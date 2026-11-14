@@ -47,6 +47,12 @@ initial scope, as do functions or dependencies that use constructs Lynx
 cannot translate.
 See [Lynx's module-loading implementation](https://github.com/josevalim/lynx/blob/d74890ac7a446d57b762d0e4fcd3c848146b2ff6/lib/lynx/translation.ex#L333-L385).
 
+The current `verify/2` and `verify/3` APIs require a readable `.beam` file
+on the code path. Modules defined interactively in IEx or compiled
+with `Code.compile_string/1` are outside this scope when they exist only
+in memory. To verify such a module, compile it to a `.beam` file with
+debug information and make the file available on the code path.
+
 Lynx stops translation when a call returns to a module already on its
 translation stack. Protocol dispatch can introduce such dependencies.
 For example, translating the general enumerable clause of `Enum.map/2`
