@@ -316,6 +316,27 @@ defmodule ReductionBounds do
   end
 
   @doc """
+  Infers a symbolic upper bound for one CircularBuffer.insert/2 call.
+
+  The buffer must have proper integer lists and a valid count and capacity,
+  and the item must be an integer. The size parameter n is the capacity.
+  Lean checks the cost and invariant of the state model for the recognized
+  Core Erlang clauses. This analysis uses the list contract for Enum.reverse/1.
+  """
+  @spec infer_circular_buffer_bound([verification_option()]) :: {:ok, map()} | {:error, term()}
+  def infer_circular_buffer_bound(options \\ []) do
+    with {:ok, options} <- validate_options(options, :search),
+         {:ok, candidate} <- ReductionBounds.CircularBufferBound.infer(options[:beam_binaries]) do
+      verify_bound(
+        candidate.target,
+        candidate,
+        ReductionBounds.CircularBufferBound.proof(),
+        options
+      )
+    end
+  end
+
+  @doc """
   Infers a symbolic bound for a local wrapper that forwards every argument
   unchanged to a list traversal. The callee must have a recognized value
   model. Lean checks the callee theorem and reuses it to prove the wrapper
@@ -550,6 +571,10 @@ defmodule ReductionBounds do
 
   defp assemble_target(translation, target, :composed) do
     translation |> assemble_target(target, :translated) |> import_postlude("Erlang.lists")
+  end
+
+  defp assemble_target(translation, _target, :circular_buffer_model) do
+    translation |> Lynx.Translation.assemble(cache: false) |> import_postlude("Erlang.lists")
   end
 
   # cspell:words leanj

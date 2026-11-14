@@ -309,6 +309,38 @@ defmodule ReductionBoundsTest do
              twice
   end
 
+  test "checks the symbolic bound for one circular buffer insertion" do
+    assert {:ok, bound} = ReductionBounds.infer_circular_buffer_bound()
+    assert bound.target == {CircularBuffer, :insert, 2}
+    assert bound.domain == :valid_integer_circular_buffer
+    assert bound.metric == :symbolic_cost
+    assert bound.size_measure == :capacity
+
+    assert %{
+             consume: {:buffer_charge, :consume} = consume,
+             fill: {:buffer_charge, :fill} = fill,
+             rotate:
+               {:add, {:buffer_charge, :rotate},
+                {:call_bound, {Enum, :reverse, 1},
+                 {:add, {:buffer_charge, :enum_reverse},
+                  {:call_bound, {:lists, :reverse, 2}, {:add, _, {:mul, :n, _}}}}}} = rotate,
+             zero: {:buffer_charge, :zero} = zero
+           } = bound.path_bounds
+
+    assert bound.upper_bound == {:max, consume, {:max, fill, {:max, rotate, zero}}}
+    assert [%{module: "Erlang.postlude", status: :ok}] = bound.reports
+
+    empty = CircularBuffer.new(0)
+    assert CircularBuffer.insert(empty, 1) == empty
+
+    partial = CircularBuffer.insert(CircularBuffer.new(3), 1)
+    assert %{a: [2, 1], b: [], count: 2} = CircularBuffer.insert(partial, 2)
+
+    full = CircularBuffer.new([1, 2, 3], 3)
+    assert %{a: [4], b: [2, 3], count: 3} = rotated = CircularBuffer.insert(full, 4)
+    assert %{a: [5, 4], b: [3], count: 3} = CircularBuffer.insert(rotated, 5)
+  end
+
   test "checks input contracts for traversals and reuses a theorem in a local wrapper" do
     beam = compile_fixture_in_memory()
     on_exit(&unload_fixture/0)

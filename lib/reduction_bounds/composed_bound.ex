@@ -6,6 +6,7 @@ defmodule ReductionBounds.ComposedBound do
 
   @member {:lists, :member, 2}
   @reverse {:lists, :reverse, 2}
+  @buffer_charges %{consume: 0, fill: 1, rotate: 2, zero: 3, enum_reverse: 4}
 
   @spec infer(tuple(), ReductionBounds.target(), [binary()]) :: {:ok, map()} | {:error, term()}
   def infer(core, {_, _, arity} = target, beams) do
@@ -235,6 +236,7 @@ defmodule ReductionBounds.ComposedBound do
   defp path_bounds({:leaf, _, _}), do: %{}
 
   defp upper({:add, left, right}), do: add(upper(left), upper(right))
+  defp upper({:max, left, right}), do: {:max, upper(left), upper(right)}
 
   defp upper({:builtin, target, _args, size}) do
     {:ok, builtin} = ListBound.infer(target, [])
@@ -244,7 +246,106 @@ defmodule ReductionBounds.ComposedBound do
   defp upper({:local_call, target, cost}),
     do: {:call_bound, target, add({:call_cost, target}, upper(cost))}
 
+  defp upper({:enum_reverse, xs, size}) do
+    {:call_bound, {Enum, :reverse, 1},
+     add({:buffer_charge, :enum_reverse}, upper({:builtin, @reverse, [xs, "[]"], size}))}
+  end
+
   defp upper(cost), do: cost
+
+  @spec compose_paths([{atom(), term()}]) :: map()
+  def compose_paths(paths) do
+    %{
+      path_bounds: Map.new(paths, fn {name, cost} -> {name, upper(cost)} end),
+      upper_bound: paths |> Keyword.values() |> maximum() |> upper()
+    }
+  end
+
+  defp maximum([cost]), do: cost
+  defp maximum([cost | rest]), do: {:max, cost, maximum(rest)}
+
+  @spec buffer_cost_proof([{atom(), term()}]) :: String.t()
+  def buffer_cost_proof(paths) do
+    combined = paths |> Keyword.values() |> maximum() |> render_cost(:upper)
+
+    primitive_proof("Reverse", @reverse) <>
+      enum_reverse_proof() <>
+      """
+      def bufferUpperBound (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
+          (n : Nat) : Nat := #{combined}
+
+      """ <> buffer_path_proofs(paths)
+  end
+
+  defp buffer_path_proofs(paths) do
+    last = length(paths) - 1
+
+    paths
+    |> Enum.with_index()
+    |> Enum.map_join("\n", fn {{name, cost}, index} ->
+      upper = render_cost(cost, :upper)
+      member = if index == last, do: "(Nat.le_refl _)", else: "(Nat.le_max_left _ _)"
+
+      included =
+        Enum.reduce(1..index//1, member, fn _, proof ->
+          "(Nat.le_trans #{proof} (Nat.le_max_right _ _))"
+        end)
+
+      """
+      def #{name}Cost (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
+          (a : List Int) : Nat := #{render_cost(cost, :actual)}
+
+      theorem #{name}Bound (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
+          (a : List Int) (n : Nat) (sizeBound : a.length ≤ n) :
+          #{name}Cost reverseCharge bufferCharge a ≤ bufferUpperBound reverseCharge bufferCharge n := by
+        have localBound : #{name}Cost reverseCharge bufferCharge a ≤ #{upper} :=
+          #{cost_proof(cost)}
+        exact Nat.le_trans localBound #{included}
+      """
+    end)
+  end
+
+  defp enum_reverse_proof() do
+    """
+    def enumReverseList : List Int → List Int
+      | [] => []
+      | [x] => [x]
+      | [x, y] => [y, x]
+      | x :: y :: z :: tail => (z :: tail).reverse ++ [y, x]
+
+    theorem enumReverseListValue (xs : List Int) : enumReverseList xs = xs.reverse := by
+      cases xs with
+      | nil => rfl
+      | cons x xs =>
+        cases xs with
+        | nil => rfl
+        | cons y xs =>
+          cases xs with
+          | nil => rfl
+          | cons z tail => simp [enumReverseList, List.reverse_cons, List.append_assoc]
+
+    def enumReverseCost (charge : Nat → Nat → Nat) : List Int → Nat
+      | x :: y :: z :: tail => (Reverse.costedReverse charge (z :: tail) [y, x]).2
+      | _ => 0
+
+    theorem enumReverseCostBound (charge : Nat → Nat → Nat) (a : List Int) (n : Nat)
+        (sizeBound : a.length ≤ n) :
+        enumReverseCost charge a ≤ Reverse.listRefinedUpperBound charge n := by
+      cases a with
+      | nil => exact Nat.zero_le _
+      | cons x a =>
+        cases a with
+        | nil => exact Nat.zero_le _
+        | cons y a =>
+          cases a with
+          | nil => exact Nat.zero_le _
+          | cons z tail =>
+            exact (Reverse.listValueAndBound charge (z :: tail) [y, x] n (by
+              simp only [List.length_cons] at sizeBound ⊢
+              omega)).2.2
+
+    """
+  end
 
   defp substitute_size(:n, size), do: size
 
@@ -407,6 +508,18 @@ defmodule ReductionBounds.ComposedBound do
   defp render_cost({:add, left, right}, mode),
     do: "(#{render_cost(left, mode)} + #{render_cost(right, mode)})"
 
+  defp render_cost({:max, left, right}, :upper),
+    do: "(max #{render_cost(left, :upper)} #{render_cost(right, :upper)})"
+
+  defp render_cost({:buffer_charge, kind}, _mode),
+    do: "(bufferCharge #{Map.fetch!(@buffer_charges, kind)})"
+
+  defp render_cost({:enum_reverse, xs, _size}, :actual),
+    do: "(bufferCharge 4 + enumReverseCost reverseCharge #{xs})"
+
+  defp render_cost({:enum_reverse, _xs, size}, :upper),
+    do: "(bufferCharge 4 + Reverse.listRefinedUpperBound reverseCharge #{render_size(size)})"
+
   defp render_cost({:builtin, target, _args, size}, :upper) do
     {namespace, charge} = primitive(target)
     "(#{namespace}.listRefinedUpperBound #{charge} #{render_size(size)})"
@@ -478,6 +591,10 @@ defmodule ReductionBounds.ComposedBound do
 
   defp cost_proof({:local_call, _, cost}),
     do: "(Nat.add_le_add_left #{cost_proof(cost)} localCharge)"
+
+  defp cost_proof({:enum_reverse, xs, :n}),
+    do:
+      "(Nat.add_le_add_left (enumReverseCostBound reverseCharge #{xs} n sizeBound) (bufferCharge 4))"
 
   defp cost_proof({:builtin, target, args, size}) do
     {namespace, charge} = primitive(target)

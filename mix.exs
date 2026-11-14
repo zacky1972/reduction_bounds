@@ -84,7 +84,9 @@ defmodule ReductionBounds.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:spellweaver, "~> 0.1.8", only: [:dev, :test], runtime: false},
-      {:lynx, git: "https://github.com/josevalim/lynx.git"}
+      {:lynx, git: "https://github.com/josevalim/lynx.git"},
+      {:circular_buffer,
+       git: "https://github.com/elixir-toniq/circular_buffer.git", tag: "v1.1.0", only: :test}
     ]
   end
 end

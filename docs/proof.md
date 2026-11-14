@@ -94,10 +94,37 @@ and both inequalities for all values of `acc` in the stated domain.
 When supplied, an `input_contract` constrains `xs` and supplies its
 size measure.
 
-## Conditional reversal
+## Composing static calls, bindings, and Boolean branches
 
-The analyzer recognizes the following function shape over an integer
-key and a proper integer list.
+The analyzer reads Core Erlang from BEAM debug information. It follows
+static calls and propagates values and size bounds through bindings and
+Boolean branches. The initial input is a proper integer list, optionally
+preceded by an integer key. The composed fragment supports variables,
+integer and Boolean literals, proper integer list construction, single-value
+bindings, and calls without recursion. Boolean cases include the
+compiler-generated truthiness guard used by Elixir `if` when the
+condition has been shown to be Boolean.
+
+At each static call, the analyzer substitutes the actual argument values
+and sizes. It uses the contracts above for the two built-ins and derives
+a bound from the body for a regular callee. Each call bound is included
+in the caller's expression under its MFA. If one call prepends a
+one-element accumulator through reversal, a later call on the result
+receives an input size bound of `n + 1`.
+
+The generated theorem `programValueAndBound` proves that the translated
+target agrees with the model and that the modeled cost is at most the
+bound for the selected path and the overall bound. Its proof applies the
+primitive cost theorems at the derived argument sizes, adds bounds for
+sequential costs, and uses the maximum of the branch bounds. Local
+call overhead, binding, list construction, and branch operations have
+symbolic charges. If an `input_contract` is supplied, the proof uses its
+size measure under the stated precondition.
+
+### Conditional reversal
+
+This example composes membership and reversal over an integer key and
+a proper integer list.
 
 ```elixir
 def reverse_on_hit(key, xs) do
@@ -106,14 +133,9 @@ end
 ```
 
 Use `ReductionBounds.infer_list_bound/2` with the function's module,
-name, and arity. The analyzer checks the Lynx translation for a single
-membership call, a miss branch that returns the original list, and a
-hit branch that reverses the same list onto an empty accumulator.
-
-The generated theorem `conditionalValueAndBound` reuses the membership
-and reversal theorems in separate namespaces. It proves that the
-translated function returns the reversed list on a hit and the original
-list on a miss. It also proves the following symbolic bounds. Here
+name, and arity. The generated theorem proves that the function returns
+the reversed list on a hit and the original list on a miss. It also
+proves the following symbolic bounds. Here
 `M(n)` and `R(n)` are the proved upper bounds for membership and reversal,
 `n` bounds the input list length, and `B_hit` and `B_miss` are
 nonnegative symbolic charges for the respective branch operations
@@ -130,8 +152,8 @@ applies the reversal theorem to the original list and an empty
 accumulator, then adds its cost to the membership and branch costs.
 On a miss, the proof accounts for membership and the miss branch only.
 The `:call_bound` terms in the result keep charges for the two built-ins
-separate. With an `input_contract`, the same theorem applies at the
-contract's input size under its precondition.
+separate. The same rules handle a nonempty accumulator and a hit branch
+that delegates reversal to a regular helper.
 
 ## Scope
 

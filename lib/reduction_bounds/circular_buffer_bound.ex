@@ -1,0 +1,362 @@
+defmodule ReductionBounds.CircularBufferBound do
+  @moduledoc false
+  # cspell:words cerl primop simp cons rcases simpa
+
+  alias ReductionBounds.{ComposedBound, SearchBound}
+
+  @target {CircularBuffer, :insert, 2}
+  @paths [:consume, :fill, :rotate, :zero]
+
+  @spec infer([binary()]) :: {:ok, map()} | {:error, term()}
+  def infer(beams) do
+    with {:ok, core} <- SearchBound.core_function(@target, beams),
+         true <- supported?(core),
+         :ok <- check_enum_reverse(beams) do
+      {:ok, candidate()}
+    else
+      false -> {:error, {:unsupported_circular_buffer_shape, @target}}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp check_enum_reverse(beams) do
+    target = {Enum, :reverse, 1}
+
+    with {:ok, core} <- SearchBound.core_function(target, beams) do
+      if list_reverse?(core), do: :ok, else: {:error, {:unsupported_list_reverse, target}}
+    end
+  end
+
+  defp list_reverse?({:c_fun, _, [{:c_var, _, input}], {:c_case, _, {:c_var, _, input}, clauses}}) do
+    case :cerl_trees.map(&:cerl.set_ann(&1, []), {:c_values, [], clauses}) do
+      {:c_values, [],
+       [
+         {:c_clause, [], [{:c_literal, [], []}], {:c_literal, [], true}, {:c_literal, [], []}},
+         {:c_clause, [],
+          [
+            {:c_alias, [], {:c_var, [], singleton},
+             {:c_cons, [], {:c_var, [], _}, {:c_literal, [], []}}}
+          ], {:c_literal, [], true}, {:c_var, [], singleton}},
+         pair,
+         longer | _
+       ]} ->
+        reverse_pair?(pair) and reverse_tail?(longer)
+
+      _ ->
+        false
+    end
+  end
+
+  defp list_reverse?(_), do: false
+
+  defp reverse_pair?(
+         {:c_clause, [],
+          [
+            {:c_cons, [], {:c_var, [], first},
+             {:c_cons, [], {:c_var, [], second}, {:c_literal, [], []}}}
+          ], {:c_literal, [], true}, result}
+       ),
+       do: swapped_pair(result, first, second)
+
+  defp reverse_pair?(_), do: false
+
+  defp reverse_tail?(
+         {:c_clause, [],
+          [
+            {:c_cons, [], {:c_var, [], first},
+             {:c_cons, [], {:c_var, [], second}, {:c_var, [], rest}}}
+          ], {:c_literal, [], true},
+          {:c_call, [], {:c_literal, [], :lists}, {:c_literal, [], :reverse},
+           [{:c_var, [], rest}, acc]}}
+       ),
+       do: swapped_pair(acc, first, second)
+
+  defp reverse_tail?(_), do: false
+
+  defp swapped_pair(result, first, second) do
+    result ==
+      {:c_cons, [], {:c_var, [], second},
+       {:c_cons, [], {:c_var, [], first}, {:c_literal, [], []}}}
+  end
+
+  defp candidate() do
+    paths = Enum.map(@paths, &{&1, path_cost(&1)})
+
+    paths
+    |> ComposedBound.compose_paths()
+    |> Map.merge(%{
+      target: @target,
+      metric: :symbolic_cost,
+      domain: :valid_integer_circular_buffer,
+      value_model: :circular_buffer_model,
+      size_measure: :capacity,
+      source: :circular_buffer_model
+    })
+  end
+
+  defp path_cost(:rotate) do
+    {:add, {:buffer_charge, :rotate}, {:enum_reverse, "a", :n}}
+  end
+
+  defp path_cost(path), do: {:buffer_charge, path}
+
+  defp supported?({:c_fun, _, params, {:c_case, _, {:c_values, _, args}, clauses}}) do
+    Enum.map(params, &:cerl.var_name/1) == Enum.map(args, &variable/1) and
+      Enum.map(clauses, &normalize_clause/1) == expected_clauses()
+  end
+
+  defp supported?(_core), do: false
+
+  defp expected_clauses() do
+    [
+      {[{:nonempty, :b}], true, {:update, %{a: {:cons, :item, :a}, b: {:tail, :b}}}},
+      {[], {:less, :count, :max_size},
+       {:update, %{a: {:cons, :item, :a}, count: {:add, :count, 1}}}},
+      {[{:empty, :b}], {:nonempty, :a},
+       {:update, %{a: {:cons, :item, []}, b: {:tail, {:reverse, :a}}}}},
+      {[], true, :buffer}
+    ]
+  end
+
+  defp normalize_clause({:c_clause, _, [buffer, {:c_var, _, item}], guard, body}) do
+    with {:ok, env, tests} <- buffer_pattern(buffer, %{item => :item}),
+         {:ok, guard} <- expression(guard, env),
+         {:ok, body} <- expression(body, env) do
+      {tests, guard, body}
+    end
+  end
+
+  defp normalize_clause(_), do: :unsupported
+
+  defp buffer_pattern({:c_var, _, name}, env), do: {:ok, Map.put(env, name, :buffer), []}
+
+  defp buffer_pattern({:c_alias, _, {:c_var, _, name}, {:c_map, _, _, fields, true}}, env) do
+    case Enum.split_with(fields, &struct_tag?/1) do
+      {[_tag], fields} ->
+        field_patterns(fields, Map.put(env, name, :buffer), [])
+
+      _ ->
+        :unsupported
+    end
+  end
+
+  defp buffer_pattern(_, _), do: :unsupported
+
+  defp struct_tag?(
+         {:c_map_pair, _, {:c_literal, _, :exact}, {:c_literal, _, :__struct__},
+          {:c_literal, _, CircularBuffer}}
+       ),
+       do: true
+
+  defp struct_tag?(_), do: false
+
+  defp field_patterns([], env, tests), do: {:ok, env, Enum.sort(tests)}
+
+  defp field_patterns(
+         [{:c_map_pair, _, {:c_literal, _, :exact}, {:c_literal, _, field}, pattern} | rest],
+         env,
+         tests
+       )
+       when field in [:a, :b, :count, :max_size] do
+    case pattern do
+      {:c_var, _, name} ->
+        field_patterns(rest, Map.put(env, name, field), tests)
+
+      {:c_literal, _, []} when field in [:a, :b] ->
+        field_patterns(rest, env, [{:empty, field} | tests])
+
+      {:c_cons, _, {:c_var, _, _}, {:c_var, _, tail}} when field in [:a, :b] ->
+        field_patterns(rest, Map.put(env, tail, {:tail, field}), [{:nonempty, field} | tests])
+
+      _ ->
+        :unsupported
+    end
+  end
+
+  defp field_patterns(_, _, _), do: :unsupported
+
+  defp expression({:c_var, _, name}, env), do: Map.fetch(env, name)
+  defp expression({:c_literal, _, value}, _env), do: {:ok, value}
+
+  defp expression({:c_cons, _, head, tail}, env) do
+    with {:ok, head} <- expression(head, env), {:ok, tail} <- expression(tail, env) do
+      {:ok, {:cons, head, tail}}
+    end
+  end
+
+  defp expression({:c_let, _, [{:c_var, _, name}], value, body}, env) do
+    with {:ok, value} <- expression(value, env), do: expression(body, Map.put(env, name, value))
+  end
+
+  defp expression({:c_call, _, {:c_literal, _, module}, {:c_literal, _, name}, args}, env) do
+    operation(module, name, Enum.map(args, &expression(&1, env)))
+  end
+
+  # On a valid buffer the first case succeeds because all record fields exist.
+  defp expression(
+         {:c_case, _, buffer,
+          [
+            {:c_clause, _,
+             [
+               {:c_map, _, _,
+                [
+                  {:c_map_pair, _, {:c_literal, _, :exact}, {:c_literal, _, field},
+                   {:c_var, _, name}}
+                ], true}
+             ], {:c_literal, _, true}, {:c_var, _, name}}
+            | _
+          ]},
+         env
+       )
+       when field in [:a, :b, :count, :max_size] do
+    with {:ok, :buffer} <- expression(buffer, env), do: {:ok, field}
+  end
+
+  # The compiler guards map updates with is_map/1.
+  defp expression(
+         {:c_case, _, {:c_values, _, []},
+          [
+            {:c_clause, _, [],
+             {:c_call, _, {:c_literal, _, :erlang}, {:c_literal, _, :is_map}, [buffer]}, updated}
+            | _
+          ]},
+         env
+       ) do
+    with {:ok, :buffer} <- expression(buffer, env), do: expression(updated, env)
+  end
+
+  defp expression({:c_map, _, base, fields, false}, env) do
+    with {:ok, :buffer} <- expression(base, env),
+         {:ok, updates} <- updates(fields, env, %{}) do
+      {:ok, {:update, updates}}
+    end
+  end
+
+  defp expression(_, _), do: :unsupported
+
+  defp operation(Enum, :reverse, [{:ok, arg}]), do: {:ok, {:reverse, arg}}
+  defp operation(:erlang, :tl, [{:ok, arg}]), do: {:ok, {:tail, arg}}
+  defp operation(:erlang, :"/=", [{:ok, field}, {:ok, []}]), do: {:ok, {:nonempty, field}}
+  defp operation(:erlang, :<, [{:ok, left}, {:ok, right}]), do: {:ok, {:less, left, right}}
+  defp operation(:erlang, :+, [{:ok, left}, {:ok, right}]), do: {:ok, {:add, left, right}}
+  defp operation(_module, _name, _args), do: :unsupported
+
+  defp updates([], _env, result), do: {:ok, result}
+
+  defp updates(
+         [{:c_map_pair, _, {:c_literal, _, :exact}, {:c_literal, _, field}, value} | rest],
+         env,
+         result
+       ) do
+    with {:ok, value} <- expression(value, env),
+         false <- Map.has_key?(result, field) do
+      updates(rest, env, Map.put(result, field, value))
+    end
+  end
+
+  defp updates(_, _, _), do: :unsupported
+
+  defp variable({:c_var, _, name}), do: name
+  defp variable(_), do: nil
+
+  @spec proof() :: Lynx.Lean.t()
+  def proof() do
+    paths = Enum.map(@paths, &{&1, path_cost(&1)})
+
+    %Lynx.Lean{
+      file: "generated_circular_buffer_bound.lean",
+      span: {1, 1},
+      indentation: 0,
+      source: ComposedBound.buffer_cost_proof(paths) <> state_proof()
+    }
+  end
+
+  defp state_proof() do
+    """
+    structure BufferState where
+      a : List Int
+      b : List Int
+      count : Nat
+      capacity : Nat
+
+    def BufferState.valid (s : BufferState) : Prop :=
+      s.count = s.a.length + s.b.length ∧ s.count ≤ s.capacity ∧
+        (s.b ≠ [] → s.count = s.capacity)
+
+    def insertModel (s : BufferState) (item : Int) : BufferState :=
+      match s.b with
+      | _ :: tail => { s with a := item :: s.a, b := tail }
+      | [] =>
+        if s.count < s.capacity then { s with a := item :: s.a, count := s.count + 1 }
+        else if s.a.isEmpty then s
+        else { s with a := [item], b := (enumReverseList s.a).tail }
+
+    def insertCost (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
+        (s : BufferState) : Nat :=
+      match s.b with
+      | _ :: _ => consumeCost reverseCharge bufferCharge s.a
+      | [] =>
+        if s.count < s.capacity then fillCost reverseCharge bufferCharge s.a
+        else if s.a.isEmpty then zeroCost reverseCharge bufferCharge s.a
+        else rotateCost reverseCharge bufferCharge s.a
+
+    theorem insertPreserves (s : BufferState) (item : Int) (valid : s.valid) :
+        (insertModel s item).valid := by
+      rcases s with ⟨a, b, count, capacity⟩
+      cases b with
+      | nil =>
+        by_cases fills : count < capacity
+        · simp [BufferState.valid, insertModel, fills] at valid ⊢
+          omega
+        · cases a with
+          | nil => simpa [insertModel, fills] using valid
+          | cons head tail =>
+            simp [BufferState.valid, insertModel, fills, enumReverseListValue, List.length_tail] at valid ⊢
+            omega
+      | cons head tail =>
+        simp [BufferState.valid, insertModel] at valid ⊢
+        omega
+
+    theorem bufferRotationSize (s : BufferState) (valid : s.valid)
+        (empty : s.b = []) (full : ¬ s.count < s.capacity) :
+        s.a.length = s.capacity := by
+      rcases valid with ⟨lengths, bounded, _⟩
+      simp [empty] at lengths
+      omega
+
+    theorem insertCostBound (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
+        (s : BufferState) (item : Int) (valid : s.valid) :
+        (insertModel s item).valid ∧
+          insertCost reverseCharge bufferCharge s ≤
+            bufferUpperBound reverseCharge bufferCharge s.capacity := by
+      refine ⟨insertPreserves s item valid, ?_⟩
+      have lengthBound : s.a.length ≤ s.capacity := by
+        rcases valid with ⟨lengths, bounded, _⟩
+        omega
+      rcases s with ⟨a, b, count, capacity⟩
+      cases b with
+      | nil =>
+        by_cases fills : count < capacity
+        · simpa [insertCost, fills] using fillBound reverseCharge bufferCharge a capacity lengthBound
+        · cases a with
+          | nil => simpa [insertCost, fills] using zeroBound reverseCharge bufferCharge [] capacity lengthBound
+          | cons head tail =>
+            simpa [insertCost, fills] using rotateBound reverseCharge bufferCharge
+              (head :: tail) capacity lengthBound
+      | cons head tail =>
+        simpa [insertCost] using consumeBound reverseCharge bufferCharge a capacity lengthBound
+
+    theorem insertZeroCapacity (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
+        (s : BufferState) (item : Int) (valid : s.valid) (zeroCapacity : s.capacity = 0) :
+        insertModel s item = s ∧ insertCost reverseCharge bufferCharge s = bufferCharge 3 := by
+      rcases s with ⟨a, b, count, capacity⟩
+      change capacity = 0 at zeroCapacity
+      simp [BufferState.valid] at valid
+      have ac : a.length = 0 := by omega
+      have bc : b.length = 0 := by omega
+      have cc : count = 0 := by omega
+      simp [insertModel, insertCost, zeroCost, List.length_eq_zero_iff.mp ac,
+        List.length_eq_zero_iff.mp bc, cc, zeroCapacity]
+    """
+  end
+end
