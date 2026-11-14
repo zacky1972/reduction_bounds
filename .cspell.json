@@ -23,5 +23,8 @@
     "priv",
     "test"
   ],
-  "words": []
+  "words": [
+    "leanprover",
+    "nolink"
+  ]
 }
