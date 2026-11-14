@@ -1,7 +1,55 @@
 defmodule ReductionBounds do
-  @moduledoc """
-  Verifies Lean declarations against functions translated by Lynx.
-  """
+  @moduledoc ~S'''
+  Verifies Lean declarations and infers symbolic costs for supported list searches.
+
+  ## Examples
+
+  Run these examples in `iex -S mix` from the project root. Define an
+  integer list search and retain its compiled BEAM binary.
+
+  ```elixir
+  import Lynx.Lean
+
+  {:module, SearchDemo, beam, _} =
+    defmodule SearchDemo do
+      @compile :debug_info
+
+      def contains(_key, []), do: false
+      def contains(key, [head | _]) when head === key, do: true
+      def contains(key, [_ | tail]), do: contains(key, tail)
+    end
+
+  target = {SearchDemo, :contains, 2}
+  ```
+
+  Use `verify/2` with an inline Lean postlude to check that searching an
+  empty list returns the Erlang atom `false`.
+
+  ```elixir
+  {:ok, [{^target, {:ok, _reports}}]} =
+    ReductionBounds.verify([target],
+      beam_binaries: [beam],
+      postlude: ~LEAN"""
+      theorem containsEmpty :
+          Elixir.SearchDemo.«contains/2» (.integer 7) .nil = .ok (.atom "false") := by
+        rfl
+      """
+    )
+  ```
+
+  Use `infer_search_bound/2` to obtain a bound for the symbolic cost model.
+
+  ```elixir
+  {:ok, bound} = ReductionBounds.infer_search_bound(target, beam_binaries: [beam])
+  :symbolic_cost = bound.metric
+  {:add, {:max, :c_empty, :c_hit}, {:mul, :n, :c_step}} = bound.upper_bound
+  ```
+
+  Here, `n` bounds the input list length. The symbolic parameters account
+  for an empty list, a hit at the head, and one step that continues with
+  the tail. Lean checks the bound on this model. Relating those parameters
+  to ERTS reduction charges requires a separate analysis.
+  '''
 
   @type target :: {module(), atom(), arity()}
   @type target_result ::
@@ -93,6 +141,32 @@ defmodule ReductionBounds do
   @spec verify(Path.t(), [target()], [verification_option()]) :: verification_result()
   def verify(lean_file, targets, options) do
     verify_source({:file, lean_file}, targets, options)
+  end
+
+  @doc """
+  Derives a symbolic cost bound for a two-argument integer list search.
+
+  The supported function returns false for an empty list, returns true
+  when the head strictly equals the key, and otherwise calls itself with
+  the same key and the tail. The input size n bounds the list length.
+  The three branch costs are nonnegative symbolic parameters.
+
+  The result includes the recurrence, the bound expression, and Lean
+  verification reports for the cost model. ERTS reduction charges are
+  outside this model. Accepts the same options as file-based verification.
+  """
+  @spec infer_search_bound(target(), [verification_option()]) ::
+          {:ok, map()} | {:error, term()}
+  def infer_search_bound(target, options \\ []) do
+    with {:ok, options} <- validate_options(options, :search),
+         {:ok, candidate} <- ReductionBounds.SearchBound.infer(target, options[:beam_binaries]),
+         {:ok, [{^target, {:ok, reports}}]} <-
+           verify([target], [postlude: ReductionBounds.SearchBound.proof()] ++ options) do
+      {:ok, Map.put(candidate, :reports, reports)}
+    else
+      {:ok, [{^target, {:error, reason}}]} -> {:error, reason}
+      {:error, _reason} = error -> error
+    end
   end
 
   defp verify_source(source, targets, options) do

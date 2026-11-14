@@ -155,6 +155,34 @@ defmodule ReductionBoundsTest do
              )
   end
 
+  test "infers and verifies a symbolic bound for integer list search" do
+    beam = compile_fixture_in_memory()
+    on_exit(&unload_fixture/0)
+    target = {Fixture, :contains, 2}
+
+    assert {:ok, result} =
+             ReductionBounds.infer_search_bound(target, beam_binaries: [beam])
+
+    assert result.metric == :symbolic_cost
+
+    assert result.recurrence == %{
+             empty: :c_empty,
+             hit: :c_hit,
+             miss: {:add, :c_step, {:cost, :tail}}
+           }
+
+    assert result.upper_bound == {:add, {:max, :c_empty, :c_hit}, {:mul, :n, :c_step}}
+    assert Enum.any?(result.reports, &match?(%{module: "Erlang.postlude", status: :ok}, &1))
+  end
+
+  test "rejects a search whose recursive call does not consume the tail" do
+    beam = compile_fixture_in_memory()
+    on_exit(&unload_fixture/0)
+
+    assert {:error, :unsupported_search_shape} =
+             ReductionBounds.infer_search_bound({Fixture, :no_progress, 2}, beam_binaries: [beam])
+  end
+
   defp compile_fixture(directory) do
     beam = compile_fixture_in_memory()
     beam_path = Path.join(directory, "#{Fixture}.beam")
@@ -170,6 +198,14 @@ defmodule ReductionBoundsTest do
       @compile :debug_info
       def identity(value), do: value
       def constant, do: true
+      def contains(_key, []), do: false
+      def contains(key, [head | _]) when head === key, do: true
+      def contains(key, [_ | tail]), do: contains(key, tail)
+
+      def no_progress(_key, []), do: false
+      def no_progress(key, [head | _]) when head === key, do: true
+      def no_progress(key, [_ | _] = list), do: no_progress(key, list)
+
       def sum(0), do: 0
       def sum(n), do: sum(n - 1) + n
       def identity_wrapper(value), do: identity(value)

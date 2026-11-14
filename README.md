@@ -96,7 +96,7 @@ that Lynx can use to recover Core Erlang.
 Lynx stops translation when a call returns to a module already on its
 translation stack. Protocol dispatch can introduce such dependencies.
 For example, translating the general enumerable clause of `Enum.map/2`
-can reach `Enumerable.File.Stream`, whose implementation calls back into
+can reach Enumerable.File.Stream, whose implementation calls back into
 `Enum.reduce/3`. Lynx can encounter that path while translating
 `Enum.map/2` even when the intended inputs are lists. The resulting
 `cyclic module call` diagnostic is reported before Lean checks the proof.
