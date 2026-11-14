@@ -3,6 +3,17 @@ defmodule ReductionBounds.ListBound do
   # cspell:words cerl primop scrutinee succ simp cons rcases simpa leanj symm nonzero elim propext
 
   @spec infer(term(), [binary()]) :: {:ok, map()} | {:error, term()}
+  def infer({:lists, :member, 2} = target, _beams) do
+    branches = [
+      {:empty, {:add, {:charge, 0, :dispatch}, {:charge, 0, :value}}, 0},
+      {:guarded_cons, {:add, {:charge, 1, :dispatch}, {:charge, 1, :value}}, 0},
+      {:cons, {:add, {:charge, 2, :dispatch}, {:charge, 2, :recursive_call}}, 1}
+    ]
+
+    {:ok,
+     Map.merge(candidate(target, branches), %{value_model: :membership, source: :lynx_builtin})}
+  end
+
   def infer({module, name, arity} = target, beams)
       when is_atom(module) and is_atom(name) and arity in [1, 2] do
     with {:ok, body} <- ReductionBounds.SearchBound.core_function(target, beams),
@@ -430,10 +441,10 @@ defmodule ReductionBounds.ListBound do
       | [] => .nil
       | head :: tail => .cons (.integer head) (integerListTerm tail)
 
-    """ <> value_proof(kind, lean_function(target))
+    """ <> value_proof(kind, lean_function(target), target)
   end
 
-  defp value_proof(:length, function) do
+  defp value_proof(:length, function, _target) do
     """
     def costedLength (charge : Nat → Nat → Nat) : List Int → Int × Nat
       | [] => (0, (listEmpty charge).eval 0)
@@ -477,7 +488,7 @@ defmodule ReductionBounds.ListBound do
     """
   end
 
-  defp value_proof(:membership, function) do
+  defp value_proof(:membership, function, target) do
     """
     def costedSearch (charge : Nat → Nat → Nat) (key : Int) : List Int → Lynx.Term × Nat
       | [] => (.atom "false", (listEmpty charge).eval 0)
@@ -489,16 +500,7 @@ defmodule ReductionBounds.ListBound do
 
     theorem listValueAgreement (charge : Nat → Nat → Nat) (key : Int) (xs : List Int) :
         #{function} (.integer key) (integerListTerm xs) = .ok (costedSearch charge key xs).1 := by
-      induction xs with
-      | nil =>
-        rw [integerListTerm, #{function}.eq_def]
-        rfl
-      | cons head tail ih =>
-        rw [integerListTerm, #{function}.eq_def]
-        by_cases equal : head = key
-        · simp [costedSearch, equal, Erlang.erlang.«=:=/2», Lynx.Except.guard_ok]
-        · simp [costedSearch, equal, Ne.symm equal, Erlang.erlang.«=:=/2», Lynx.Except.guard_ok, ih]
-
+    #{membership_agreement(target, function)}
     theorem searchCostDerivation (charge : Nat → Nat → Nat) (key : Int) (xs : List Int) :
         ListCost (listEmpty charge) (listStops charge) (listSteps charge)
           xs.length (costedSearch charge key xs).2 := by
@@ -521,6 +523,32 @@ defmodule ReductionBounds.ListBound do
       ⟨listValueAgreement charge key xs,
         listCostBound charge xs.length n _ (searchCostDerivation charge key xs) sizeBound,
         listRefinedCostBound charge xs.length n _ (searchCostDerivation charge key xs) sizeBound⟩
+    """
+  end
+
+  defp membership_agreement({:lists, :member, 2}, function) do
+    """
+      induction xs with
+      | nil => rfl
+      | cons head tail ih =>
+        rw [integerListTerm, #{function}.eq_def]
+        by_cases equal : head = key
+        · simp [costedSearch, equal, Lynx.Term.true]
+        · simp [costedSearch, equal, Ne.symm equal, ih]
+    """
+  end
+
+  defp membership_agreement(_target, function) do
+    """
+      induction xs with
+      | nil =>
+        rw [integerListTerm, #{function}.eq_def]
+        rfl
+      | cons head tail ih =>
+        rw [integerListTerm, #{function}.eq_def]
+        by_cases equal : head = key
+        · simp [costedSearch, equal, Erlang.erlang.«=:=/2», Lynx.Except.guard_ok]
+        · simp [costedSearch, equal, Ne.symm equal, Erlang.erlang.«=:=/2», Lynx.Except.guard_ok, ih]
     """
   end
 

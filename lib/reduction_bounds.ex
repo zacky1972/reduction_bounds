@@ -283,6 +283,11 @@ defmodule ReductionBounds do
   the upper bound. A nil value_model means only the symbolic cost rules
   were checked.
 
+  The target {:lists, :member, 2} uses Lynx's built-in value model for an
+  integer key and a proper integer list. Its charges describe the empty,
+  hit, and continue cases of the symbolic traversal. In the continue
+  case, recursive_call denotes a step to the next list cell in the model.
+
   For a recognized value model, pass input_contract as a Lean block to
   prove the bounds under an input precondition with a tail invariant and a
   natural-valued size measure. See the module examples.
@@ -343,21 +348,23 @@ defmodule ReductionBounds do
   defp list_size_measure(%Lynx.Lean{}), do: :input_size
 
   defp verify_bound(target, candidate, proof, options) do
-    case verify([target], [postlude: proof] ++ options) do
+    source = Map.get(candidate, :source, :translated)
+
+    case verify_source(:inline, [target], [postlude: proof] ++ options, source) do
       {:ok, [{^target, {:ok, reports}}]} -> {:ok, Map.put(candidate, :reports, reports)}
       {:ok, [{^target, {:error, reason}}]} -> {:error, reason}
       {:error, _reason} = error -> error
     end
   end
 
-  defp verify_source(source, targets, options) do
+  defp verify_source(source, targets, options, definition \\ :translated) do
     with :ok <- validate_targets(targets),
          {:ok, options} <- validate_options(options, source),
          {:ok, proof, options} <- resolve_proof(source, options),
          {beams, options} = Keyword.pop!(options, :beam_binaries),
          {suffixes, options} = Keyword.pop!(options, :termination_suffixes),
          {:ok, translation} <- prepare_translation(proof, beams, suffixes) do
-      {:ok, verify_targets(translation, Enum.uniq(targets), options)}
+      {:ok, verify_targets(translation, Enum.uniq(targets), options, definition)}
     end
   end
 
@@ -480,9 +487,9 @@ defmodule ReductionBounds do
     error in CompileError -> {:error, {:beam_registration, error}}
   end
 
-  defp verify_targets(_translation, [], _options), do: []
+  defp verify_targets(_translation, [], _options, _definition), do: []
 
-  defp verify_targets(translation, targets, options) do
+  defp verify_targets(translation, targets, options, definition) do
     project_dir = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
     {lean_options, task_options} = Keyword.pop!(options, :lean_options)
     {:ok, supervisor} = Task.Supervisor.start_link()
@@ -491,7 +498,9 @@ defmodule ReductionBounds do
       supervisor
       |> Task.Supervisor.async_stream_nolink(
         targets,
-        fn target -> {target, verify_target(target, translation, project_dir, lean_options)} end,
+        fn target ->
+          {target, verify_target(target, translation, project_dir, lean_options, definition)}
+        end,
         task_options ++ [on_timeout: :kill_task, zip_input_on_exit: true]
       )
       |> Enum.map(fn
@@ -504,12 +513,8 @@ defmodule ReductionBounds do
     end
   end
 
-  defp verify_target({module, function, arity}, translation, project_dir, lean_options) do
-    files =
-      translation
-      |> Lynx.Translation.translate(module, [{function, arity}])
-      |> Lynx.Translation.assemble(cache: false)
-
+  defp verify_target(target, translation, project_dir, lean_options, definition) do
+    files = assemble_target(translation, target, definition)
     reports = Lynx.Commands.verify!(project_dir, files, options: lean_options)
 
     if Enum.all?(reports, &(&1.status == :ok)) do
@@ -519,5 +524,27 @@ defmodule ReductionBounds do
     end
   rescue
     error -> {:error, {:lynx, error}}
+  end
+
+  defp assemble_target(translation, {module, function, arity}, :translated) do
+    translation
+    |> Lynx.Translation.translate(module, [{function, arity}])
+    |> Lynx.Translation.assemble(cache: false)
+  end
+
+  # cspell:words leanj
+  defp assemble_target(translation, {module, _, _}, :lynx_builtin) do
+    # Lynx's runner resolves this import to its bundled Erlang model.
+    import = :lynx_core_to_leanj.module_name(module)
+
+    for file <- Lynx.Translation.assemble(translation, cache: false) do
+      case file do
+        %{"module" => "Erlang.postlude"} ->
+          Map.update!(file, "imports", &[import | &1])
+
+        _ ->
+          file
+      end
+    end
   end
 end

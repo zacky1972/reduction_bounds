@@ -27,7 +27,7 @@ defmodule ReductionBounds.MixProject do
   def docs do
     [
       main: "readme",
-      extras: ["README.md", "LICENSE.md"]
+      extras: ["README.md", "LICENSE.md", "docs/proof.md"]
     ]
   end
 
