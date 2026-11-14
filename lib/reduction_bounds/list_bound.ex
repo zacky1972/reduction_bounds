@@ -1,6 +1,6 @@
 defmodule ReductionBounds.ListBound do
   @moduledoc false
-  # cspell:words cerl primop scrutinee succ
+  # cspell:words cerl primop scrutinee succ simp cons rcases simpa
 
   @spec infer(term(), [binary()]) :: {:ok, map()} | {:error, term()}
   def infer({module, name, arity} = target, beams)
@@ -167,48 +167,133 @@ defmodule ReductionBounds.ListBound do
 
   @spec proof(map()) :: Lynx.Lean.t()
   def proof(%{recurrence: [{:empty, empty, 0} | cons], upper_bound: bound}) do
-    cons_cost = for {_kind, local, calls} <- cons, do: with_recursion(local, calls)
+    stops = for {_kind, local, 0} <- cons, do: expression(local, "_charge")
+    steps = for {_kind, local, 1} <- cons, do: expression(local, "_charge")
 
     %Lynx.Lean{
       file: "generated_list_bound.lean",
       span: {1, 1},
       indentation: 0,
-      source: """
-      def listCost (charge : Nat → Nat → Nat) : Nat → Nat
-        | 0 => #{lean(empty)}
-        | n + 1 => #{lean(maximum(cons_cost))}
+      source:
+        soundness_rules() <>
+          """
+          def listEmpty (charge : Nat → Nat → Nat) : CostExpr :=
+            #{expression(empty, "charge")}
 
-      def listUpperBound (charge : Nat → Nat → Nat) (n : Nat) : Nat :=
-        #{lean(bound)}
+          def listStops (_charge : Nat → Nat → Nat) : List CostExpr :=
+            [#{Enum.join(stops, ", ")}]
 
-      theorem listCostBound (charge : Nat → Nat → Nat) (size n : Nat)
-          (sizeBound : size ≤ n) : listCost charge size ≤ listUpperBound charge n := by
-        have exactBound (k : Nat) : listCost charge k ≤ listUpperBound charge k := by
-          induction k with
-          | zero =>
-              simp only [listCost, listUpperBound, Nat.zero_mul, Nat.add_zero]
-              omega
-          | succ k ih =>
-              simp only [listCost, listUpperBound, Nat.succ_mul] at *
-              omega
-        refine Nat.le_trans (exactBound size) ?_
-        unfold listUpperBound
-        exact Nat.add_le_add_left (Nat.mul_le_mul_right _ sizeBound) _
-      """
+          def listSteps (_charge : Nat → Nat → Nat) : List CostExpr :=
+            [#{Enum.join(steps, ", ")}]
+
+          def listUpperBound (charge : Nat → Nat → Nat) (n : Nat) : Nat :=
+            #{lean(bound)}
+
+          theorem listCostBound (charge : Nat → Nat → Nat) (size n cost : Nat)
+              (derivation : ListCost (listEmpty charge) (listStops charge) (listSteps charge) size cost)
+              (sizeBound : size ≤ n) : cost ≤ listUpperBound charge n := by
+            unfold listUpperBound
+            apply listRulesSound derivation sizeBound
+            · simp [listEmpty, CostExpr.eval] <;> omega
+            · intro branch member
+              simp [listStops] at member <;>
+              #{branch_cases(stops, "CostExpr.eval")}
+            · intro branch member
+              simp [listSteps] at member <;>
+              #{branch_cases(steps, "CostExpr.eval, CostExpr.calls")}
+          """
     }
   end
 
-  defp with_recursion(local, 0), do: local
-  defp with_recursion(local, 1), do: {:add, local, :tail_cost}
+  defp branch_cases([], _rules), do: "contradiction"
+  defp branch_cases([_], rules), do: "subst branch; simp [#{rules}] <;> omega"
 
-  defp lean({:add, left, right}), do: "(#{lean(left)} + #{lean(right)})"
-  defp lean({:mul, left, right}), do: "(#{lean(left)} * #{lean(right)})"
-  defp lean({:max, left, right}), do: "(max #{lean(left)} #{lean(right)})"
-  defp lean({:charge, index, :dispatch}), do: "(charge #{index} 0)"
-  defp lean({:charge, index, :value}), do: "(charge #{index} 1)"
-  defp lean({:charge, index, :recursive_call}), do: "(charge #{index} 2)"
-  defp lean({:charge, index, :addition}), do: "(charge #{index} 3)"
-  defp lean(:tail_cost), do: "(listCost charge n)"
-  defp lean(:n), do: "n"
-  defp lean(0), do: "0"
+  defp branch_cases(branches, rules) do
+    alternatives = Enum.map_join(branches, " | ", fn _ -> "rfl" end)
+    "rcases member with #{alternatives} <;> simp [#{rules}] <;> omega"
+  end
+
+  defp soundness_rules() do
+    """
+    inductive CostExpr where
+      | paid : Nat → CostExpr
+      | seq : CostExpr → CostExpr → CostExpr
+      | tail : CostExpr
+
+    def CostExpr.eval (tailCost : Nat) : CostExpr → Nat
+      | .paid cost => cost
+      | .seq left right => left.eval tailCost + right.eval tailCost
+      | .tail => tailCost
+
+    def CostExpr.calls : CostExpr → Nat
+      | .paid _ => 0
+      | .seq left right => left.calls + right.calls
+      | .tail => 1
+
+    theorem costComposition (expr : CostExpr) (tailCost : Nat) :
+        expr.eval tailCost = expr.eval 0 + expr.calls * tailCost := by
+      induction expr with
+      | paid cost => simp [CostExpr.eval, CostExpr.calls]
+      | seq left right leftIH rightIH =>
+        simp only [CostExpr.eval, CostExpr.calls, Nat.add_mul, leftIH, rightIH]
+        omega
+      | tail => simp [CostExpr.eval, CostExpr.calls]
+
+    inductive ListCost (empty : CostExpr) (stops steps : List CostExpr) : Nat → Nat → Prop where
+      | nil : ListCost empty stops steps 0 (empty.eval 0)
+      | stop {size branch} : branch ∈ stops →
+          ListCost empty stops steps (size + 1) (branch.eval 0)
+      | step {size branch tailCost} : branch ∈ steps →
+          ListCost empty stops steps size tailCost →
+          ListCost empty stops steps (size + 1) (branch.eval tailCost)
+
+    theorem listRulesSound {empty stops steps size cost n base step}
+        (derivation : ListCost empty stops steps size cost) (sizeBound : size ≤ n)
+        (emptyBound : empty.eval 0 ≤ base)
+        (stopBound : ∀ branch ∈ stops, branch.eval 0 ≤ base)
+        (stepBound : ∀ branch ∈ steps, branch.eval 0 ≤ step ∧ branch.calls ≤ 1) :
+        cost ≤ base + n * step := by
+      have exactBound : cost ≤ base + size * step := by
+        induction derivation with
+        | nil => simpa using emptyBound
+        | stop member =>
+          exact Nat.le_trans (stopBound _ member) (Nat.le_add_right _ _)
+        | @step size branch tailCost member _ ih =>
+          obtain ⟨localBound, countBound⟩ := stepBound branch member
+          have recursiveBound := Nat.mul_le_mul_right tailCost countBound
+          rw [Nat.one_mul] at recursiveBound
+          have tailBound := ih (by omega : size ≤ n)
+          rw [costComposition, Nat.succ_mul]
+          omega
+      exact Nat.le_trans exactBound
+        (Nat.add_le_add_left (Nat.mul_le_mul_right step sizeBound) _)
+
+    """
+  end
+
+  defp expression({:add, left, right}, charges),
+    do: "(.seq #{expression(left, charges)} #{expression(right, charges)})"
+
+  defp expression({:charge, _, :recursive_call} = charge, charges),
+    do: "(.seq (.paid #{lean(charge, charges)}) .tail)"
+
+  defp expression(charge, charges), do: "(.paid #{lean(charge, charges)})"
+
+  defp lean(expr), do: lean(expr, "charge")
+
+  defp lean({:add, left, right}, charges),
+    do: "(#{lean(left, charges)} + #{lean(right, charges)})"
+
+  defp lean({:mul, left, right}, charges),
+    do: "(#{lean(left, charges)} * #{lean(right, charges)})"
+
+  defp lean({:max, left, right}, charges),
+    do: "(max #{lean(left, charges)} #{lean(right, charges)})"
+
+  defp lean({:charge, index, :dispatch}, charges), do: "(#{charges} #{index} 0)"
+  defp lean({:charge, index, :value}, charges), do: "(#{charges} #{index} 1)"
+  defp lean({:charge, index, :recursive_call}, charges), do: "(#{charges} #{index} 2)"
+  defp lean({:charge, index, :addition}, charges), do: "(#{charges} #{index} 3)"
+  defp lean(:n, _charges), do: "n"
+  defp lean(0, _charges), do: "0"
 end
