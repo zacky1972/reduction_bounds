@@ -4,14 +4,30 @@ defmodule ReductionBounds.SearchBound do
 
   @spec infer(term(), [binary()]) :: {:ok, map()} | {:error, term()}
   def infer({module, name, 2} = target, beams) when is_atom(module) and is_atom(name) do
-    with {:ok, beam} <- find_beam(module, beams),
-         {:ok, core} <- read_core(module, beam),
-         :ok <- recognize(core, name) do
+    with {:ok, body} <- core_function({module, name, 2}, beams),
+         :ok <- recognize_body(body, name) do
       {:ok, candidate(target)}
     end
   end
 
   def infer(target, _beams), do: {:error, {:unsupported_target, target}}
+
+  @spec core_function(ReductionBounds.target(), [binary()]) :: {:ok, tuple()} | {:error, term()}
+  def core_function({module, name, arity}, beams) do
+    with {:ok, beam} <- find_beam(module, beams),
+         {:ok, core} <- read_core(module, beam) do
+      find_function(core, name, arity)
+    end
+  end
+
+  defp find_function(core, name, arity) do
+    case Enum.find(:cerl.module_defs(core), fn {var, _body} ->
+           :cerl.var_name(var) == {name, arity}
+         end) do
+      nil -> {:error, {:function_not_found, name, arity}}
+      {_var, body} -> {:ok, body}
+    end
+  end
 
   defp find_beam(module, beams) do
     case Enum.find(Enum.reverse(beams), &(beam_module(&1) == module)) do
@@ -40,15 +56,6 @@ defmodule ReductionBounds.SearchBound do
       {:ok, core}
     else
       reason -> {:error, {:core_unavailable, module, reason}}
-    end
-  end
-
-  defp recognize(core, name) do
-    case Enum.find(:cerl.module_defs(core), fn {var, _body} ->
-           :cerl.var_name(var) == {name, 2}
-         end) do
-      nil -> {:error, {:function_not_found, name, 2}}
-      {_var, body} -> recognize_body(body, name)
     end
   end
 

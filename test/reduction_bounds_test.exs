@@ -183,6 +183,38 @@ defmodule ReductionBoundsTest do
              ReductionBounds.infer_search_bound({Fixture, :no_progress, 2}, beam_binaries: [beam])
   end
 
+  test "reuses traversal rules for search and non-tail-recursive length" do
+    beam = compile_fixture_in_memory()
+    on_exit(&unload_fixture/0)
+
+    assert {:ok, search} =
+             ReductionBounds.infer_list_bound({Fixture, :contains, 2}, beam_binaries: [beam])
+
+    assert {:ok, length} =
+             ReductionBounds.infer_list_bound({Fixture, :list_length, 1}, beam_binaries: [beam])
+
+    assert [{:empty, _, 0}, {:guarded_cons, _, 0}, {:cons, _, 1}] = search.recurrence
+
+    assert [
+             {:empty, _, 0},
+             {:cons, {:add, _, {:add, {:charge, 1, :recursive_call}, {:charge, 1, :addition}}}, 1}
+           ] = length.recurrence
+
+    for result <- [search, length] do
+      assert result.metric == :symbolic_cost
+      assert {:add, _, {:mul, :n, _}} = result.upper_bound
+      assert Enum.any?(result.reports, &match?(%{module: "Erlang.postlude", status: :ok}, &1))
+    end
+  end
+
+  test "shared rules reject recursion that does not consume the tail" do
+    beam = compile_fixture_in_memory()
+    on_exit(&unload_fixture/0)
+
+    assert {:error, {:unsupported_list_shape, 2}} =
+             ReductionBounds.infer_list_bound({Fixture, :no_progress, 2}, beam_binaries: [beam])
+  end
+
   defp compile_fixture(directory) do
     beam = compile_fixture_in_memory()
     beam_path = Path.join(directory, "#{Fixture}.beam")
@@ -205,6 +237,9 @@ defmodule ReductionBoundsTest do
       def no_progress(_key, []), do: false
       def no_progress(key, [head | _]) when head === key, do: true
       def no_progress(key, [_ | _] = list), do: no_progress(key, list)
+
+      def list_length([]), do: 0
+      def list_length([_ | tail]), do: 1 + list_length(tail)
 
       def sum(0), do: 0
       def sum(n), do: sum(n - 1) + n

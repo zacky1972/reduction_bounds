@@ -1,11 +1,11 @@
 defmodule ReductionBounds do
   @moduledoc ~S'''
-  Verifies Lean declarations and infers symbolic costs for supported list searches.
+  Verifies Lean declarations and infers symbolic costs for supported list traversals.
 
   ## Examples
 
   Run these examples in `iex -S mix` from the project root. Define an
-  integer list search and retain its compiled BEAM binary.
+  list search and a list length function, then retain the compiled BEAM binary.
 
   ```elixir
   import Lynx.Lean
@@ -17,6 +17,9 @@ defmodule ReductionBounds do
       def contains(_key, []), do: false
       def contains(key, [head | _]) when head === key, do: true
       def contains(key, [_ | tail]), do: contains(key, tail)
+
+      def list_length([]), do: 0
+      def list_length([_ | tail]), do: 1 + list_length(tail)
     end
 
   target = {SearchDemo, :contains, 2}
@@ -49,6 +52,30 @@ defmodule ReductionBounds do
   for an empty list, a hit at the head, and one step that continues with
   the tail. Lean checks the bound on this model. Relating those parameters
   to ERTS reduction charges requires a separate analysis.
+
+  Use `infer_list_bound/2` to apply the same analysis rules to the search
+  and the length function.
+
+  ```elixir
+  {:ok, search} = ReductionBounds.infer_list_bound(target, beam_binaries: [beam])
+
+  {:ok, length} =
+    ReductionBounds.infer_list_bound({SearchDemo, :list_length, 1}, beam_binaries: [beam])
+
+  :symbolic_cost = search.metric
+  :symbolic_cost = length.metric
+
+  {:add, base, {:mul, :n, step}} = length.upper_bound
+  {:add, {:charge, 0, :dispatch}, {:charge, 0, :value}} = base
+
+  {:add, {:charge, 1, :dispatch},
+   {:add, {:charge, 1, :recursive_call}, {:charge, 1, :addition}}} = step
+  ```
+
+  The bound for `list_length/1` has the form `base + n * step`. Each
+  `{:charge, clause_index, operation}` identifies a symbolic cost by the
+  clause's zero-based index and operation. The step includes the addition
+  performed after the recursive call returns.
   '''
 
   @type target :: {module(), atom(), arity()}
@@ -159,11 +186,34 @@ defmodule ReductionBounds do
           {:ok, map()} | {:error, term()}
   def infer_search_bound(target, options \\ []) do
     with {:ok, options} <- validate_options(options, :search),
-         {:ok, candidate} <- ReductionBounds.SearchBound.infer(target, options[:beam_binaries]),
-         {:ok, [{^target, {:ok, reports}}]} <-
-           verify([target], [postlude: ReductionBounds.SearchBound.proof()] ++ options) do
-      {:ok, Map.put(candidate, :reports, reports)}
-    else
+         {:ok, candidate} <- ReductionBounds.SearchBound.infer(target, options[:beam_binaries]) do
+      verify_bound(target, candidate, ReductionBounds.SearchBound.proof(), options)
+    end
+  end
+
+  @doc """
+  Infers a symbolic cost bound for a supported traversal of an integer list.
+
+  The traversal may take a key before the list and may test for equality.
+  The analysis handles clause dispatch, values, integer addition, sequential
+  bindings, and at most one self-call on the tail per branch.
+
+  Results include the branch recurrence and a Lean-checked upper bound for
+  its cost model. Each charge names a clause and an operation. A dispatch
+  charge includes the tests that led to the clause. ERTS reduction charges
+  are outside this model. Accepts the same options as file-based verification.
+  """
+  @spec infer_list_bound(target(), [verification_option()]) :: {:ok, map()} | {:error, term()}
+  def infer_list_bound(target, options \\ []) do
+    with {:ok, options} <- validate_options(options, :search),
+         {:ok, candidate} <- ReductionBounds.ListBound.infer(target, options[:beam_binaries]) do
+      verify_bound(target, candidate, ReductionBounds.ListBound.proof(candidate), options)
+    end
+  end
+
+  defp verify_bound(target, candidate, proof, options) do
+    case verify([target], [postlude: proof] ++ options) do
+      {:ok, [{^target, {:ok, reports}}]} -> {:ok, Map.put(candidate, :reports, reports)}
       {:ok, [{^target, {:error, reason}}]} -> {:error, reason}
       {:error, _reason} = error -> error
     end
