@@ -47,6 +47,15 @@ initial scope, as do functions or dependencies that use constructs Lynx
 cannot translate.
 See [Lynx's module-loading implementation](https://github.com/josevalim/lynx/blob/d74890ac7a446d57b762d0e4fcd3c848146b2ff6/lib/lynx/translation.ex#L333-L385).
 
+Lynx stops translation when a call returns to a module already on its
+translation stack. Protocol dispatch can introduce such dependencies.
+For example, translating the general enumerable clause of `Enum.map/2`
+can reach `Enumerable.File.Stream`, whose implementation calls back into
+`Enum.reduce/3`. Lynx can encounter that path while translating
+`Enum.map/2` even when the intended inputs are lists. The resulting
+`cyclic module call` diagnostic is reported before Lean checks the proof.
+See [Lynx's cycle detection](https://github.com/josevalim/lynx/blob/d74890ac7a446d57b762d0e4fcd3c848146b2ff6/lib/lynx/translation.ex#L236-L270).
+
 ## Roadmap
 
 - Use circular-buffer insertion to evaluate bounds for individual calls and
