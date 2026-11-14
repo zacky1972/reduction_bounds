@@ -1,17 +1,38 @@
 defmodule ReductionBounds.ListBound do
   @moduledoc false
-  # cspell:words cerl primop scrutinee succ simp cons rcases simpa
+  # cspell:words cerl primop scrutinee succ simp cons rcases simpa leanj symm
 
   @spec infer(term(), [binary()]) :: {:ok, map()} | {:error, term()}
   def infer({module, name, arity} = target, beams)
       when is_atom(module) and is_atom(name) and arity in [1, 2] do
     with {:ok, body} <- ReductionBounds.SearchBound.core_function(target, beams),
          {:ok, branches} <- analyze(body, {name, arity}) do
-      {:ok, candidate(target, branches)}
+      {:ok, Map.put(candidate(target, branches), :value_model, value_model(body, target))}
     end
   end
 
   def infer(target, _beams), do: {:error, {:unsupported_target, target}}
+
+  defp value_model(body, {_, name, 2}) do
+    if ReductionBounds.SearchBound.search_body?(body, name), do: :membership
+  end
+
+  defp value_model(
+         {:c_fun, _, _,
+          {:c_case, _, _,
+           [
+             {:c_clause, _, _, _, {:c_literal, _, 0}},
+             {:c_clause, _, [{:c_cons, _, _, {:c_var, _, tail}}], _,
+              {:c_let, _, [{:c_var, _, result}],
+               {:c_apply, _, {:c_var, _, {name, 1}}, [{:c_var, _, tail}]},
+               {:c_call, _, _, _, [{:c_literal, _, 1}, {:c_var, _, result}]}}},
+             _fallback
+           ]}},
+         {_, name, 1}
+       ),
+       do: :length
+
+  defp value_model(_body, _target), do: nil
 
   defp analyze({:c_fun, _, args, {:c_case, _, scrutinee, clauses}}, {_, arity} = function) do
     with true <- argument_case?(args, scrutinee),
@@ -166,7 +187,7 @@ defmodule ReductionBounds.ListBound do
   defp maximum([first | rest]), do: Enum.reduce(rest, first, &{:max, &2, &1})
 
   @spec proof(map()) :: Lynx.Lean.t()
-  def proof(%{recurrence: [{:empty, empty, 0} | cons], upper_bound: bound}) do
+  def proof(%{recurrence: [{:empty, empty, 0} | cons], upper_bound: bound} = candidate) do
     stops = for {_kind, local, 0} <- cons, do: expression(local, "_charge")
     steps = for {_kind, local, 1} <- cons, do: expression(local, "_charge")
 
@@ -201,8 +222,109 @@ defmodule ReductionBounds.ListBound do
             · intro branch member
               simp [listSteps] at member <;>
               #{branch_cases(steps, "CostExpr.eval, CostExpr.calls")}
-          """
+          """ <> value_proof(candidate)
     }
+  end
+
+  defp value_proof(%{value_model: nil}), do: ""
+
+  defp value_proof(%{value_model: kind, target: {module, name, arity}}) do
+    namespace = :lynx_core_to_leanj.module_name(module)
+    function = "#{namespace}.«#{name}/#{arity}»"
+
+    """
+    def integerListTerm : List Int → Lynx.Term
+      | [] => .nil
+      | head :: tail => .cons (.integer head) (integerListTerm tail)
+
+    """ <> value_proof(kind, function)
+  end
+
+  defp value_proof(:length, function) do
+    """
+    def costedLength (charge : Nat → Nat → Nat) : List Int → Int × Nat
+      | [] => (0, (listEmpty charge).eval 0)
+      | _ :: tail =>
+        let result := costedLength charge tail
+        (1 + result.1, charge 1 0 + (charge 1 2 + result.2) + charge 1 3)
+
+    theorem listValueAgreement (charge : Nat → Nat → Nat) (xs : List Int) :
+        #{function} (integerListTerm xs) = .ok (.integer (costedLength charge xs).1) := by
+      induction xs with
+      | nil =>
+        rw [integerListTerm, #{function}.eq_def]
+        rfl
+      | cons head tail ih =>
+        rw [integerListTerm, #{function}.eq_def]
+        simp only [ih, costedLength]
+        rfl
+
+    theorem lengthCostDerivation (charge : Nat → Nat → Nat) (xs : List Int) :
+        ListCost (listEmpty charge) (listStops charge) (listSteps charge)
+          xs.length (costedLength charge xs).2 := by
+      induction xs with
+      | nil => exact .nil
+      | cons head tail ih =>
+        simp only [List.length_cons, costedLength]
+        have stepDerivation := ListCost.step
+          (empty := listEmpty charge) (stops := listStops charge) (steps := listSteps charge)
+          (branch := (.seq (.paid (charge 1 0))
+            (.seq (.seq (.paid (charge 1 2)) .tail) (.paid (charge 1 3)))))
+          (by simp [listSteps]) ih
+        simpa [CostExpr.eval, Nat.add_assoc] using stepDerivation
+
+    theorem listValueAndBound (charge : Nat → Nat → Nat) (xs : List Int) (n : Nat)
+        (sizeBound : xs.length ≤ n) :
+        #{function} (integerListTerm xs) = .ok (.integer (costedLength charge xs).1) ∧
+        (costedLength charge xs).2 ≤ listUpperBound charge n :=
+      ⟨listValueAgreement charge xs,
+        listCostBound charge xs.length n _ (lengthCostDerivation charge xs) sizeBound⟩
+    """
+  end
+
+  defp value_proof(:membership, function) do
+    """
+    def costedSearch (charge : Nat → Nat → Nat) (key : Int) : List Int → Lynx.Term × Nat
+      | [] => (.atom "false", (listEmpty charge).eval 0)
+      | head :: tail =>
+        if head = key then (.atom "true", charge 1 0 + charge 1 1)
+        else
+          let result := costedSearch charge key tail
+          (result.1, charge 2 0 + (charge 2 2 + result.2))
+
+    theorem listValueAgreement (charge : Nat → Nat → Nat) (key : Int) (xs : List Int) :
+        #{function} (.integer key) (integerListTerm xs) = .ok (costedSearch charge key xs).1 := by
+      induction xs with
+      | nil =>
+        rw [integerListTerm, #{function}.eq_def]
+        rfl
+      | cons head tail ih =>
+        rw [integerListTerm, #{function}.eq_def]
+        by_cases equal : head = key
+        · simp [costedSearch, equal, Erlang.erlang.«=:=/2», Lynx.Except.guard_ok]
+        · simp [costedSearch, equal, Ne.symm equal, Erlang.erlang.«=:=/2», Lynx.Except.guard_ok, ih]
+
+    theorem searchCostDerivation (charge : Nat → Nat → Nat) (key : Int) (xs : List Int) :
+        ListCost (listEmpty charge) (listStops charge) (listSteps charge)
+          xs.length (costedSearch charge key xs).2 := by
+      induction xs with
+      | nil => exact .nil
+      | cons head tail ih =>
+        by_cases equal : head = key
+        · simp only [List.length_cons, costedSearch, if_pos equal]
+          exact ListCost.stop (branch := .seq (.paid (charge 1 0)) (.paid (charge 1 1)))
+            (by simp [listStops])
+        · simp only [List.length_cons, costedSearch, if_neg equal]
+          exact ListCost.step (branch := .seq (.paid (charge 2 0)) (.seq (.paid (charge 2 2)) .tail))
+            (by simp [listSteps]) ih
+
+    theorem listValueAndBound (charge : Nat → Nat → Nat) (key : Int) (xs : List Int) (n : Nat)
+        (sizeBound : xs.length ≤ n) :
+        #{function} (.integer key) (integerListTerm xs) = .ok (costedSearch charge key xs).1 ∧
+        (costedSearch charge key xs).2 ≤ listUpperBound charge n :=
+      ⟨listValueAgreement charge key xs,
+        listCostBound charge xs.length n _ (searchCostDerivation charge key xs) sizeBound⟩
+    """
   end
 
   defp branch_cases([], _rules), do: "contradiction"

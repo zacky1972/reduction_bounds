@@ -193,6 +193,9 @@ defmodule ReductionBoundsTest do
     assert {:ok, length} =
              ReductionBounds.infer_list_bound({Fixture, :list_length, 1}, beam_binaries: [beam])
 
+    assert search.value_model == :membership
+    assert length.value_model == :length
+
     assert [{:empty, _, 0}, {:guarded_cons, _, 0}, {:cons, _, 1}] = search.recurrence
 
     assert [

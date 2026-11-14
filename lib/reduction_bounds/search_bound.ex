@@ -59,6 +59,9 @@ defmodule ReductionBounds.SearchBound do
     end
   end
 
+  @spec search_body?(tuple(), atom()) :: boolean()
+  def search_body?(body, name), do: recognize_body(body, name) == :ok
+
   defp recognize_body(
          {:c_fun, _, [{:c_var, _, key}, {:c_var, _, list}],
           {:c_case, _, {:c_values, _, [{:c_var, _, key}, {:c_var, _, list}]},

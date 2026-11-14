@@ -202,6 +202,12 @@ defmodule ReductionBounds do
   its cost model. Each charge names a clause and an operation. A dispatch
   charge includes the tests that led to the clause. ERTS reduction charges
   are outside this model. Accepts the same options as file-based verification.
+
+  The value_model field identifies a recognized membership or length model.
+  For those models, Lean also proves that the costed model returns the same
+  value as the translated target on integer lists and that its cost obeys
+  the upper bound. A nil value_model means only the symbolic cost rules
+  were checked.
   """
   @spec infer_list_bound(target(), [verification_option()]) :: {:ok, map()} | {:error, term()}
   def infer_list_bound(target, options \\ []) do
