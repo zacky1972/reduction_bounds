@@ -1,6 +1,6 @@
 defmodule ReductionBounds.ListBound do
   @moduledoc false
-  # cspell:words cerl primop scrutinee succ simp cons rcases simpa leanj symm nonzero elim
+  # cspell:words cerl primop scrutinee succ simp cons rcases simpa leanj symm nonzero elim propext
 
   @spec infer(term(), [binary()]) :: {:ok, map()} | {:error, term()}
   def infer({module, name, arity} = target, beams)
@@ -12,6 +12,22 @@ defmodule ReductionBounds.ListBound do
   end
 
   def infer(target, _beams), do: {:error, {:unsupported_target, target}}
+
+  @spec check_forwarding_call(term(), term(), [binary()]) :: :ok | {:error, term()}
+  def check_forwarding_call({module, caller, arity}, {module, callee, arity}, beams)
+      when is_atom(module) and is_atom(caller) and is_atom(callee) and
+             caller != callee and arity in [1, 2] do
+    with {:ok, {:c_fun, _, params, {:c_apply, _, {:c_var, _, {^callee, ^arity}}, args}}} <-
+           ReductionBounds.SearchBound.core_function({module, caller, arity}, beams),
+         true <- same_variables?(params, args) do
+      :ok
+    else
+      {:error, _reason} = error -> error
+      _ -> {:error, :unsupported_forwarding_call}
+    end
+  end
+
+  def check_forwarding_call(_caller, _callee, _beams), do: {:error, :unsupported_forwarding_call}
 
   defp value_model(body, {_, name, 2}) do
     if ReductionBounds.SearchBound.search_body?(body, name), do: :membership
@@ -238,6 +254,113 @@ defmodule ReductionBounds.ListBound do
     }
   end
 
+  @spec input_proof(map(), Lynx.Lean.t() | nil) :: {:ok, Lynx.Lean.t()} | {:error, atom()}
+  def input_proof(candidate, nil), do: {:ok, proof(candidate)}
+
+  def input_proof(%{value_model: nil}, %Lynx.Lean{}),
+    do: {:error, :unsupported_value_model}
+
+  def input_proof(candidate, %Lynx.Lean{source: source}) do
+    proof = proof(candidate)
+
+    source =
+      proof.source <>
+        "\n" <>
+        source <>
+        "\n" <>
+        input_rules() <>
+        input_bound(candidate) <> audit("listInputValueAndBound")
+
+    {:ok, %{proof | source: source}}
+  end
+
+  @spec forwarding_proof(ReductionBounds.target(), map(), Lynx.Lean.t() | nil) ::
+          {:ok, Lynx.Lean.t()} | {:error, atom()}
+  def forwarding_proof(_caller, %{value_model: nil}, _contract),
+    do: {:error, :unsupported_value_model}
+
+  def forwarding_proof(caller, %{value_model: kind, target: callee} = candidate, contract) do
+    with {:ok, proof} <- input_proof(candidate, contract) do
+      source = forwarding_rules(caller, callee, kind, contract)
+      {:ok, %{proof | source: proof.source <> source <> audit("listCallerValueAndBound")}}
+    end
+  end
+
+  defp audit(theorem) do
+    """
+    open Lean in
+    run_cmd do
+      for dependency in ← Lean.collectAxioms ``#{theorem} do
+        unless #[``propext, ``Classical.choice, ``Quot.sound].contains dependency do
+          throwError m!"Unexpected axiom in #{theorem}: {dependency}"
+    """
+  end
+
+  defp input_rules() do
+    """
+    theorem inputLengthBound (xs : List Int) (invariant : inputInvariant xs) :
+        xs.length ≤ inputSize xs := by
+      induction xs with
+      | nil => exact Nat.zero_le _
+      | cons head tail ih =>
+        have tailInvariant := inputInvariantTail head tail invariant
+        have smaller := inputSizeTail head tail invariant
+        simp only [List.length_cons]
+        exact Nat.le_trans (Nat.succ_le_succ (ih tailInvariant)) smaller
+    """
+  end
+
+  defp input_bound(%{value_model: kind, target: target}) do
+    {key, arguments, value, cost, theorem_args} = model_terms(kind)
+
+    """
+    theorem listInputValueAndBound (charge : Nat → Nat → Nat) #{key} (xs : List Int)
+        (precondition : inputPrecondition xs) :
+        #{lean_function(target)} #{arguments} = .ok #{value} ∧
+        #{cost} ≤ listRefinedUpperBound charge (inputSize xs) := by
+      have bound := inputLengthBound xs (inputInvariantInit xs precondition)
+      have result := listValueAndBound charge #{theorem_args} (inputSize xs) bound
+      exact ⟨result.1, result.2.2⟩
+    """
+  end
+
+  defp forwarding_rules(caller, callee, kind, contract) do
+    {key, arguments, value, cost, theorem_args} = model_terms(kind)
+
+    {size, premises, callee_result, callee_bound} =
+      if is_nil(contract) do
+        {"n", "(n : Nat) (sizeBound : xs.length ≤ n)",
+         "listValueAndBound charge #{theorem_args} n sizeBound", "calleeResult.2.2"}
+      else
+        {"(inputSize xs)", "(precondition : inputPrecondition xs)",
+         "listInputValueAndBound charge #{theorem_args} precondition", "calleeResult.2"}
+      end
+
+    """
+    theorem listCallerValueAndBound (charge : Nat → Nat → Nat) (callerCost : Nat)
+        #{key} (xs : List Int) #{premises} :
+        #{lean_function(caller)} #{arguments} = .ok #{value} ∧
+        callerCost + #{cost} ≤ callerCost + listRefinedUpperBound charge #{size} := by
+      have calleeResult := #{callee_result}
+      change #{lean_function(callee)} #{arguments} = .ok #{value} ∧ _
+      exact ⟨calleeResult.1, Nat.add_le_add_left #{callee_bound} callerCost⟩
+    """
+  end
+
+  defp model_terms(:length) do
+    {"", "(integerListTerm xs)", "(.integer (costedLength charge xs).1)",
+     "(costedLength charge xs).2", "xs"}
+  end
+
+  defp model_terms(:membership) do
+    {"(key : Int)", "(.integer key) (integerListTerm xs)", "(costedSearch charge key xs).1",
+     "(costedSearch charge key xs).2", "key xs"}
+  end
+
+  defp lean_function({module, name, arity}) do
+    "#{:lynx_core_to_leanj.module_name(module)}.«#{name}/#{arity}»"
+  end
+
   defp refined_proof(%{recurrence: [{:empty, empty, 0} | cons], refined_upper_bound: bound}) do
     stops = for {_kind, local, 0} <- cons, do: expression(local, "_charge")
     stop_costs = for {_kind, local, 0} <- cons, do: local
@@ -301,16 +424,13 @@ defmodule ReductionBounds.ListBound do
 
   defp value_proof(%{value_model: nil}), do: ""
 
-  defp value_proof(%{value_model: kind, target: {module, name, arity}}) do
-    namespace = :lynx_core_to_leanj.module_name(module)
-    function = "#{namespace}.«#{name}/#{arity}»"
-
+  defp value_proof(%{value_model: kind, target: target}) do
     """
     def integerListTerm : List Int → Lynx.Term
       | [] => .nil
       | head :: tail => .cons (.integer head) (integerListTerm tail)
 
-    """ <> value_proof(kind, function)
+    """ <> value_proof(kind, lean_function(target))
   end
 
   defp value_proof(:length, function) do

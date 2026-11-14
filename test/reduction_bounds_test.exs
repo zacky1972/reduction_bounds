@@ -228,6 +228,61 @@ defmodule ReductionBoundsTest do
              ReductionBounds.infer_list_bound({Fixture, :no_progress, 2}, beam_binaries: [beam])
   end
 
+  test "checks a user input contract and reuses the traversal theorem in a local wrapper" do
+    beam = compile_fixture_in_memory()
+    on_exit(&unload_fixture/0)
+    callee = {Fixture, :list_length, 1}
+    caller = {Fixture, :forward_length, 1}
+
+    contract = ~LEAN"""
+    def inputPrecondition (xs : List Int) : Prop := xs.length < 100
+    def inputInvariant (xs : List Int) : Prop := xs.length < 100
+    def inputSize (xs : List Int) : Nat := xs.length + 2
+
+    theorem inputInvariantInit (xs : List Int) :
+        inputPrecondition xs → inputInvariant xs := id
+
+    theorem inputInvariantTail (head : Int) (tail : List Int) :
+        inputInvariant (head :: tail) → inputInvariant tail := by
+      simp [inputInvariant]
+      omega
+
+    theorem inputSizeTail (head : Int) (tail : List Int) :
+        inputInvariant (head :: tail) → inputSize tail + 1 ≤ inputSize (head :: tail) := by
+      simp [inputSize] <;> omega
+    """
+
+    options = [beam_binaries: [beam], input_contract: contract]
+    assert {:ok, direct} = ReductionBounds.infer_list_bound(callee, options)
+    assert direct.size_measure == :input_size
+    assert {:ok, result} = ReductionBounds.infer_list_call_bound(caller, callee, options)
+    assert result.size_measure == :input_size
+    assert result.upper_bound == {:add, :caller_cost, direct.refined_upper_bound}
+
+    assert {:ok, %{size_measure: :list_length}} =
+             ReductionBounds.infer_list_call_bound(caller, callee, beam_binaries: [beam])
+
+    assert {:error, :unsupported_forwarding_call} =
+             ReductionBounds.infer_list_call_bound({Fixture, :constant, 0}, callee, options)
+
+    incomplete = %{
+      contract
+      | source: String.replace(contract.source, "simp [inputSize] <;> omega", "sorry")
+    }
+
+    assert {:error, {:verification_failed, _}} =
+             ReductionBounds.infer_list_bound(
+               callee,
+               Keyword.put(options, :input_contract, incomplete)
+             )
+
+    assert {:error, {:verification_failed, _}} =
+             ReductionBounds.infer_list_bound(callee,
+               beam_binaries: [beam],
+               input_contract: ~LEAN"def inputSize (_ : List Int) : Nat := 0"
+             )
+  end
+
   defp compile_fixture(directory) do
     beam = compile_fixture_in_memory()
     beam_path = Path.join(directory, "#{Fixture}.beam")
@@ -253,6 +308,7 @@ defmodule ReductionBoundsTest do
 
       def list_length([]), do: 0
       def list_length([_ | tail]), do: 1 + list_length(tail)
+      def forward_length(xs), do: list_length(xs)
 
       def sum(0), do: 0
       def sum(n), do: sum(n - 1) + n

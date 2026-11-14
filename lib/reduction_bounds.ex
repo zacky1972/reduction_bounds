@@ -4,7 +4,7 @@ defmodule ReductionBounds do
 
   ## Examples
 
-  Run these examples in `iex -S mix` from the project root. Define an
+  Run these examples in `iex -S mix` from the project root. Define a
   list search and a list length function, then retain the compiled BEAM binary.
 
   ```elixir
@@ -20,6 +20,7 @@ defmodule ReductionBounds do
 
       def list_length([]), do: 0
       def list_length([_ | tail]), do: 1 + list_length(tail)
+      def forward_length(xs), do: list_length(xs)
     end
 
   target = {SearchDemo, :contains, 2}
@@ -83,6 +84,68 @@ defmodule ReductionBounds do
   To use the symbolic bound for ERTS reductions, map the compiled paths
   to the modeled charges and justify each charge under the allowed VM
   states for the target build, including the available reduction budget.
+
+  ### Derive a bound under an input contract
+
+  Continue in the same IEx session, using the compiled `beam` and the
+  `~LEAN` sigil from `Lynx.Lean`. This contract admits lists of fewer than
+  100 positive integers.
+  Positivity is the invariant, and the sum of the entries is the size
+  measure. Removing a positive head decreases the measure by at least one.
+
+  ```elixir
+  contract = ~LEAN"""
+  def inputInvariant (xs : List Int) : Prop := ∀ x ∈ xs, 0 < x
+  def inputPrecondition (xs : List Int) : Prop :=
+    xs.length < 100 ∧ inputInvariant xs
+  def inputSize (xs : List Int) : Nat := (xs.map Int.toNat).sum
+
+  theorem inputInvariantInit (xs : List Int) :
+      inputPrecondition xs → inputInvariant xs := by
+    intro precondition
+    exact precondition.2
+
+  theorem inputInvariantTail (head : Int) (tail : List Int) :
+      inputInvariant (head :: tail) → inputInvariant tail := by
+    intro invariant x member
+    exact invariant x (List.mem_cons_of_mem head member)
+
+  theorem inputSizeTail (head : Int) (tail : List Int) :
+      inputInvariant (head :: tail) → inputSize tail + 1 ≤ inputSize (head :: tail) := by
+    intro invariant
+    have positive := invariant head (by simp)
+    simp [inputSize]
+    omega
+  """
+
+  options = [beam_binaries: [beam], input_contract: contract]
+  callee = {SearchDemo, :list_length, 1}
+
+  {:ok, %{size_measure: :input_size, refined_upper_bound: callee_bound}} =
+    ReductionBounds.infer_list_bound(callee, options)
+  ```
+
+  Lean checks the three contract lemmas and derives that the list length
+  is at most the custom measure. In the returned formula, `n` denotes
+  `inputSize xs` for inputs satisfying `inputPrecondition xs`. For example,
+  `[2, 5, 1]` gives `n = 8`.
+
+  ### Reuse the callee's bound in a wrapper
+
+  Pass the wrapper and callee as separate targets, with the same contract.
+  The wrapper forwards its argument unchanged within the same module.
+
+  ```elixir
+  caller = {SearchDemo, :forward_length, 1}
+
+  {:ok, %{size_measure: :input_size, upper_bound: {:add, :caller_cost, ^callee_bound}}} =
+    ReductionBounds.infer_list_call_bound(caller, callee, options)
+  ```
+
+  The pinned pattern checks that the wrapper formula contains the same
+  refined bound as the preceding call. `infer_list_call_bound/3` checks the
+  callee theorem again and applies it in the same Lean run. `caller_cost`
+  represents the wrapper's own symbolic cost.
   '''
 
   @type target :: {module(), atom(), arity()}
@@ -113,6 +176,8 @@ defmodule ReductionBounds do
 
   @type verification_result ::
           {:ok, [{target(), target_result()}]} | {:error, setup_error()}
+
+  @type list_inference_option :: verification_option() | {:input_contract, Lynx.Lean.t()}
 
   @doc """
   Checks a Lean file or an inline Lean postlude against each target.
@@ -207,7 +272,8 @@ defmodule ReductionBounds do
 
   Results include the branch recurrence and two Lean-checked upper bounds
   for its cost model. The refined_upper_bound field accounts for the
-  different maximum step counts of empty-list and early-stop paths. Each charge names a clause and an operation. A dispatch
+  different maximum step counts of empty-list and early-stop paths. Each
+  charge names a clause and an operation. A dispatch
   charge includes the tests that led to the clause. ERTS reduction charges
   are outside this model. Accepts the same options as file-based verification.
 
@@ -216,14 +282,65 @@ defmodule ReductionBounds do
   value as the translated target on integer lists and that its cost obeys
   the upper bound. A nil value_model means only the symbolic cost rules
   were checked.
+
+  For a recognized value model, pass input_contract as a Lean block to
+  prove the bounds under an input precondition with a tail invariant and a
+  natural-valued size measure. See the module examples.
   """
-  @spec infer_list_bound(target(), [verification_option()]) :: {:ok, map()} | {:error, term()}
+  @spec infer_list_bound(target(), [list_inference_option()]) :: {:ok, map()} | {:error, term()}
   def infer_list_bound(target, options \\ []) do
-    with {:ok, options} <- validate_options(options, :search),
+    with {:ok, options} <- validate_options(options, :list_bound),
          {:ok, candidate} <- ReductionBounds.ListBound.infer(target, options[:beam_binaries]) do
-      verify_bound(target, candidate, ReductionBounds.ListBound.proof(candidate), options)
+      {contract, options} = Keyword.pop(options, :input_contract)
+      verify_list_candidate(target, candidate, contract, options)
     end
   end
+
+  @doc """
+  Infers a symbolic bound for a local wrapper that forwards every argument
+  unchanged to a list traversal. The callee must have a recognized value
+  model. Lean checks the callee theorem and reuses it to prove the wrapper
+  bound, which adds the symbolic caller_cost to the callee's bound.
+
+  An optional input_contract Lean block can supply a precondition, a
+  tail invariant, and a size measure. See the module examples.
+  """
+  @spec infer_list_call_bound(target(), target(), [list_inference_option()]) ::
+          {:ok, map()} | {:error, term()}
+  def infer_list_call_bound(caller, callee, options \\ []) do
+    with {:ok, options} <- validate_options(options, :list_bound),
+         :ok <-
+           ReductionBounds.ListBound.check_forwarding_call(
+             caller,
+             callee,
+             options[:beam_binaries]
+           ),
+         {:ok, candidate} <- ReductionBounds.ListBound.infer(callee, options[:beam_binaries]) do
+      {contract, options} = Keyword.pop(options, :input_contract)
+
+      with {:ok, proof} <- ReductionBounds.ListBound.forwarding_proof(caller, candidate, contract) do
+        result = %{
+          target: caller,
+          callee: callee,
+          metric: :symbolic_cost,
+          upper_bound: {:add, :caller_cost, candidate.refined_upper_bound},
+          size_measure: list_size_measure(contract)
+        }
+
+        verify_bound(caller, result, proof, options)
+      end
+    end
+  end
+
+  defp verify_list_candidate(target, candidate, contract, options) do
+    with {:ok, proof} <- ReductionBounds.ListBound.input_proof(candidate, contract) do
+      result = Map.put(candidate, :size_measure, list_size_measure(contract))
+      verify_bound(target, result, proof, options)
+    end
+  end
+
+  defp list_size_measure(nil), do: :list_length
+  defp list_size_measure(%Lynx.Lean{}), do: :input_size
 
   defp verify_bound(target, candidate, proof, options) do
     case verify([target], [postlude: proof] ++ options) do
@@ -281,7 +398,12 @@ defmodule ReductionBounds do
       termination_suffixes: %{}
     ]
 
-    allowed = if source == :inline, do: [:postlude | defaults], else: defaults
+    allowed =
+      case source do
+        :inline -> [:postlude | defaults]
+        :list_bound -> [:input_contract | defaults]
+        _ -> defaults
+      end
 
     with true <- Keyword.keyword?(options),
          {:ok, options} <- Keyword.validate(options, allowed),
@@ -294,6 +416,7 @@ defmodule ReductionBounds do
     end
   end
 
+  defp valid_option?({:input_contract, value}), do: is_struct(value, Lynx.Lean)
   defp valid_option?({:postlude, value}), do: is_struct(value, Lynx.Lean)
   defp valid_option?({:max_concurrency, value}), do: is_integer(value) and value > 0
   defp valid_option?({:timeout, value}), do: is_integer(value) and value in 0..4_294_967_295
