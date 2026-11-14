@@ -14,6 +14,20 @@ defmodule ReductionBounds.ListBound do
      Map.merge(candidate(target, branches), %{value_model: :membership, source: :lynx_builtin})}
   end
 
+  def infer({:lists, :reverse, 2} = target, _beams) do
+    branches = [
+      {:empty, {:add, {:charge, 0, :dispatch}, {:charge, 0, :value}}, 0},
+      {:cons, {:add, {:charge, 1, :dispatch}, {:charge, 1, :recursive_call}}, 1}
+    ]
+
+    {:ok,
+     Map.merge(candidate(target, branches), %{
+       domain: :proper_integer_lists,
+       value_model: :reversal,
+       source: :lynx_builtin
+     })}
+  end
+
   def infer({module, name, arity} = target, beams)
       when is_atom(module) and is_atom(name) and arity in [1, 2] do
     with {:ok, body} <- ReductionBounds.SearchBound.core_function(target, beams),
@@ -322,10 +336,10 @@ defmodule ReductionBounds.ListBound do
   end
 
   defp input_bound(%{value_model: kind, target: target}) do
-    {key, arguments, value, cost, theorem_args} = model_terms(kind)
+    {extra_binder, arguments, value, cost, theorem_args} = model_terms(kind)
 
     """
-    theorem listInputValueAndBound (charge : Nat → Nat → Nat) #{key} (xs : List Int)
+    theorem listInputValueAndBound (charge : Nat → Nat → Nat) #{extra_binder} (xs : List Int)
         (precondition : inputPrecondition xs) :
         #{lean_function(target)} #{arguments} = .ok #{value} ∧
         #{cost} ≤ listRefinedUpperBound charge (inputSize xs) := by
@@ -336,7 +350,7 @@ defmodule ReductionBounds.ListBound do
   end
 
   defp forwarding_rules(caller, callee, kind, contract) do
-    {key, arguments, value, cost, theorem_args} = model_terms(kind)
+    {extra_binder, arguments, value, cost, theorem_args} = model_terms(kind)
 
     {size, premises, callee_result, callee_bound} =
       if is_nil(contract) do
@@ -349,7 +363,7 @@ defmodule ReductionBounds.ListBound do
 
     """
     theorem listCallerValueAndBound (charge : Nat → Nat → Nat) (callerCost : Nat)
-        #{key} (xs : List Int) #{premises} :
+        #{extra_binder} (xs : List Int) #{premises} :
         #{lean_function(caller)} #{arguments} = .ok #{value} ∧
         callerCost + #{cost} ≤ callerCost + listRefinedUpperBound charge #{size} := by
       have calleeResult := #{callee_result}
@@ -366,6 +380,11 @@ defmodule ReductionBounds.ListBound do
   defp model_terms(:membership) do
     {"(key : Int)", "(.integer key) (integerListTerm xs)", "(costedSearch charge key xs).1",
      "(costedSearch charge key xs).2", "key xs"}
+  end
+
+  defp model_terms(:reversal) do
+    {"(acc : List Int)", "(integerListTerm xs) (integerListTerm acc)",
+     "(integerListTerm (xs.reverse ++ acc))", "(costedReverse charge xs acc).2", "xs acc"}
   end
 
   defp lean_function({module, name, arity}) do
@@ -523,6 +542,53 @@ defmodule ReductionBounds.ListBound do
       ⟨listValueAgreement charge key xs,
         listCostBound charge xs.length n _ (searchCostDerivation charge key xs) sizeBound,
         listRefinedCostBound charge xs.length n _ (searchCostDerivation charge key xs) sizeBound⟩
+    """
+  end
+
+  defp value_proof(:reversal, function, _target) do
+    """
+    def costedReverse (charge : Nat → Nat → Nat) : List Int → List Int → List Int × Nat
+      | [], acc => (acc, (listEmpty charge).eval 0)
+      | head :: tail, acc =>
+        let result := costedReverse charge tail (head :: acc)
+        (result.1, charge 1 0 + (charge 1 2 + result.2))
+
+    theorem listValueAgreement (charge : Nat → Nat → Nat) (xs acc : List Int) :
+        #{function} (integerListTerm xs) (integerListTerm acc) =
+          .ok (integerListTerm (costedReverse charge xs acc).1) := by
+      induction xs generalizing acc with
+      | nil => rfl
+      | cons head tail ih =>
+        rw [integerListTerm, #{function}.eq_def]
+        exact ih (head :: acc)
+
+    theorem reverseResult (charge : Nat → Nat → Nat) (xs acc : List Int) :
+        (costedReverse charge xs acc).1 = xs.reverse ++ acc := by
+      induction xs generalizing acc with
+      | nil => rfl
+      | cons head tail ih =>
+        simpa [costedReverse, List.reverse_cons, List.append_assoc] using ih (head :: acc)
+
+    theorem reverseCostDerivation (charge : Nat → Nat → Nat) (xs acc : List Int) :
+        ListCost (listEmpty charge) (listStops charge) (listSteps charge)
+          xs.length (costedReverse charge xs acc).2 := by
+      induction xs generalizing acc with
+      | nil => exact .nil
+      | cons head tail ih =>
+        simp only [List.length_cons, costedReverse]
+        exact ListCost.step (branch := .seq (.paid (charge 1 0)) (.seq (.paid (charge 1 2)) .tail))
+          (by simp [listSteps]) (ih (head :: acc))
+
+    theorem listValueAndBound (charge : Nat → Nat → Nat) (xs acc : List Int) (n : Nat)
+        (sizeBound : xs.length ≤ n) :
+        #{function} (integerListTerm xs) (integerListTerm acc) =
+          .ok (integerListTerm (xs.reverse ++ acc)) ∧
+        (costedReverse charge xs acc).2 ≤ listUpperBound charge n ∧
+        (costedReverse charge xs acc).2 ≤ listRefinedUpperBound charge n := by
+      have derivation := reverseCostDerivation charge xs acc
+      exact ⟨by simpa only [reverseResult] using listValueAgreement charge xs acc,
+        listCostBound charge xs.length n _ derivation sizeBound,
+        listRefinedCostBound charge xs.length n _ derivation sizeBound⟩
     """
   end
 

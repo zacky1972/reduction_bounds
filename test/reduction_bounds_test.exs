@@ -228,7 +228,43 @@ defmodule ReductionBoundsTest do
              ReductionBounds.infer_list_bound({Fixture, :no_progress, 2}, beam_binaries: [beam])
   end
 
-  test "checks a user input contract and reuses the traversal theorem in a local wrapper" do
+  test "checks symbolic bounds for the built-in lists membership function" do
+    target = {:lists, :member, 2}
+
+    assert {:ok, bound} = ReductionBounds.infer_list_bound(target)
+    assert bound.target == target
+    assert bound.source == :lynx_builtin
+    assert bound.metric == :symbolic_cost
+    assert bound.size_measure == :list_length
+    assert bound.value_model == :membership
+    assert bound.domain == :proper_integer_list_with_integer_key_if_present
+    assert [{:empty, empty, 0}, {:guarded_cons, hit, 0}, {:cons, step, 1}] = bound.recurrence
+    assert bound.upper_bound == {:add, {:max, empty, hit}, {:mul, :n, step}}
+
+    assert bound.refined_upper_bound ==
+             {:if_zero, :n, empty,
+              {:max, {:add, empty, {:mul, :n, step}}, {:add, hit, {:mul, {:sub, :n, 1}, step}}}}
+
+    assert [%{module: "Erlang.postlude", status: :ok}] = bound.reports
+  end
+
+  test "checks symbolic bounds for the built-in reversal with an accumulator" do
+    target = {:lists, :reverse, 2}
+
+    assert {:ok, bound} = ReductionBounds.infer_list_bound(target)
+    assert bound.target == target
+    assert bound.source == :lynx_builtin
+    assert bound.metric == :symbolic_cost
+    assert bound.size_measure == :list_length
+    assert bound.value_model == :reversal
+    assert bound.domain == :proper_integer_lists
+    assert [{:empty, empty, 0}, {:cons, step, 1}] = bound.recurrence
+    assert bound.upper_bound == {:add, empty, {:mul, :n, step}}
+    assert bound.refined_upper_bound == bound.upper_bound
+    assert [%{module: "Erlang.postlude", status: :ok}] = bound.reports
+  end
+
+  test "checks input contracts for traversals and reuses a theorem in a local wrapper" do
     beam = compile_fixture_in_memory()
     on_exit(&unload_fixture/0)
     callee = {Fixture, :list_length, 1}
@@ -255,6 +291,10 @@ defmodule ReductionBoundsTest do
     options = [beam_binaries: [beam], input_contract: contract]
     assert {:ok, direct} = ReductionBounds.infer_list_bound(callee, options)
     assert direct.size_measure == :input_size
+
+    assert {:ok, %{size_measure: :input_size, value_model: :reversal}} =
+             ReductionBounds.infer_list_bound({:lists, :reverse, 2}, input_contract: contract)
+
     assert {:ok, result} = ReductionBounds.infer_list_call_bound(caller, callee, options)
     assert result.size_measure == :input_size
     assert result.upper_bound == {:add, :caller_cost, direct.refined_upper_bound}

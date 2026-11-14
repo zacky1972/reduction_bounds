@@ -277,7 +277,7 @@ defmodule ReductionBounds do
   charge includes the tests that led to the clause. ERTS reduction charges
   are outside this model. Accepts the same options as file-based verification.
 
-  The value_model field identifies a recognized membership or length model.
+  The value_model field identifies a recognized membership, length, or reversal model.
   For those models, Lean also proves that the costed model returns the same
   value as the translated target on integer lists and that its cost obeys
   the upper bound. A nil value_model means only the symbolic cost rules
@@ -287,6 +287,11 @@ defmodule ReductionBounds do
   integer key and a proper integer list. Its charges describe the empty,
   hit, and continue cases of the symbolic traversal. In the continue
   case, recursive_call denotes a step to the next list cell in the model.
+
+  The target {:lists, :reverse, 2} uses Lynx's built-in reversal model.
+  Both arguments must be proper integer lists. The size measure applies
+  to the first argument, and the result is its reversal followed by
+  the accumulator. The symbolic bound does not depend on accumulator length.
 
   For a recognized value model, pass input_contract as a Lean block to
   prove the bounds under an input precondition with a tail invariant and a

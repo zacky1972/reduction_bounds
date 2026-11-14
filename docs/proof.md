@@ -1,4 +1,6 @@
-# Proof of the symbolic bound for lists:member/2
+# Proofs of symbolic bounds for list built-ins
+
+## lists:member/2
 
 Call `ReductionBounds.infer_list_bound({:lists, :member, 2})` to check
 the bound for the Erlang built-in. The analysis uses the built-in value
@@ -7,7 +9,7 @@ theorem are an integer key and a proper list of integers, encoded as
 Lynx terms. The size parameter `n` is any natural number at least as
 large as the input list length.
 
-## Value agreement
+### Value agreement
 
 The costed model returns a pair consisting of the Boolean result as a
 Lynx atom and a symbolic cost. It returns `false` for an empty list,
@@ -17,7 +19,7 @@ list that the value component agrees with the result of the Lynx model.
 In the inductive step, exact comparison of two encoded integers reduces
 to equality of their integer values.
 
-## Cost recurrence
+### Cost recurrence
 
 The cost theorem holds for every assignment of natural numbers to
 the model's charges. Write `E` for the total charge of the empty case,
@@ -36,7 +38,7 @@ The theorem `searchCostDerivation` proves that the cost computed by the
 model has a derivation in the shared `ListCost` relation. Each
 continuation decreases the input length by one.
 
-## Upper bounds
+### Upper bounds
 
 The result contains the following two bounds.
 
@@ -53,6 +55,44 @@ so it can continue at most `n - 1` times before the hit. When
 The generated theorem `listValueAndBound` combines value agreement
 with both cost inequalities. It is checked by Lean when inference
 runs, and the ExUnit case exercises that path through the public API.
+
+## lists:reverse/2
+
+Call `ReductionBounds.infer_list_bound({:lists, :reverse, 2})` to check
+the bound for reversal with an accumulator. Both inputs are proper
+integer lists. Write `xs` for the first argument and `acc` for the
+accumulator. The size parameter `n` bounds the length of `xs`.
+
+### Value agreement
+
+The costed model returns `acc` when `xs` is empty. For a nonempty
+list, it prepends the head to `acc` and continues on the tail. Lean
+proves by induction on `xs`, with the accumulator generalized, that
+the model agrees with Lynx's `Erlang.lists.«reverse/2»` and returns
+`xs.reverse ++ acc`. Reversing `[1, 2]` onto `[3, 4]` gives
+`[2, 1, 3, 4]`. An empty accumulator gives `[2, 1]`.
+
+### Cost recurrence and upper bound
+
+Let `E` be the symbolic charge for returning the accumulator, and let
+`S` be the local charge for moving one head to the accumulator and
+continuing. The charges range over the natural numbers.
+
+| Input | Modeled cost |
+| --- | --- |
+| `[]`, `acc` | `E` |
+| `head :: tail`, `acc` | `S + cost(tail, head :: acc)` |
+
+The theorem `reverseCostDerivation` proves that the computed cost has a
+derivation in the shared `ListCost` relation. Every step consumes one
+cell of the first list. The model reaches the empty case after
+`xs.length` steps, so both `upper_bound` and `refined_upper_bound`
+are `E + n * S`. The bound has no term for the length of `acc`.
+
+The generated theorem `listValueAndBound` gives the result equation
+and both inequalities for all values of `acc` in the stated domain.
+When supplied, an `input_contract` constrains `xs` and supplies its
+size measure.
 
 ## Scope
 
