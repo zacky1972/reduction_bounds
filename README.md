@@ -35,6 +35,18 @@ versions. It will distinguish bounds proved for the cost model from bounds
 justified against ERTS reduction accounting and identify unsupported
 operations or unresolved proof obligations.
 
+## Input limitations
+
+The initial Lynx-based analysis requires Core Erlang for the target
+function and any dependencies that Lynx needs to translate. When loading
+a compiled Erlang or Elixir module, Lynx uses its BEAM debug information
+to recover Core Erlang and translate the relevant functions to Lean.
+This path requires a debug information backend that can provide Core
+Erlang. BEAM files with stripped debug information fall outside the
+initial scope, as do functions or dependencies that use constructs Lynx
+cannot translate.
+See [Lynx's module-loading implementation](https://github.com/josevalim/lynx/blob/d74890ac7a446d57b762d0e4fcd3c848146b2ff6/lib/lynx/translation.ex#L333-L385).
+
 ## Roadmap
 
 - Use circular-buffer insertion to evaluate bounds for individual calls and
@@ -44,6 +56,11 @@ operations or unresolved proof obligations.
 - Release an open-source prototype and document the supported operations,
   the annotations users need to supply, and how much of the derivation the
   library can automate.
+- Investigate deriving reduction bounds directly from BEAM instructions,
+  with the longer-term goal of accepting arbitrary BEAM modules, including
+  binaries with stripped debug information. This would require an
+  instruction-level model of execution and reduction accounting for the
+  target ERTS version.
 
 ## License
 
