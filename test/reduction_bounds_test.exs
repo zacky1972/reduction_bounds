@@ -1,6 +1,8 @@
 defmodule ReductionBoundsTest do
   use ExUnit.Case
 
+  import Lynx.Lean
+
   doctest ReductionBounds
 
   alias ReductionBoundsTest.Fixture
@@ -95,32 +97,91 @@ defmodule ReductionBoundsTest do
     wrapper = {Fixture, :identity_wrapper, 1}
 
     assert {:ok, [{^identity, {:error, :timeout}}, {^wrapper, {:error, :timeout}}]} =
-             ReductionBounds.verify("identity.lean", [identity, wrapper],
-               max_concurrency: 1,
-               timeout: 1
+             ReductionBounds.verify("timeout.lean", [identity, wrapper],
+               max_concurrency: 2,
+               timeout: 2_000
+             )
+  end
+
+  test "verifies a module compiled only in memory from its BEAM binary" do
+    beam = compile_fixture_in_memory()
+    target = {Fixture, :identity, 1}
+    on_exit(&unload_fixture/0)
+
+    assert :code.which(Fixture) == []
+
+    assert {:ok, [{^target, {:ok, reports}}]} =
+             ReductionBounds.verify("identity.lean", [target], beam_binaries: [beam])
+
+    assert Enum.any?(reports, &match?(%{module: "Erlang.postlude", status: :ok}, &1))
+    assert :code.which(Fixture) == []
+  end
+
+  test "verifies inline Lean against a recursive in-memory function" do
+    beam = compile_fixture_in_memory()
+    target = {Fixture, :sum, 1}
+    on_exit(&unload_fixture/0)
+
+    postlude = ~LEAN"""
+    theorem sumZero :
+        Elixir.ReductionBoundsTest.Fixture.«sum/1» (.integer 0) = .ok (.integer 0) := by
+      rw [Elixir.ReductionBoundsTest.Fixture.«sum/1».eq_def]
+      rfl
+    """
+
+    assert {:ok, [{^target, {:ok, reports}}]} =
+             ReductionBounds.verify([target],
+               postlude: postlude,
+               beam_binaries: [beam],
+               termination_suffixes: %{target => ~LEAN"partial_fixpoint"}
+             )
+
+    assert Enum.any?(reports, &match?(%{module: "Erlang.postlude", status: :ok}, &1))
+    assert :code.which(Fixture) == []
+  end
+
+  test "requires a Lynx.Lean postlude for inline verification" do
+    target = {Fixture, :identity, 1}
+    assert {:error, :missing_postlude} = ReductionBounds.verify([target], [])
+
+    assert {:error, {:invalid_option, :postlude, "invalid"}} =
+             ReductionBounds.verify([target], postlude: "invalid")
+  end
+
+  test "reports a BEAM registration failure" do
+    assert {:error, {:beam_registration, %CompileError{}}} =
+             ReductionBounds.verify("identity.lean", [{Fixture, :identity, 1}],
+               beam_binaries: ["invalid BEAM"]
              )
   end
 
   defp compile_fixture(directory) do
+    beam = compile_fixture_in_memory()
+    beam_path = Path.join(directory, "#{Fixture}.beam")
+    File.write!(beam_path, beam)
+    unload_fixture()
+    {:module, Fixture} = :code.load_binary(Fixture, String.to_charlist(beam_path), beam)
+    on_exit(&unload_fixture/0)
+  end
+
+  defp compile_fixture_in_memory do
     source = """
     defmodule ReductionBoundsTest.Fixture do
       @compile :debug_info
       def identity(value), do: value
       def constant, do: true
+      def sum(0), do: 0
+      def sum(n), do: sum(n - 1) + n
       def identity_wrapper(value), do: identity(value)
     end
     """
 
     [{Fixture, beam}] = Code.compile_string(source)
-    beam_path = Path.join(directory, "#{Fixture}.beam")
-    File.write!(beam_path, beam)
+    beam
+  end
+
+  defp unload_fixture do
     :code.delete(Fixture)
     :code.purge(Fixture)
-    {:module, Fixture} = :code.load_binary(Fixture, String.to_charlist(beam_path), beam)
-
-    on_exit(fn ->
-      :code.delete(Fixture)
-      :code.purge(Fixture)
-    end)
   end
 end

@@ -17,13 +17,37 @@ defmodule ReductionBounds do
           | {:expected_target_list, term()}
           | {:invalid_targets, [term()]}
           | :invalid_options
+          | :missing_postlude
           | {:invalid_option, atom(), term()}
           | {:read_lean, Path.t(), File.posix()}
+          | {:beam_registration, %CompileError{}}
 
   @type verification_option ::
           {:max_concurrency, pos_integer()}
           | {:timeout, non_neg_integer()}
+          | {:beam_binaries, [binary()]}
+          | {:termination_suffixes, %{optional(target()) => Lynx.Lean.t()}}
           | {:lean_options, [{atom(), integer() | boolean() | String.t()}]}
+
+  @type verification_result ::
+          {:ok, [{target(), target_result()}]} | {:error, setup_error()}
+
+  @doc """
+  Checks a Lean file or an inline Lean postlude against each target.
+
+  Pass a filename relative to the Mix project's lean/ directory and
+  a list of targets, or pass the targets first with a required
+  postlude option containing a Lynx.Lean value, such as one produced
+  by the ~LEAN sigil. Target tuples have the form {module, function, arity}.
+  """
+  @spec verify(Path.t(), [target()]) :: verification_result()
+  @spec verify([target()], [verification_option() | {:postlude, Lynx.Lean.t()}]) ::
+          verification_result()
+  def verify(targets, options) when is_list(targets) do
+    verify_source(:inline, targets, options)
+  end
+
+  def verify(lean_file, targets), do: verify(lean_file, targets, [])
 
   @doc """
   Checks a Lean file against each target independently.
@@ -32,10 +56,21 @@ defmodule ReductionBounds do
   and a list of {module, function, arity} tuples. The file is loaded as a
   Lynx postlude in each verification, so it must elaborate with the
   definitions available for that target. Target modules are resolved
-  through the BEAM code path.
+  from registered BEAM binaries or through the BEAM code path.
 
   Options
 
+    * beam_binaries (default []) registers BEAM binaries for target
+      modules and dependencies in this invocation. The binaries must
+      contain debug information from which Lynx can obtain Core Erlang.
+      If several binaries define the same module, the last one is used.
+      Registration failures are returned before verification starts.
+
+    * termination_suffixes (default %{}) attaches Lean termination
+      declarations to translated functions, keyed by {module, function,
+      arity}. A suffix can specify how Lean handles a function that may
+      diverge on some inputs. Each supplied function must be translated
+      in every verification job.
     * max_concurrency (default 2) limits the number of concurrent tasks
       in this invocation. Set it to 1 for sequential verification.
     * timeout (default 60,000 milliseconds) limits each task from
@@ -55,13 +90,32 @@ defmodule ReductionBounds do
   This function checks the supplied declarations. It does not derive bounds
   or apply Lynx's law-specific axiom audit to postlude declarations.
   """
-  @spec verify(Path.t(), [target()], [verification_option()]) ::
-          {:ok, [{target(), target_result()}]} | {:error, setup_error()}
-  def verify(lean_file, targets, options \\ []) do
+  @spec verify(Path.t(), [target()], [verification_option()]) :: verification_result()
+  def verify(lean_file, targets, options) do
+    verify_source({:file, lean_file}, targets, options)
+  end
+
+  defp verify_source(source, targets, options) do
     with :ok <- validate_targets(targets),
-         {:ok, options} <- validate_options(options),
-         {:ok, proof} <- read_proof(lean_file) do
-      {:ok, verify_targets(proof, Enum.uniq(targets), options)}
+         {:ok, options} <- validate_options(options, source),
+         {:ok, proof, options} <- resolve_proof(source, options),
+         {beams, options} = Keyword.pop!(options, :beam_binaries),
+         {suffixes, options} = Keyword.pop!(options, :termination_suffixes),
+         {:ok, translation} <- prepare_translation(proof, beams, suffixes) do
+      {:ok, verify_targets(translation, Enum.uniq(targets), options)}
+    end
+  end
+
+  defp resolve_proof(:inline, options) do
+    case Keyword.pop(options, :postlude) do
+      {nil, _options} -> {:error, :missing_postlude}
+      {proof, options} -> {:ok, proof, options}
+    end
+  end
+
+  defp resolve_proof({:file, lean_file}, options) do
+    with {:ok, proof} <- read_proof(lean_file) do
+      {:ok, proof, options}
     end
   end
 
@@ -80,11 +134,19 @@ defmodule ReductionBounds do
 
   defp valid_target?(_target), do: false
 
-  defp validate_options(options) do
-    defaults = [max_concurrency: 2, timeout: 60_000, lean_options: []]
+  defp validate_options(options, source) do
+    defaults = [
+      max_concurrency: 2,
+      timeout: 60_000,
+      lean_options: [],
+      beam_binaries: [],
+      termination_suffixes: %{}
+    ]
+
+    allowed = if source == :inline, do: [:postlude | defaults], else: defaults
 
     with true <- Keyword.keyword?(options),
-         {:ok, options} <- Keyword.validate(options, defaults),
+         {:ok, options} <- Keyword.validate(options, allowed),
          nil <- Enum.find(options, fn option -> not valid_option?(option) end) do
       {:ok, options}
     else
@@ -94,8 +156,21 @@ defmodule ReductionBounds do
     end
   end
 
+  defp valid_option?({:postlude, value}), do: is_struct(value, Lynx.Lean)
   defp valid_option?({:max_concurrency, value}), do: is_integer(value) and value > 0
   defp valid_option?({:timeout, value}), do: is_integer(value) and value in 0..4_294_967_295
+
+  defp valid_option?({:beam_binaries, values}) do
+    is_list(values) and Enum.all?(values, &is_binary/1)
+  end
+
+  defp valid_option?({:termination_suffixes, %{} = suffixes}) when not is_struct(suffixes) do
+    Enum.all?(suffixes, fn {target, source} ->
+      valid_target?(target) and is_struct(source, Lynx.Lean)
+    end)
+  end
+
+  defp valid_option?({:termination_suffixes, _value}), do: false
 
   defp valid_option?({:lean_options, values}) do
     Keyword.keyword?(values) and
@@ -137,10 +212,16 @@ defmodule ReductionBounds do
     end
   end
 
-  defp verify_targets(_proof, [], _options), do: []
+  defp prepare_translation(proof, beams, suffixes) do
+    translation = Lynx.Translation.new(postludes: [proof], termination_suffixes: suffixes)
+    {:ok, Enum.reduce(beams, translation, &Lynx.Translation.add(&2, &1))}
+  rescue
+    error in CompileError -> {:error, {:beam_registration, error}}
+  end
 
-  defp verify_targets(proof, targets, options) do
-    translation = Lynx.Translation.new(postludes: [proof])
+  defp verify_targets(_translation, [], _options), do: []
+
+  defp verify_targets(translation, targets, options) do
     project_dir = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
     {lean_options, task_options} = Keyword.pop!(options, :lean_options)
     {:ok, supervisor} = Task.Supervisor.start_link()

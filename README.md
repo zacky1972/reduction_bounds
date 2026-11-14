@@ -17,6 +17,45 @@ Use the Lean version specified by Lynx's `lean-toolchain` file. The
 [referenced Lynx revision](https://github.com/josevalim/lynx/blob/d74890ac7a446d57b762d0e4fcd3c848146b2ff6/lean-toolchain)
 specifies Lean 4.35.0 (`leanprover/lean4:v4.35.0`).
 
+## Verify Lean declarations
+
+The current API checks caller-supplied Lean declarations against functions
+translated by Lynx. Automatic derivation of reduction bounds is planned.
+
+For a proof stored in the project's `lean/` directory, call
+`ReductionBounds.verify("proof.lean", targets)`. Pass options as the third
+argument when needed. Each target is a `{module, function, arity}` tuple,
+and the proof is checked independently against each distinct target.
+
+For interactive checks, pass a `~LEAN` declaration as the `postlude:`
+option. This example can be run in `iex -S mix` from the project root.
+
+```elixir
+# cspell:words fixpoint
+import Lynx.Lean
+
+{:module, SumDemo, beam, _} =
+  defmodule SumDemo do
+    @compile :debug_info
+
+    def sum(0), do: 0
+    def sum(n), do: sum(n - 1) + n
+  end
+
+ReductionBounds.verify([{SumDemo, :sum, 1}],
+  beam_binaries: [beam],
+  termination_suffixes: %{{SumDemo, :sum, 1} => ~LEAN"partial_fixpoint"},
+  postlude: ~LEAN"""
+  theorem sumZero : Elixir.SumDemo.«sum/1» (.integer 0) = .ok (.integer 0) := by
+    rw [Elixir.SumDemo.«sum/1».eq_def]
+    rfl
+  """
+)
+```
+
+The termination suffix lets Lean model recursion on inputs for which
+the function may diverge. The theorem checks the return value for input zero.
+
 ## Planned approach
 
 The initial scope is a subset of terminating Erlang and Elixir code running
@@ -47,11 +86,12 @@ initial scope, as do functions or dependencies that use constructs Lynx
 cannot translate.
 See [Lynx's module-loading implementation](https://github.com/josevalim/lynx/blob/d74890ac7a446d57b762d0e4fcd3c848146b2ff6/lib/lynx/translation.ex#L333-L385).
 
-The current `verify/2` and `verify/3` APIs require a readable `.beam` file
-on the code path. Modules defined interactively in IEx or compiled
-with `Code.compile_string/1` are outside this scope when they exist only
-in memory. To verify such a module, compile it to a `.beam` file with
-debug information and make the file available on the code path.
+By default, verification resolves modules through readable `.beam` files on
+the code path. For modules defined in IEx or with `Code.compile_string/1`,
+retain the BEAM binaries returned by compilation and pass them to either verification form
+using `beam_binaries: [beam]`. Include binaries for any dependencies that
+exist only in memory. Each supplied binary must contain debug information
+that Lynx can use to recover Core Erlang.
 
 Lynx stops translation when a call returns to a module already on its
 translation stack. Protocol dispatch can introduce such dependencies.
