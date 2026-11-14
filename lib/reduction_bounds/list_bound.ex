@@ -1,6 +1,6 @@
 defmodule ReductionBounds.ListBound do
   @moduledoc false
-  # cspell:words cerl primop scrutinee succ simp cons rcases simpa leanj symm
+  # cspell:words cerl primop scrutinee succ simp cons rcases simpa leanj symm nonzero elim
 
   @spec infer(term(), [binary()]) :: {:ok, map()} | {:error, term()}
   def infer({module, name, arity} = target, beams)
@@ -173,14 +173,26 @@ defmodule ReductionBounds.ListBound do
   defp candidate(target, branches) do
     base = for {_kind, local, 0} <- branches, do: local
     steps = for {_kind, local, 1} <- branches, do: local
+    [{:empty, empty, 0} | cons] = branches
+    stops = for {_kind, local, 0} <- cons, do: local
+    step = maximum(steps)
 
     %{
       target: target,
       domain: :proper_integer_list_with_integer_key_if_present,
       metric: :symbolic_cost,
       recurrence: branches,
-      upper_bound: {:add, maximum(base), {:mul, :n, maximum(steps)}}
+      upper_bound: {:add, maximum(base), {:mul, :n, step}},
+      refined_upper_bound: refined_bound(empty, stops, step)
     }
+  end
+
+  defp refined_bound(empty, [], step), do: {:add, empty, {:mul, :n, step}}
+
+  defp refined_bound(empty, stops, step) do
+    empty_path = {:add, empty, {:mul, :n, step}}
+    stop_path = {:add, maximum(stops), {:mul, {:sub, :n, 1}, step}}
+    {:if_zero, :n, empty, {:max, empty_path, stop_path}}
   end
 
   defp maximum([]), do: 0
@@ -222,8 +234,69 @@ defmodule ReductionBounds.ListBound do
             · intro branch member
               simp [listSteps] at member <;>
               #{branch_cases(steps, "CostExpr.eval, CostExpr.calls")}
-          """ <> value_proof(candidate)
+          """ <> refined_proof(candidate) <> value_proof(candidate)
     }
+  end
+
+  defp refined_proof(%{recurrence: [{:empty, empty, 0} | cons], refined_upper_bound: bound}) do
+    stops = for {_kind, local, 0} <- cons, do: expression(local, "_charge")
+    stop_costs = for {_kind, local, 0} <- cons, do: local
+    steps = for {_kind, local, 1} <- cons, do: expression(local, "_charge")
+    step_costs = for {_kind, local, 1} <- cons, do: local
+
+    """
+    def listRefinedUpperBound (charge : Nat → Nat → Nat) (n : Nat) : Nat :=
+      #{lean(bound)}
+
+    theorem listRefinedCostBound (charge : Nat → Nat → Nat) (size n cost : Nat)
+        (derivation : ListCost (listEmpty charge) (listStops charge) (listSteps charge) size cost)
+        (sizeBound : size ≤ n) : cost ≤ listRefinedUpperBound charge n := by
+      have paths := listPathBounds (stop := #{lean(maximum(stop_costs))})
+        (step := #{lean(maximum(step_costs))}) derivation
+      have stopBound : ∀ branch ∈ listStops charge,
+          branch.eval 0 ≤ #{lean(maximum(stop_costs))} := by
+        intro branch member
+        simp [listStops] at member <;>
+        #{branch_cases(stops, "CostExpr.eval")}
+      have stepBound : ∀ branch ∈ listSteps charge,
+          branch.eval 0 ≤ #{lean(maximum(step_costs))} ∧ branch.calls ≤ 1 := by
+        intro branch member
+        simp [listSteps] at member <;>
+        #{branch_cases(steps, "CostExpr.eval, CostExpr.calls")}
+      rcases paths stopBound stepBound with emptyPath | ⟨hasStop, positive, stopPath⟩
+      · have bound := Nat.le_trans emptyPath
+          (Nat.add_le_add_left (Nat.mul_le_mul_right _ sizeBound) ((listEmpty charge).eval 0))
+        #{refined_empty_case(empty, stops)}
+      · #{refined_stop_case(stops)}
+    """
+  end
+
+  defp refined_empty_case(_empty, []),
+    do: "simpa [listRefinedUpperBound, listEmpty, CostExpr.eval] using bound"
+
+  defp refined_empty_case(empty, [_ | _]) do
+    """
+    by_cases zero : n = 0
+        · simpa [listRefinedUpperBound, zero, listEmpty, CostExpr.eval] using bound
+        · simp only [listRefinedUpperBound, if_neg zero]
+          exact Nat.le_trans
+            (by simpa [listEmpty, CostExpr.eval] using bound :
+              cost ≤ #{lean(empty)} + n * _)
+            (Nat.le_max_left _ _)
+    """
+  end
+
+  defp refined_stop_case([]), do: "exact False.elim (hasStop rfl)"
+
+  defp refined_stop_case([_ | _]) do
+    """
+    have nonzero : n ≠ 0 := by omega
+        simp only [listRefinedUpperBound, if_neg nonzero]
+        exact Nat.le_trans stopPath
+          (Nat.le_trans (Nat.add_le_add_left
+            (Nat.mul_le_mul_right _ (Nat.sub_le_sub_right sizeBound 1)) _)
+            (Nat.le_max_right _ _))
+    """
   end
 
   defp value_proof(%{value_model: nil}), do: ""
@@ -276,9 +349,11 @@ defmodule ReductionBounds.ListBound do
     theorem listValueAndBound (charge : Nat → Nat → Nat) (xs : List Int) (n : Nat)
         (sizeBound : xs.length ≤ n) :
         #{function} (integerListTerm xs) = .ok (.integer (costedLength charge xs).1) ∧
-        (costedLength charge xs).2 ≤ listUpperBound charge n :=
+        (costedLength charge xs).2 ≤ listUpperBound charge n ∧
+        (costedLength charge xs).2 ≤ listRefinedUpperBound charge n :=
       ⟨listValueAgreement charge xs,
-        listCostBound charge xs.length n _ (lengthCostDerivation charge xs) sizeBound⟩
+        listCostBound charge xs.length n _ (lengthCostDerivation charge xs) sizeBound,
+        listRefinedCostBound charge xs.length n _ (lengthCostDerivation charge xs) sizeBound⟩
     """
   end
 
@@ -321,9 +396,11 @@ defmodule ReductionBounds.ListBound do
     theorem listValueAndBound (charge : Nat → Nat → Nat) (key : Int) (xs : List Int) (n : Nat)
         (sizeBound : xs.length ≤ n) :
         #{function} (.integer key) (integerListTerm xs) = .ok (costedSearch charge key xs).1 ∧
-        (costedSearch charge key xs).2 ≤ listUpperBound charge n :=
+        (costedSearch charge key xs).2 ≤ listUpperBound charge n ∧
+        (costedSearch charge key xs).2 ≤ listRefinedUpperBound charge n :=
       ⟨listValueAgreement charge key xs,
-        listCostBound charge xs.length n _ (searchCostDerivation charge key xs) sizeBound⟩
+        listCostBound charge xs.length n _ (searchCostDerivation charge key xs) sizeBound,
+        listRefinedCostBound charge xs.length n _ (searchCostDerivation charge key xs) sizeBound⟩
     """
   end
 
@@ -390,6 +467,38 @@ defmodule ReductionBounds.ListBound do
       exact Nat.le_trans exactBound
         (Nat.add_le_add_left (Nat.mul_le_mul_right step sizeBound) _)
 
+    theorem listPathBounds {empty stops steps size cost stop step}
+        (derivation : ListCost empty stops steps size cost)
+        (stopBound : ∀ branch ∈ stops, branch.eval 0 ≤ stop)
+        (stepBound : ∀ branch ∈ steps, branch.eval 0 ≤ step ∧ branch.calls ≤ 1) :
+        cost ≤ empty.eval 0 + size * step ∨
+          (stops ≠ [] ∧ 0 < size ∧ cost ≤ stop + (size - 1) * step) := by
+      induction derivation with
+      | nil => exact Or.inl (by simp)
+      | @stop size branch member =>
+        right
+        refine ⟨?_, by omega, ?_⟩
+        · intro noStops
+          simp [noStops] at member
+        · exact Nat.le_trans (stopBound branch member) (Nat.le_add_right _ _)
+      | @step size branch tailCost member _ ih =>
+        obtain ⟨localBound, countBound⟩ := stepBound branch member
+        have recursiveBound := Nat.mul_le_mul_right tailCost countBound
+        rw [Nat.one_mul] at recursiveBound
+        rw [costComposition]
+        rcases ih with emptyPath | ⟨hasStop, positive, stopPath⟩
+        · left
+          rw [Nat.succ_mul]
+          omega
+        · right
+          refine ⟨hasStop, by omega, ?_⟩
+          have sizeEq : size = (size - 1) + 1 := by omega
+          have sizeCost : size * step = (size - 1) * step + step := by
+            conv => lhs; rw [sizeEq]
+            rw [Nat.succ_mul]
+          simp only [Nat.add_sub_cancel]
+          omega
+
     """
   end
 
@@ -416,6 +525,15 @@ defmodule ReductionBounds.ListBound do
   defp lean({:charge, index, :value}, charges), do: "(#{charges} #{index} 1)"
   defp lean({:charge, index, :recursive_call}, charges), do: "(#{charges} #{index} 2)"
   defp lean({:charge, index, :addition}, charges), do: "(#{charges} #{index} 3)"
+
+  defp lean({:sub, left, right}, charges),
+    do: "(#{lean(left, charges)} - #{lean(right, charges)})"
+
+  defp lean({:if_zero, size, empty, nonempty}, charges),
+    do:
+      "(if #{lean(size, charges)} = 0 then #{lean(empty, charges)} else #{lean(nonempty, charges)})"
+
+  defp lean(1, _charges), do: "1"
   defp lean(:n, _charges), do: "n"
   defp lean(0, _charges), do: "0"
 end

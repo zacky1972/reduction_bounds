@@ -74,6 +74,23 @@ versions. It will distinguish bounds proved for the cost model from bounds
 justified against ERTS reduction accounting and identify unsupported
 operations or unresolved proof obligations.
 
+## Symbolic list bounds
+
+`infer_list_bound/2` returns a Lean-checked `refined_upper_bound` alongside
+`upper_bound`. For an input length at most `n`, a traversal takes at most
+`n` recursive steps before reaching the empty list, or at most `n - 1`
+before stopping on a nonempty list. For positive `n`, the refined bound
+takes the maximum of these two path bounds when both are possible. At
+`n = 0`, it uses only the empty-list cost.
+
+The proof is parametric in nonnegative symbolic charges. Applying it to
+actual BEAM reductions requires a separate, version-specific argument.
+That argument must map compiled instructions and runtime paths to the
+modeled charges, account for every reduction in the measurement interval,
+and justify each charge bound under the permitted VM states. Relevant
+conditions include available reduction budget, integer representation,
+and whether collection occurs during the call.
+
 ## Input limitations
 
 The initial Lynx-based analysis requires Core Erlang for the target

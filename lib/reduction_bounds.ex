@@ -76,6 +76,13 @@ defmodule ReductionBounds do
   `{:charge, clause_index, operation}` identifies a symbolic cost by the
   clause's zero-based index and operation. The step includes the addition
   performed after the recursive call returns.
+
+  The `refined_upper_bound` field distinguishes reaching the empty list
+  after at most `n` steps from stopping on a nonempty list after at most
+  `n - 1` steps. At `n = 0`, only the empty-list cost applies.
+  To use the symbolic bound for ERTS reductions, map the compiled paths
+  to the modeled charges and justify each charge under the allowed VM
+  states for the target build, including the available reduction budget.
   '''
 
   @type target :: {module(), atom(), arity()}
@@ -198,8 +205,9 @@ defmodule ReductionBounds do
   The analysis handles clause dispatch, values, integer addition, sequential
   bindings, and at most one self-call on the tail per branch.
 
-  Results include the branch recurrence and a Lean-checked upper bound for
-  its cost model. Each charge names a clause and an operation. A dispatch
+  Results include the branch recurrence and two Lean-checked upper bounds
+  for its cost model. The refined_upper_bound field accounts for the
+  different maximum step counts of empty-list and early-stop paths. Each charge names a clause and an operation. A dispatch
   charge includes the tests that led to the clause. ERTS reduction charges
   are outside this model. Accepts the same options as file-based verification.
 

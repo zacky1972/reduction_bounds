@@ -196,7 +196,17 @@ defmodule ReductionBoundsTest do
     assert search.value_model == :membership
     assert length.value_model == :length
 
-    assert [{:empty, _, 0}, {:guarded_cons, _, 0}, {:cons, _, 1}] = search.recurrence
+    assert [
+             {:empty, empty, 0},
+             {:guarded_cons, hit, 0},
+             {:cons, miss, 1}
+           ] = search.recurrence
+
+    assert search.refined_upper_bound ==
+             {:if_zero, :n, empty,
+              {:max, {:add, empty, {:mul, :n, miss}}, {:add, hit, {:mul, {:sub, :n, 1}, miss}}}}
+
+    assert length.refined_upper_bound == length.upper_bound
 
     assert [
              {:empty, _, 0},
