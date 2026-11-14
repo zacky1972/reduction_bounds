@@ -9,6 +9,14 @@ preconditions, such as a maximum list length. A bound in reductions
 expresses work in BEAM's scheduling units. Turning it into a bound on
 elapsed time requires separate, platform-specific timing evidence.
 
+## Lean prerequisites
+
+For Lynx-based proof checking, install [Elan](https://github.com/leanprover/elan),
+Lean's toolchain manager, and make sure `lake` is available on `PATH`.
+Use the Lean version specified by Lynx's `lean-toolchain` file. The
+[referenced Lynx revision](https://github.com/josevalim/lynx/blob/d74890ac7a446d57b762d0e4fcd3c848146b2ff6/lean-toolchain)
+specifies Lean 4.35.0 (`leanprover/lean4:v4.35.0`).
+
 ## Planned approach
 
 The initial scope is a subset of terminating Erlang and Elixir code running

@@ -83,9 +83,8 @@ defmodule ReductionBounds.MixProject do
       {:ex_doc, "~> 0.40", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:spellweaver, "~> 0.1.8", only: [:dev, :test], runtime: false}
-      # {:dep_from_hexpm, "~> 0.3.0"},
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
+      {:spellweaver, "~> 0.1.8", only: [:dev, :test], runtime: false},
+      {:lynx, git: "https://github.com/josevalim/lynx.git"}
     ]
   end
 end
