@@ -264,6 +264,51 @@ defmodule ReductionBoundsTest do
     assert [%{module: "Erlang.postlude", status: :ok}] = bound.reports
   end
 
+  test "composes bounds for static calls, bindings, and Boolean branches" do
+    beam = compile_fixture_in_memory()
+    on_exit(&unload_fixture/0)
+    options = [beam_binaries: [beam]]
+    target = {Fixture, :reverse_on_hit, 2}
+
+    assert {:ok, bound} = ReductionBounds.infer_list_bound(target, options)
+    assert bound.value_model == :composed
+    assert bound.metric == :symbolic_cost
+    assert bound.size_measure == :list_length
+    paths = bound.path_bounds
+
+    assert %{
+             hit:
+               {:add, {:call_bound, {:lists, :member, 2}, _} = search,
+                {:add, {:branch_cost, :hit}, {:call_bound, {:lists, :reverse, 2}, _}}} = hit,
+             miss: {:add, search, {:branch_cost, :miss}} = miss
+           } = paths
+
+    assert bound.upper_bound == {:max, hit, miss}
+    assert Enum.any?(bound.reports, &match?(%{module: "Erlang.postlude", status: :ok}, &1))
+    reverse_on_hit = Function.capture(Fixture, :reverse_on_hit, 2)
+    assert reverse_on_hit.(2, [1, 2, 3]) == [3, 2, 1]
+    assert reverse_on_hit.(4, [1, 2, 3]) == [1, 2, 3]
+    assert reverse_on_hit.(2, []) == []
+
+    assert {:ok, %{value_model: :composed, path_bounds: ^paths}} =
+             ReductionBounds.infer_list_bound({Fixture, :reverse_onto_on_hit, 2}, options)
+
+    for name <- [:reverse_via_helper, :reverse_via_case] do
+      assert {:ok, %{value_model: :composed, path_bounds: %{hit: hit}}} =
+               ReductionBounds.infer_list_bound({Fixture, name, 2}, options)
+
+      assert contains_call_bound?(hit, {Fixture, :reverse_onto, 1})
+    end
+
+    assert {:ok, %{value_model: :composed, upper_bound: twice}} =
+             ReductionBounds.infer_list_bound({Fixture, :reverse_twice, 1}, options)
+
+    assert {:add, {:call_bound, {:lists, :reverse, 2}, _},
+            {:add, {:operation_cost, :bind},
+             {:call_bound, {:lists, :reverse, 2}, {:add, _, {:mul, {:add, :n, 1}, _}}}}} =
+             twice
+  end
+
   test "checks input contracts for traversals and reuses a theorem in a local wrapper" do
     beam = compile_fixture_in_memory()
     on_exit(&unload_fixture/0)
@@ -295,6 +340,9 @@ defmodule ReductionBoundsTest do
     assert {:ok, %{size_measure: :input_size, value_model: :reversal}} =
              ReductionBounds.infer_list_bound({:lists, :reverse, 2}, input_contract: contract)
 
+    assert {:ok, %{size_measure: :input_size, value_model: :composed}} =
+             ReductionBounds.infer_list_bound({Fixture, :reverse_on_hit, 2}, options)
+
     assert {:ok, result} = ReductionBounds.infer_list_call_bound(caller, callee, options)
     assert result.size_measure == :input_size
     assert result.upper_bound == {:add, :caller_cost, direct.refined_upper_bound}
@@ -323,6 +371,13 @@ defmodule ReductionBoundsTest do
              )
   end
 
+  defp contains_call_bound?({:call_bound, target, _}, target), do: true
+
+  defp contains_call_bound?({:add, left, right}, target),
+    do: contains_call_bound?(left, target) or contains_call_bound?(right, target)
+
+  defp contains_call_bound?(_bound, _target), do: false
+
   defp compile_fixture(directory) do
     beam = compile_fixture_in_memory()
     beam_path = Path.join(directory, "#{Fixture}.beam")
@@ -349,6 +404,33 @@ defmodule ReductionBoundsTest do
       def list_length([]), do: 0
       def list_length([_ | tail]), do: 1 + list_length(tail)
       def forward_length(xs), do: list_length(xs)
+
+      def reverse_on_hit(key, xs) do
+        if :lists.member(key, xs), do: :lists.reverse(xs, []), else: xs
+      end
+
+      def reverse_onto_on_hit(key, xs) do
+        if :lists.member(key, xs), do: :lists.reverse(xs, [0]), else: xs
+      end
+
+      def reverse_via_helper(key, xs) do
+        hit = :lists.member(key, xs)
+        if hit, do: reverse_onto(xs), else: xs
+      end
+
+      def reverse_via_case(key, xs) do
+        case :lists.member(key, xs) do
+          true -> reverse_onto(xs)
+          false -> xs
+        end
+      end
+
+      def reverse_onto(xs), do: :lists.reverse(xs, [0])
+
+      def reverse_twice(xs) do
+        reversed = :lists.reverse(xs, [0])
+        :lists.reverse(reversed, [])
+      end
 
       def sum(0), do: 0
       def sum(n), do: sum(n - 1) + n

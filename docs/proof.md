@@ -1,4 +1,4 @@
-# Proofs of symbolic bounds for list built-ins
+# Proofs of symbolic bounds for list operations
 
 ## lists:member/2
 
@@ -93,6 +93,45 @@ The generated theorem `listValueAndBound` gives the result equation
 and both inequalities for all values of `acc` in the stated domain.
 When supplied, an `input_contract` constrains `xs` and supplies its
 size measure.
+
+## Conditional reversal
+
+The analyzer recognizes the following function shape over an integer
+key and a proper integer list.
+
+```elixir
+def reverse_on_hit(key, xs) do
+  if :lists.member(key, xs), do: :lists.reverse(xs, []), else: xs
+end
+```
+
+Use `ReductionBounds.infer_list_bound/2` with the function's module,
+name, and arity. The analyzer checks the Lynx translation for a single
+membership call, a miss branch that returns the original list, and a
+hit branch that reverses the same list onto an empty accumulator.
+
+The generated theorem `conditionalValueAndBound` reuses the membership
+and reversal theorems in separate namespaces. It proves that the
+translated function returns the reversed list on a hit and the original
+list on a miss. It also proves the following symbolic bounds. Here
+`M(n)` and `R(n)` are the proved upper bounds for membership and reversal,
+`n` bounds the input list length, and `B_hit` and `B_miss` are
+nonnegative symbolic charges for the respective branch operations
+outside the calls.
+
+| Result field | Upper bound |
+| --- | --- |
+| `path_bounds.hit` | `M(n) + (B_hit + R(n))` |
+| `path_bounds.miss` | `M(n) + B_miss` |
+| `upper_bound` | Maximum of the hit and miss bounds |
+
+Both paths use the same membership upper bound. On a hit, the proof
+applies the reversal theorem to the original list and an empty
+accumulator, then adds its cost to the membership and branch costs.
+On a miss, the proof accounts for membership and the miss branch only.
+The `:call_bound` terms in the result keep charges for the two built-ins
+separate. With an `input_contract`, the same theorem applies at the
+contract's input size under its precondition.
 
 ## Scope
 

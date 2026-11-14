@@ -277,7 +277,8 @@ defmodule ReductionBounds do
   charge includes the tests that led to the clause. ERTS reduction charges
   are outside this model. Accepts the same options as file-based verification.
 
-  The value_model field identifies a recognized membership, length, or reversal model.
+  The value_model field identifies a recognized membership, length, reversal,
+  or composed model.
   For those models, Lean also proves that the costed model returns the same
   value as the translated target on integer lists and that its cost obeys
   the upper bound. A nil value_model means only the symbolic cost rules
@@ -292,6 +293,14 @@ defmodule ReductionBounds do
   Both arguments must be proper integer lists. The size measure applies
   to the first argument, and the result is its reversal followed by
   the accumulator. The symbolic bound does not depend on accumulator length.
+
+  The composed model analyzes Core Erlang functions without recursion that
+  use static calls, single-value bindings, and Boolean branches. The
+  input is a proper integer list, optionally preceded by an integer key.
+  When the derivation branches, path_bounds reports separate bounds for
+  the first Boolean decision's true and false paths. The upper_bound
+  covers both paths. A call_bound names the callee and carries its bound
+  specialized to the sizes of the actual arguments.
 
   For a recognized value model, pass input_contract as a Lean block to
   prove the bounds under an input precondition with a tail invariant and a
@@ -344,7 +353,9 @@ defmodule ReductionBounds do
 
   defp verify_list_candidate(target, candidate, contract, options) do
     with {:ok, proof} <- ReductionBounds.ListBound.input_proof(candidate, contract) do
-      result = Map.put(candidate, :size_measure, list_size_measure(contract))
+      result =
+        candidate |> Map.delete(:program) |> Map.put(:size_measure, list_size_measure(contract))
+
       verify_bound(target, result, proof, options)
     end
   end
@@ -537,15 +548,22 @@ defmodule ReductionBounds do
     |> Lynx.Translation.assemble(cache: false)
   end
 
+  defp assemble_target(translation, target, :composed) do
+    translation |> assemble_target(target, :translated) |> import_postlude("Erlang.lists")
+  end
+
   # cspell:words leanj
   defp assemble_target(translation, {module, _, _}, :lynx_builtin) do
     # Lynx's runner resolves this import to its bundled Erlang model.
     import = :lynx_core_to_leanj.module_name(module)
+    translation |> Lynx.Translation.assemble(cache: false) |> import_postlude(import)
+  end
 
-    for file <- Lynx.Translation.assemble(translation, cache: false) do
+  defp import_postlude(files, import) do
+    for file <- files do
       case file do
         %{"module" => "Erlang.postlude"} ->
-          Map.update!(file, "imports", &[import | &1])
+          Map.update!(file, "imports", &Enum.uniq([import | &1]))
 
         _ ->
           file

@@ -30,13 +30,22 @@ defmodule ReductionBounds.ListBound do
 
   def infer({module, name, arity} = target, beams)
       when is_atom(module) and is_atom(name) and arity in [1, 2] do
-    with {:ok, body} <- ReductionBounds.SearchBound.core_function(target, beams),
-         {:ok, branches} <- analyze(body, {name, arity}) do
-      {:ok, Map.put(candidate(target, branches), :value_model, value_model(body, target))}
+    with {:ok, body} <- ReductionBounds.SearchBound.core_function(target, beams) do
+      infer_body(body, target, beams)
     end
   end
 
   def infer(target, _beams), do: {:error, {:unsupported_target, target}}
+
+  defp infer_body(body, {_, name, arity} = target, beams) do
+    case analyze(body, {name, arity}) do
+      {:ok, branches} ->
+        {:ok, Map.put(candidate(target, branches), :value_model, value_model(body, target))}
+
+      {:error, {:unsupported_list_shape, ^arity}} ->
+        ReductionBounds.ComposedBound.infer(body, target, beams)
+    end
+  end
 
   @spec check_forwarding_call(term(), term(), [binary()]) :: :ok | {:error, term()}
   def check_forwarding_call({module, caller, arity}, {module, callee, arity}, beams)
@@ -240,6 +249,9 @@ defmodule ReductionBounds.ListBound do
   defp maximum([first | rest]), do: Enum.reduce(rest, first, &{:max, &2, &1})
 
   @spec proof(map()) :: Lynx.Lean.t()
+  def proof(%{value_model: :composed} = candidate),
+    do: ReductionBounds.ComposedBound.proof(candidate)
+
   def proof(%{recurrence: [{:empty, empty, 0} | cons], upper_bound: bound} = candidate) do
     stops = for {_kind, local, 0} <- cons, do: expression(local, "_charge")
     steps = for {_kind, local, 1} <- cons, do: expression(local, "_charge")
@@ -301,8 +313,9 @@ defmodule ReductionBounds.ListBound do
 
   @spec forwarding_proof(ReductionBounds.target(), map(), Lynx.Lean.t() | nil) ::
           {:ok, Lynx.Lean.t()} | {:error, atom()}
-  def forwarding_proof(_caller, %{value_model: nil}, _contract),
-    do: {:error, :unsupported_value_model}
+  def forwarding_proof(_caller, %{value_model: kind}, _contract)
+      when kind in [nil, :composed],
+      do: {:error, :unsupported_value_model}
 
   def forwarding_proof(caller, %{value_model: kind, target: callee} = candidate, contract) do
     with {:ok, proof} <- input_proof(candidate, contract) do
@@ -334,6 +347,9 @@ defmodule ReductionBounds.ListBound do
         exact Nat.le_trans (Nat.succ_le_succ (ih tailInvariant)) smaller
     """
   end
+
+  defp input_bound(%{value_model: :composed} = candidate),
+    do: ReductionBounds.ComposedBound.input_bound(candidate)
 
   defp input_bound(%{value_model: kind, target: target}) do
     {extra_binder, arguments, value, cost, theorem_args} = model_terms(kind)
