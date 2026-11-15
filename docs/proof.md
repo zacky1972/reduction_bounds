@@ -155,6 +155,80 @@ The `:call_bound` terms in the result keep charges for the two built-ins
 separate. The same rules handle a nonempty accumulator and a hit branch
 that delegates reversal to a regular helper.
 
+## One CircularBuffer insertion
+
+Call `ReductionBounds.infer_circular_buffer_bound/0` in the test
+environment with `circular_buffer` v1.1.0 available. The analyzer checks
+the Core Erlang clauses of `CircularBuffer.insert/2` against the state
+model and checks the list clauses of `Enum.reverse/1` against its
+primitive contract.
+
+The inputs are a buffer with proper integer lists `a` and `b` and an
+integer item. A valid state has
+`count = length(a) + length(b) <= capacity`, and a nonempty `b`
+implies the buffer is full. In the returned formula `n` is the
+capacity.
+
+| Path | State update | Symbolic upper bound |
+| --- | --- | --- |
+| `consume` | Remove the head of `b` and prepend to `a` | `C_consume` |
+| `fill` | Prepend to `a` and increase the count | `C_fill` |
+| `rotate` | Reverse `a`, drop the oldest element, and start a new `a` | `C_rotate + C_enum_reverse + R(n)` |
+| `zero` | Return the original buffer | `C_zero` |
+
+Each path charge includes its local tests and operations outside
+the calls listed in its bound. `R(n)` is the existing bound for
+`lists:reverse/2`. In the list clauses, `Enum.reverse/1` handles
+lists of length at most two locally. For longer lists it calls
+`lists:reverse/2` on the suffix after the first two elements, using
+those elements in reverse order as the accumulator. Lean proves that
+this list model returns the reversed list and that the primitive part
+of its cost is bounded by `R(n)`.
+
+`ComposedBound` adds the local and callee charges on the rotation path
+and takes the maximum of the four path bounds. Lean proves that the
+modeled insertion preserves the state invariant, that a rotation
+reverses an `a` of length equal to the capacity, and that the modeled
+cost fits the returned bound. At capacity zero, Lean proves that the
+state is unchanged and that the cost is `C_zero`.
+
+The Elixir analysis checks the Core Erlang shapes before applying this
+Lean state model. The Lean theorem is stated over the state model.
+ExUnit also exercises all four paths with the actual library.
+
+## Consecutive CircularBuffer insertions
+
+Call `ReductionBounds.infer_circular_buffer_sequence_bound/0` to
+derive a bound for `n` calls to `CircularBuffer.insert/2` with integer
+items after `CircularBuffer.new(m)` has returned. The analyzer checks
+the initializer's Core Erlang in addition to the insertion and reversal
+clauses checked for one call.
+
+Let `c` be the maximum of the local charges for consuming, filling, and
+rotating. Let `r(m)` be the extra cost bound for the rotation's
+`Enum.reverse/1` call. This includes its local charge and the existing
+`lists:reverse/2` upper bound at capacity `m`.
+
+| Condition | Exact modeled rotations `q(m, n)` | Symbolic cost upper bound |
+| --- | --- | --- |
+| `m = 0` | `0` | `n * C_zero` |
+| `m > 0` and `n = 0` | `0` | `0` |
+| `m > 0` and `n > 0` | `floor((n - 1) / m)` | `n * c + q(m, n) * r(m)` |
+
+The proof threads the state after each insertion into the next call.
+For positive capacity, a step without rotation increases the length of
+`a` by one. A rotation takes place with `length(a) = m` and leaves the
+new `a` with length one. Starting with an empty `a`, the theorem
+`insertManyFromPositive` gives
+`n = q * m + length(final_a)`. For a nonempty insertion sequence,
+`length(final_a)` lies between one and `m`, so
+`insertManyRotationCount` derives the quotient in the table. At
+capacity zero the state stays empty on every step.
+
+`insertManyCostBound` then combines the per-step cost with the exact
+rotation count. The returned `rotation_count` expression uses natural
+number subtraction, so `n - 1` is zero when `n = 0`.
+
 ## Scope
 
 The inequalities bound the symbolic cost model. To obtain an upper

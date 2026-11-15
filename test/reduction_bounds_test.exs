@@ -341,6 +341,42 @@ defmodule ReductionBoundsTest do
     assert %{a: [5, 4], b: [3], count: 3} = CircularBuffer.insert(rotated, 5)
   end
 
+  test "checks the symbolic cost and rotation count of consecutive insertions" do
+    assert {:ok, bound} = ReductionBounds.infer_circular_buffer_sequence_bound()
+    assert bound.target == {CircularBuffer, :insert, 2}
+    assert bound.metric == :symbolic_cost
+    assert bound.size_measure == %{m: :capacity, n: :insertions}
+    assert bound.value_model == :circular_buffer_sequence_model
+    assert bound.rotation_count == {:if_zero, :m, 0, {:div, {:sub, :n, 1}, :m}}
+
+    assert {:call_bound, {Enum, :reverse, 1},
+            {:add, {:buffer_charge, :enum_reverse},
+             {:call_bound, {:lists, :reverse, 2}, {:add, _, {:mul, :m, _}}}}} =
+             bound.rotation_surcharge
+
+    assert bound.upper_bound ==
+             {:if_zero, :m, {:mul, :n, {:buffer_charge, :zero}},
+              {:add, {:mul, :n, bound.base_cost},
+               {:mul, bound.rotation_count, bound.rotation_surcharge}}}
+
+    assert [%{module: "Erlang.postlude", status: :ok}] = bound.reports
+
+    for {capacity, insertions, expected} <- [
+          {0, 0, 0},
+          {0, 5, 0},
+          {1, 0, 0},
+          {1, 1, 0},
+          {1, 5, 4},
+          {3, 3, 0},
+          {3, 4, 1},
+          {3, 6, 1},
+          {3, 7, 2},
+          {3, 10, 3}
+        ] do
+      assert actual_rotations(capacity, insertions) == expected
+    end
+  end
+
   test "checks input contracts for traversals and reuses a theorem in a local wrapper" do
     beam = compile_fixture_in_memory()
     on_exit(&unload_fixture/0)
@@ -401,6 +437,16 @@ defmodule ReductionBoundsTest do
                beam_binaries: [beam],
                input_contract: ~LEAN"def inputSize (_ : List Int) : Nat := 0"
              )
+  end
+
+  defp actual_rotations(capacity, insertions) do
+    {_, rotations} =
+      Enum.reduce(1..insertions//1, {CircularBuffer.new(capacity), 0}, fn item, {buffer, count} ->
+        rotates = buffer.count == capacity and buffer.b == [] and buffer.a != []
+        {CircularBuffer.insert(buffer, item), count + if(rotates, do: 1, else: 0)}
+      end)
+
+    rotations
   end
 
   defp contains_call_bound?({:call_bound, target, _}, target), do: true

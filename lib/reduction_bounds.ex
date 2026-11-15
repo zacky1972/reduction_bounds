@@ -337,6 +337,28 @@ defmodule ReductionBounds do
   end
 
   @doc """
+  Infers a symbolic upper bound for consecutive insertions from CircularBuffer.new/1.
+
+  The size parameters m and n denote capacity and number of insertions.
+  The cost covers the calls to insert/2 with integer items. Lean verifies
+  the exact rotation count for the state model and the resulting cost bound.
+  """
+  @spec infer_circular_buffer_sequence_bound([verification_option()]) ::
+          {:ok, map()} | {:error, term()}
+  def infer_circular_buffer_sequence_bound(options \\ []) do
+    with {:ok, options} <- validate_options(options, :search),
+         {:ok, candidate} <-
+           ReductionBounds.CircularBufferSequenceBound.infer(options[:beam_binaries]) do
+      verify_bound(
+        candidate.target,
+        candidate,
+        ReductionBounds.CircularBufferSequenceBound.proof(),
+        options
+      )
+    end
+  end
+
+  @doc """
   Infers a symbolic bound for a local wrapper that forwards every argument
   unchanged to a list traversal. The callee must have a recognized value
   model. Lean checks the callee theorem and reuses it to prove the wrapper
