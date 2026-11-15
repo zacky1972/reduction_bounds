@@ -42,6 +42,39 @@ short-circuit conjunction, subtraction, and exact field updates.
 `BoundedCounter.set_limit/2` uses the same rules with a different field
 and guard.
 
+## User-defined list traversals
+
+`ReductionBounds.infer_list_bound/2` recognizes a traversal with an
+empty-list clause and nonempty-list clauses. A nonempty clause may
+return immediately or call itself once on the tail, passing the same
+key when there is one. The analyzer assigns symbolic charges to clause
+dispatch, values, integer addition, and recursive calls. It adds the
+costs of sequential expressions. A dispatch charge covers the tests
+that led to the selected clause, including rejected earlier clauses.
+
+Lean's `ListCost` relation describes the costs of these three cases.
+`listRulesSound` bounds every derivation by `base + n * step` when
+`n` bounds the list length, `base` bounds the empty and early-stop
+charges, and `step` bounds the local cost of a recursive clause. The
+proof uses the fact that a recursive clause makes at most one call
+and consumes one list cell. `listPathBounds` distinguishes paths that
+reach the empty list from paths that stop early. An early stop requires
+a remaining cell, so it can follow at most `n - 1` recursive steps.
+The result exposes both `upper_bound` and `refined_upper_bound`.
+
+For recognized membership and length functions on proper integer lists,
+Lean also checks that the costed model returns the same value as the
+Lynx translation. When `value_model` is `nil`, the checked claim is the
+cost inequality for the modeled derivations.
+
+`ReductionBounds.infer_search_bound/2` provides a dedicated analysis for
+the membership pattern. The function returns false for an empty list,
+returns true on an exact match at the head, and otherwise searches the
+tail with the same key. Its `searchCostBound` theorem bounds the cost
+model by `max(c_empty, c_hit) + n * c_step`, where `c_step` is the
+local charge of a miss before continuing. This entry point checks the
+cost inequality for that model.
+
 ## lists:member/2
 
 Call `ReductionBounds.infer_list_bound({:lists, :member, 2})` to check
@@ -136,6 +169,31 @@ and both inequalities for all values of `acc` in the stated domain.
 When supplied, an `input_contract` constrains `xs` and supplies its
 size measure.
 
+## Input contracts and forwarding calls
+
+For a recognized value model, `infer_list_bound/2` accepts a Lean block
+as the `input_contract` option. The block defines `inputPrecondition`,
+`inputInvariant`, and a natural-valued measure `inputSize` on integer
+lists. It proves that the precondition establishes the invariant
+(`inputInvariantInit`), that the invariant holds for the tail
+(`inputInvariantTail`), and that the measure decreases by at least one
+on a tail step (`inputSizeTail`).
+
+`inputLengthBound` then proves `xs.length ≤ inputSize xs` by induction
+on the list. The generated theorem `listInputValueAndBound` applies
+the model's cost theorem with `inputSize xs` under the precondition
+and includes value agreement. For example, a contract can require
+`xs.length < 100` and supply `xs.length + 2` as the size measure.
+
+`ReductionBounds.infer_list_call_bound/3` checks that a local wrapper
+forwards every argument in the original order to a different function in
+the same module. It supports recognized membership, length, and reversal
+models. Lean checks the callee theorem in the same run and applies it in
+`listCallerValueAndBound`. The wrapper's upper bound is
+`caller_cost + callee_refined_bound`. The symbolic `caller_cost` covers
+the wrapper's own work. With an input contract, the wrapper proof uses
+the same precondition and size measure as the callee.
+
 ## Composing static calls, bindings, and Boolean branches
 
 The analyzer reads Core Erlang from BEAM debug information. It follows
@@ -213,7 +271,7 @@ capacity.
 
 | Path | State update | Symbolic upper bound |
 | --- | --- | --- |
-| `consume` | Remove the head of `b` and prepend to `a` | `C_consume` |
+| `consume` | Remove the head of `b` and prepend the new item to `a` | `C_consume` |
 | `fill` | Prepend to `a` and increase the count | `C_fill` |
 | `rotate` | Reverse `a`, drop the oldest element, and start a new `a` | `C_rotate + C_enum_reverse + R(n)` |
 | `zero` | Return the original buffer | `C_zero` |
@@ -234,17 +292,23 @@ reverses an `a` of length equal to the capacity, and that the modeled
 cost fits the returned bound. At capacity zero, Lean proves that the
 state is unchanged and that the cost is `C_zero`.
 
-The Elixir analysis checks the Core Erlang shapes before applying this
-Lean state model. The Lean theorem is stated over the state model.
-ExUnit also exercises all four paths with the actual library.
+The Elixir analysis decodes field accesses with `CoreFragment` and
+applies the shared `Normalize` rule under the assumption that the
+required fields exist in a valid buffer. It compares the resulting
+clauses with the expected CircularBuffer conditions and updates.
+In `CircularBuffer.lean`, `insertPath` selects the path used by both
+`insertModel` and `insertCost`. The Lean theorem is stated over this
+state model. ExUnit exercises all four paths with the actual library.
 
 ## Consecutive CircularBuffer insertions
 
 Call `ReductionBounds.infer_circular_buffer_sequence_bound/0` to
 derive a bound for `n` calls to `CircularBuffer.insert/2` with integer
-items after `CircularBuffer.new(m)` has returned. The analyzer checks
-the initializer's Core Erlang in addition to the insertion and reversal
-clauses checked for one call.
+items after `CircularBuffer.new(m)` has returned. The analyzer reuses
+the single-insertion analysis with `m` as the capacity variable.
+It also uses `CoreFragment` to decode the initializer's guard and
+checks that the nonnegative integer capacity is stored in an empty
+buffer with count zero.
 
 Let `c` be the maximum of the local charges for consuming, filling, and
 rotating. Let `r(m)` be the extra cost bound for the rotation's
@@ -257,7 +321,9 @@ rotating. Let `r(m)` be the extra cost bound for the rotation's
 | `m > 0` and `n = 0` | `0` | `0` |
 | `m > 0` and `n > 0` | `floor((n - 1) / m)` | `n * c + q(m, n) * r(m)` |
 
-The proof threads the state after each insertion into the next call.
+The proof in `CircularBufferSequence.lean` threads the state after
+each insertion into the next call. Its `rotationStep` counts a
+rotation exactly when the shared `insertPath` selects the rotate path.
 For positive capacity, a step without rotation increases the length of
 `a` by one. A rotation takes place with `length(a) = m` and leaves the
 new `a` with length one. Starting with an empty `a`, the theorem
