@@ -61,18 +61,42 @@ theorem insertBudget (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat �
           (Nat.add_le_add_left (enumReverseCostBound reverseCharge
             (head :: tail) capacity sizeBound) (bufferCharge 4))
 
-structure InsertionRun where
-  state : BufferState
-  rotations : Nat
-  cost : Nat
-
 def insertMany (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
-    (s : BufferState) : List Int → InsertionRun
-  | [] => ⟨s, 0, 0⟩
-  | item :: rest =>
-    let suffix := insertMany reverseCharge bufferCharge (insertModel s item) rest
-    ⟨suffix.state, rotationStep s + suffix.rotations,
-      insertCost reverseCharge bufferCharge s + suffix.cost⟩
+    (state : BufferState) (items : List Int) : ReductionBounds.Periodic.Run BufferState :=
+  ReductionBounds.Periodic.run insertModel (fun s _ => rotationStep s)
+    (fun s _ => insertCost reverseCharge bufferCharge s) state items
+
+def bufferRule (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
+    (period : Nat) : ReductionBounds.Periodic.Rule BufferState Int := {
+  period, stride := 1, origin := 1
+  size := fun s => s.a.length
+  invariant := fun s => s.valid ∧ s.capacity = period
+  next := insertModel
+  event := fun s _ => rotationStep s
+  cost := fun s _ => insertCost reverseCharge bufferCharge s
+  base := insertionBase bufferCharge
+  surcharge := rotationSurcharge reverseCharge bufferCharge period
+}
+
+theorem bufferObligations (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
+    (period : Nat) (positive : 0 < period) :
+    ReductionBounds.Periodic.Obligations (bufferRule reverseCharge bufferCharge period) := by
+  refine ⟨positive, ?_, ?_, ?_, ?_⟩
+  · intro s valid
+    change s.a.length < period + 1
+    obtain ⟨⟨lengths, bounded, _⟩, fixed⟩ := valid
+    omega
+  · intro s item valid
+    exact ⟨insertPreserves s item valid.1, (insertCapacity s item).trans valid.2⟩
+  · intro s item valid
+    have fixed : s.capacity = period := valid.2
+    have nonzero : 0 < s.capacity := by rwa [fixed]
+    obtain ⟨balance, landed⟩ := insertAdvance s item valid.1 nonzero
+    exact ⟨by simpa [bufferRule, fixed] using balance, Nat.succ_le_of_lt landed⟩
+  · intro s item valid
+    have fixed : s.capacity = period := valid.2
+    have nonzero : 0 < s.capacity := by rwa [fixed]
+    simpa [bufferRule, fixed] using insertBudget reverseCharge bufferCharge s valid.1 nonzero
 
 theorem insertManyContents (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
     (s : BufferState) (items : List Int) (valid : s.valid) :
@@ -81,7 +105,8 @@ theorem insertManyContents (reverseCharge : Nat → Nat → Nat) (bufferCharge :
   induction items generalizing s with
   | nil => rfl
   | cons item rest ih =>
-    simp only [insertMany, List.foldl_cons]
+    simp only [insertMany] at ih
+    simp only [insertMany, ReductionBounds.Periodic.run, List.foldl_cons]
     rw [ih (insertModel s item) (insertPreserves s item valid),
       insertCapacity s item, insertContents s item valid]
 
@@ -120,41 +145,19 @@ theorem insertManyLatest (reverseCharge : Nat → Nat → Nat) (bufferCharge : N
   rw [insertManyContents reverseCharge bufferCharge s items valid]
   simpa only [initial] using fifoFoldLatest s.capacity s.contents items
 
-theorem insertManyFromPositive (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
-    (s : BufferState) (items : List Int) (valid : s.valid) (positive : 0 < s.capacity) :
-    let run := insertMany reverseCharge bufferCharge s items
-    run.state.valid ∧ run.state.capacity = s.capacity ∧
-    s.a.length + items.length = run.rotations * s.capacity + run.state.a.length ∧
-    (0 < s.a.length ∨ items ≠ [] → 0 < run.state.a.length) ∧
-    run.cost ≤ items.length * insertionBase bufferCharge +
-      run.rotations * rotationSurcharge reverseCharge bufferCharge s.capacity := by
-  induction items generalizing s with
-  | nil => simp [insertMany, valid]
-  | cons item rest ih =>
-    have capacity := insertCapacity s item
-    have nextPositive : 0 < (insertModel s item).capacity := by rwa [capacity]
-    obtain ⟨endValid, endCapacity, balance, nonempty, cost⟩ :=
-      ih (insertModel s item) (insertPreserves s item valid) nextPositive
-    rw [capacity] at endCapacity balance cost
-    obtain ⟨advance, nextNonempty⟩ := insertAdvance s item valid positive
-    have stepCost := insertBudget reverseCharge bufferCharge s valid positive
-    simp only [insertMany, List.length_cons, Nat.add_mul, Nat.succ_mul]
-    refine ⟨endValid, endCapacity, by omega, fun _ => nonempty (Or.inl nextNonempty), ?_⟩
-    omega
-
-
 theorem insertManyZero (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
     (items : List Int) :
     let run := insertMany reverseCharge bufferCharge (newModel 0) items
-    run.state = newModel 0 ∧ run.rotations = 0 ∧ run.cost = items.length * bufferCharge 3 := by
+    run.state = newModel 0 ∧ run.events = 0 ∧ run.cost = items.length * bufferCharge 3 := by
   induction items with
-  | nil => simp [insertMany]
+  | nil => simp [insertMany, ReductionBounds.Periodic.run]
   | cons item rest ih =>
     obtain ⟨state, rotations, cost⟩ := ih
+    simp only [insertMany] at state rotations cost
     have step := insertZeroCapacity reverseCharge bufferCharge (newModel 0) item (by
       simp [newModel, BufferState.valid]) rfl
     have noRotation : rotationStep (newModel 0) = 0 := rfl
-    simp only [insertMany, step.1, step.2, noRotation, state, rotations, cost, Nat.zero_add,
+    simp only [insertMany, ReductionBounds.Periodic.run, step.1, step.2, noRotation, state, rotations, cost, Nat.zero_add,
       List.length_cons, Nat.succ_mul, Nat.add_comm, and_self]
 
 theorem validZeroState (s : BufferState) (valid : s.valid) (zero : s.capacity = 0) :
@@ -173,47 +176,25 @@ def sequenceRotationCountFrom (m a n : Nat) : Nat :=
 
 theorem insertManyRotationCountFrom (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
     (s : BufferState) (items : List Int) (valid : s.valid) :
-    (insertMany reverseCharge bufferCharge s items).rotations =
+    (insertMany reverseCharge bufferCharge s items).events =
       sequenceRotationCountFrom s.capacity s.a.length items.length := by
   by_cases zero : s.capacity = 0
   · rw [validZeroState s valid zero]
     simpa [sequenceRotationCountFrom, newModel] using
       (insertManyZero reverseCharge bufferCharge items).2.1
   · have positive : 0 < s.capacity := by omega
-    by_cases noProgress : s.a.length + items.length = 0
-    · have empty : items = [] := List.length_eq_zero_iff.mp (by omega)
-      have aEmpty : s.a.length = 0 := by omega
-      simp [empty, aEmpty, insertMany, sequenceRotationCountFrom]
-    · obtain ⟨endValid, endCapacity, balance, nonempty, _⟩ :=
-        insertManyFromPositive reverseCharge bufferCharge s items valid positive
-      let run := insertMany reverseCharge bufferCharge s items
-      change s.a.length + items.length = run.rotations * s.capacity + run.state.a.length at balance
-      have endNonempty : 0 < run.state.a.length := nonempty (by
-        by_cases hasA : 0 < s.a.length
-        · exact Or.inl hasA
-        · have lengthZero : s.a.length = 0 := by omega
-          exact Or.inr (fun empty => noProgress (by simp [empty, lengthZero])))
-      have endBound : run.state.a.length ≤ s.capacity := by
-        rcases endValid with ⟨lengths, bounded, _⟩
-        calc
-          run.state.a.length ≤ run.state.a.length + run.state.b.length := Nat.le_add_right _ _
-          _ = run.state.count := lengths.symm
-          _ ≤ run.state.capacity := bounded
-          _ = s.capacity := endCapacity
-      simp only [sequenceRotationCountFrom, ite_eq_right zero]
-      change run.rotations = (s.a.length + items.length - 1) / s.capacity
-      symm
-      apply Nat.div_eq_of_lt_le
-      · omega
-      · rw [Nat.add_mul, Nat.one_mul]
-        omega
+    have checked := bufferObligations reverseCharge bufferCharge s.capacity positive
+    have count := ReductionBounds.Periodic.eventCount checked s items ⟨valid, rfl⟩
+    change (insertMany reverseCharge bufferCharge s items).events =
+      ReductionBounds.Periodic.eventFormula s.capacity 1 1 s.a.length items.length at count
+    simpa [sequenceRotationCountFrom, ReductionBounds.Periodic.eventFormula, zero] using count
 
 def sequenceRotationCount (m n : Nat) : Nat :=
   sequenceRotationCountFrom m 0 n
 
 theorem insertManyRotationCount (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
     (m : Nat) (items : List Int) :
-    (insertMany reverseCharge bufferCharge (newModel m) items).rotations =
+    (insertMany reverseCharge bufferCharge (newModel m) items).events =
       sequenceRotationCount m items.length := by
   simpa [sequenceRotationCount, newModel] using
     insertManyRotationCountFrom reverseCharge bufferCharge (newModel m) items
@@ -235,9 +216,15 @@ theorem insertManyCostBoundFrom (reverseCharge : Nat → Nat → Nat) (bufferCha
     simpa [insertionSequenceUpperBoundFrom, newModel] using
       Nat.le_of_eq (insertManyZero reverseCharge bufferCharge items).2.2
   · have positive : 0 < s.capacity := by omega
-    have cost := (insertManyFromPositive reverseCharge bufferCharge s items valid positive).2.2.2.2
-    rw [insertManyRotationCountFrom reverseCharge bufferCharge s items valid] at cost
-    simpa [insertionSequenceUpperBoundFrom, zero] using cost
+    have checked := bufferObligations reverseCharge bufferCharge s.capacity positive
+    have bound := ReductionBounds.Periodic.costBound checked s items ⟨valid, rfl⟩
+    change (insertMany reverseCharge bufferCharge s items).cost ≤
+      ReductionBounds.Periodic.costFormula (insertionBase bufferCharge)
+        (rotationSurcharge reverseCharge bufferCharge s.capacity)
+        (ReductionBounds.Periodic.eventFormula s.capacity 1 1 s.a.length items.length)
+        items.length at bound
+    simpa [insertionSequenceUpperBoundFrom, sequenceRotationCountFrom,
+      ReductionBounds.Periodic.costFormula, ReductionBounds.Periodic.eventFormula, zero] using bound
 
 def insertionSequenceUpperBound (reverseCharge : Nat → Nat → Nat)
     (bufferCharge : Nat → Nat) (m n : Nat) : Nat :=

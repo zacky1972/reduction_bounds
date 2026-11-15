@@ -379,6 +379,51 @@ zero-capacity path retains no items. This theorem connects the
 Lean state model to the independent FIFO specification. ExUnit checks
 the corresponding observable behavior of the Elixir library.
 
+## Fixed progress and periodic resets
+
+`Periodic.lean` gives the common rule for a sequence of state
+transitions with a constant increment and periodic resets. Let `m` be
+a positive period, `d` the increment, `o` the lower endpoint after a
+step, and `size(s)` the progress in state `s`. The inferred proof
+obligations check invariant preservation, `size(s) < m + o` in valid
+states, and the following equation for each valid step:
+
+```text
+size(s) + d = events_this_step * m + size(next)
+```
+
+The next state must also satisfy `o ≤ size(next)`. The rule allows
+an initial size below `o` and handles an empty sequence separately.
+Lean's `accumulate` combines the transition obligations by induction.
+`eventCount` derives `floor(max(initial + n * d - o, 0) / m)`. Here
+`initial` denotes the initial size and `n` the number of steps.
+`costBound` sums the per-step budgets to give
+`n * base + events * surcharge`.
+
+`infer_periodic_bound/2` recognizes a two-argument transition that
+adds a positive constant to a pending count. At the threshold it
+subtracts the period and returns an event flag. Below the threshold it
+keeps the advanced count and returns false. The invariant is
+`pending < period`, with a period at least as large as the increment.
+For a function that enqueues two items at a time and signals a batch
+when it is ready, the rule gives `floor((pending + 2 * n) / period)`.
+The counter decoder checks this source shape in Core Erlang. The
+counter proof checks the transition's obligations in its natural
+number model. The symbolic surcharge is the extra modeled cost of an
+event step.
+
+The return value lists `conditions.derived` and `conditions.supplied`
+separately. A `periodic_contract` Lean block may specify an extra
+predicate `periodicInvariant period state` and a natural-valued
+`periodicMeasure period state`. The block proves
+`periodicInvariantStep` under `periodicDomain` and
+`periodicMeasureBounds` to justify using the measure in place of the
+initial pending count. The API returns the supplied Lean source and
+separate measured bounds. Lean checks these obligations and rejects a
+contract that relies on an unfinished proof or an extra axiom. The
+periodic bound tests demonstrate an even-period, even-count invariant
+and a measure of `state + 2`.
+
 ## Consecutive CircularBuffer insertions
 
 Call `ReductionBounds.infer_circular_buffer_sequence_bound/0` to
@@ -400,17 +445,15 @@ rotating. Let `r(m)` be the extra cost bound for the rotation's
 | `m > 0` and `n = 0` | `0` | `0` |
 | `m > 0` and `n > 0` | `floor((n - 1) / m)` | `n * c + q(m, n) * r(m)` |
 
-The proof in `CircularBufferSequence.lean` threads the state after
-each insertion into the next call. Its `rotationStep` counts a
-rotation exactly when the shared `insertPath` selects the rotate path.
-For positive capacity, a step without rotation increases the length of
-`a` by one. A rotation takes place with `length(a) = m` and leaves the
-new `a` with length one. Starting with an empty `a`, the theorem
-`insertManyFromPositive` gives
-`n = q * m + length(final_a)`. For a nonempty insertion sequence,
-`length(final_a)` lies between one and `m`, so
-`insertManyRotationCount` derives the quotient in the table. At
-capacity zero the state stays empty on every step.
+`CircularBufferSequence.lean` uses the fixed-progress rule with
+`size(s) = length(a)`, increment one, and lower endpoint one. Its
+`rotationStep` counts a rotation exactly when `insertPath` selects the
+rotate path. With positive capacity, an ordinary step increases the
+length of `a` by one. A rotation takes place with `length(a) = m` and
+leaves the new `a` with length one. `bufferObligations` discharges the
+shared rule's premises using the single-insertion model.
+`insertManyRotationCount` specializes the shared count theorem to an
+empty initial buffer. At capacity zero the state remains empty.
 
 `insertManyCostBound` then combines the per-step cost with the exact
 rotation count. The returned `rotation_count` expression uses natural

@@ -347,6 +347,9 @@ defmodule ReductionBoundsTest do
     assert bound.metric == :symbolic_cost
     assert bound.size_measure == %{m: :capacity, n: :insertions}
     assert bound.value_model == :circular_buffer_sequence_model
+    assert bound.periodic_rule == :constant_stride_reset
+    assert %{derived: derived, supplied: []} = bound.conditions
+    assert {:size_measure, :front_list_length} in derived
     assert bound.rotation_count == {:if_zero, :m, 0, {:div, {:sub, :n, 1}, :m}}
 
     assert {:call_bound, {Enum, :reverse, 1},

@@ -27,6 +27,8 @@
     "leanprover",
     "nolink",
     "callees",
-    "succ"
+    "succ",
+    "cerl",
+    "propext"
   ]
 }

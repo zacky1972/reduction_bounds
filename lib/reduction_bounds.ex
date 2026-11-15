@@ -190,6 +190,9 @@ defmodule ReductionBounds do
           struct_inference_option()
           | {:call_contracts, %{optional(target()) => non_neg_integer()}}
 
+  @type periodic_inference_option ::
+          struct_inference_option() | {:periodic_contract, Lynx.Lean.t()}
+
   @doc """
   Checks a Lean file or an inline Lean postlude against each target.
 
@@ -366,6 +369,34 @@ defmodule ReductionBounds do
         ReductionBounds.CircularBufferSequenceBound.proof(),
         options
       )
+    end
+  end
+
+  @doc """
+  Infers the event count and symbolic cost for repeated calls to a
+  counter with fixed progress and a reset at its threshold.
+
+  The target takes a pending count and a period and returns the
+  updated pending count and a Boolean event flag. The initial count
+  must be below the period. Both are natural numbers and the period
+  must be at least the positive increment recovered from the code.
+
+  Pass a Lean block as :periodic_contract to add an invariant and a
+  measure for the initial state. Define periodicInvariant and
+  periodicMeasure and prove periodicInvariantStep and
+  periodicMeasureBounds using periodicDomain and periodicNext.
+  The result reports the derived and supplied conditions and includes
+  a separate upper bound expressed in the supplied measure.
+  """
+  @spec infer_periodic_bound(target(), [periodic_inference_option()]) ::
+          {:ok, map()} | {:error, term()}
+  def infer_periodic_bound(target, options \\ []) do
+    with :ok <- validate_targets([target]),
+         {:ok, options} <- validate_options(options, :periodic_bound),
+         {contract, options} = Keyword.pop(options, :periodic_contract),
+         {:ok, candidate, proof} <-
+           ReductionBounds.PeriodicBound.infer(target, options[:beam_binaries], contract) do
+      verify_bound(target, candidate, proof, Keyword.delete(options, :beam_binaries))
     end
   end
 
@@ -556,6 +587,9 @@ defmodule ReductionBounds do
         :execution_bound ->
           [call_contracts: %{}] ++ Keyword.delete(defaults, :termination_suffixes)
 
+        :periodic_bound ->
+          [:periodic_contract | Keyword.delete(defaults, :termination_suffixes)]
+
         _ ->
           defaults
       end
@@ -572,6 +606,7 @@ defmodule ReductionBounds do
   end
 
   defp valid_option?({:input_contract, value}), do: is_struct(value, Lynx.Lean)
+  defp valid_option?({:periodic_contract, value}), do: is_struct(value, Lynx.Lean)
   defp valid_option?({:postlude, value}), do: is_struct(value, Lynx.Lean)
   defp valid_option?({:max_concurrency, value}), do: is_integer(value) and value > 0
   defp valid_option?({:timeout, value}), do: is_integer(value) and value in 0..4_294_967_295
@@ -694,6 +729,10 @@ defmodule ReductionBounds do
 
   defp assemble_target(translation, _target, :circular_buffer_model) do
     translation |> Lynx.Translation.assemble(cache: false) |> import_postlude("Erlang.lists")
+  end
+
+  defp assemble_target(translation, _target, :periodic_fragment) do
+    Lynx.Translation.assemble(translation, cache: false)
   end
 
   defp assemble_target(translation, _target, fragment)

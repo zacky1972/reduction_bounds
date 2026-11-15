@@ -2,7 +2,7 @@ defmodule ReductionBounds.CircularBufferSequenceBound do
   @moduledoc false
   # cspell:words cerl primop
 
-  alias ReductionBounds.{CircularBufferBound, CoreFragment, SearchBound}
+  alias ReductionBounds.{CircularBufferBound, CoreFragment, PeriodicBound, SearchBound}
 
   @initializer {CircularBuffer, :new, 1}
   @proof_path Path.expand("../../priv/lean/reduction_bounds/CircularBufferSequence.lean", __DIR__)
@@ -24,8 +24,8 @@ defmodule ReductionBounds.CircularBufferSequenceBound do
   defp sequence_candidate(%{path_bounds: paths} = single) do
     {:add, local_rotation, surcharge} = paths.rotate
     base = {:max, paths.consume, {:max, paths.fill, local_rotation}}
-    rotations = {:if_zero, :m, 0, {:div, {:sub, :n, 1}, :m}}
-    positive = {:add, {:mul, :n, base}, {:mul, rotations, surcharge}}
+    rotations = {:if_zero, :m, 0, PeriodicBound.event_count(:m, 1, 1, 0, :n)}
+    positive = PeriodicBound.cost_bound(base, surcharge, rotations, :n)
 
     single
     |> Map.drop([:path_bounds])
@@ -33,6 +33,20 @@ defmodule ReductionBounds.CircularBufferSequenceBound do
       domain: :integer_insertions_from_empty_circular_buffer,
       value_model: :circular_buffer_sequence_model,
       size_measure: %{m: :capacity, n: :insertions},
+      periodic_rule: :constant_stride_reset,
+      stride: 1,
+      origin: 1,
+      conditions: %{
+        derived: [
+          {:domain, :valid_integer_circular_buffer},
+          {:initial, :empty_buffer},
+          {:size_measure, :front_list_length},
+          {:invariant, :valid_buffer_with_fixed_capacity},
+          {:reset, :rotate_when_front_list_is_full},
+          {:zero_period, :no_rotation}
+        ],
+        supplied: []
+      },
       rotation_count: rotations,
       base_cost: base,
       rotation_surcharge: surcharge,
@@ -97,7 +111,7 @@ defmodule ReductionBounds.CircularBufferSequenceBound do
     %{
       proof
       | file: "generated_circular_buffer_sequence_bound.lean",
-        source: proof.source <> "\n" <> @proof_source
+        source: proof.source <> "\n" <> PeriodicBound.rules_source() <> "\n" <> @proof_source
     }
   end
 end
