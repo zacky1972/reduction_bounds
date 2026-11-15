@@ -1,18 +1,24 @@
 defmodule ReductionBounds.CircularBufferBound do
   @moduledoc false
-  # cspell:words cerl primop simp cons rcases simpa
+  # cspell:words cerl cons
 
-  alias ReductionBounds.{ComposedBound, SearchBound}
+  alias ReductionBounds.{ComposedBound, CoreFragment, Normalize, SearchBound}
 
   @target {CircularBuffer, :insert, 2}
   @paths [:consume, :fill, :rotate, :zero]
+  @fields [:a, :b, :count, :max_size]
+  @field_names Map.new(@fields, &{Atom.to_string(&1), &1})
+  @proof_path Path.expand("../../priv/lean/reduction_bounds/CircularBuffer.lean", __DIR__)
+  @external_resource @proof_path
+  @proof_source File.read!(@proof_path)
 
   @spec infer([binary()]) :: {:ok, map()} | {:error, term()}
-  def infer(beams) do
+  @spec infer([binary()], :n | :m) :: {:ok, map()} | {:error, term()}
+  def infer(beams, capacity \\ :n) do
     with {:ok, core} <- SearchBound.core_function(@target, beams),
          true <- supported?(core),
          :ok <- check_enum_reverse(beams) do
-      {:ok, candidate()}
+      {:ok, candidate(capacity)}
     else
       false -> {:error, {:unsupported_circular_buffer_shape, @target}}
       {:error, _} = error -> error
@@ -79,10 +85,9 @@ defmodule ReductionBounds.CircularBufferBound do
        {:c_cons, [], {:c_var, [], first}, {:c_literal, [], []}}}
   end
 
-  defp candidate() do
-    paths = Enum.map(@paths, &{&1, path_cost(&1)})
-
-    paths
+  defp candidate(capacity) do
+    capacity
+    |> path_costs()
     |> ComposedBound.compose_paths()
     |> Map.merge(%{
       target: @target,
@@ -94,11 +99,12 @@ defmodule ReductionBounds.CircularBufferBound do
     })
   end
 
-  defp path_cost(:rotate) do
-    {:add, {:buffer_charge, :rotate}, {:enum_reverse, "a", :n}}
-  end
+  defp path_costs(capacity), do: Enum.map(@paths, &{&1, path_cost(&1, capacity)})
 
-  defp path_cost(path), do: {:buffer_charge, path}
+  defp path_cost(:rotate, capacity),
+    do: {:add, {:buffer_charge, :rotate}, {:enum_reverse, "a", capacity}}
+
+  defp path_cost(path, _capacity), do: {:buffer_charge, path}
 
   defp supported?({:c_fun, _, params, {:c_case, _, {:c_values, _, args}, clauses}}) do
     Enum.map(params, &:cerl.var_name/1) == Enum.map(args, &variable/1) and
@@ -157,7 +163,7 @@ defmodule ReductionBounds.CircularBufferBound do
          env,
          tests
        )
-       when field in [:a, :b, :count, :max_size] do
+       when field in @fields do
     case pattern do
       {:c_var, _, name} ->
         field_patterns(rest, Map.put(env, name, field), tests)
@@ -192,24 +198,18 @@ defmodule ReductionBounds.CircularBufferBound do
     operation(module, name, Enum.map(args, &expression(&1, env)))
   end
 
-  # On a valid buffer the first case succeeds because all record fields exist.
-  defp expression(
-         {:c_case, _, buffer,
-          [
-            {:c_clause, _,
-             [
-               {:c_map, _, _,
-                [
-                  {:c_map_pair, _, {:c_literal, _, :exact}, {:c_literal, _, field},
-                   {:c_var, _, name}}
-                ], true}
-             ], {:c_literal, _, true}, {:c_var, _, name}}
-            | _
-          ]},
-         env
-       )
-       when field in [:a, :b, :count, :max_size] do
-    with {:ok, :buffer} <- expression(buffer, env), do: {:ok, field}
+  # The valid-buffer domain supplies the field facts to the common rewrite rule.
+  defp expression({:c_case, _, {:c_var, _, _} = buffer, _} = core, env) do
+    with {:ok, :buffer} <- expression(buffer, env),
+         {:ok, %{parameters: [subject]} = program} <-
+           CoreFragment.decode({:c_fun, [], [buffer], core}),
+         facts = Enum.map(Map.keys(@field_names), &{subject, &1}),
+         %{program: %{expression: {:field, {:var, ^subject}, key}}} <-
+           Normalize.normalize(program, facts) do
+      Map.fetch(@field_names, key)
+    else
+      _ -> :unsupported
+    end
   end
 
   # The compiler guards map updates with is_map/1.
@@ -261,102 +261,11 @@ defmodule ReductionBounds.CircularBufferBound do
 
   @spec proof() :: Lynx.Lean.t()
   def proof() do
-    paths = Enum.map(@paths, &{&1, path_cost(&1)})
-
     %Lynx.Lean{
       file: "generated_circular_buffer_bound.lean",
       span: {1, 1},
       indentation: 0,
-      source: ComposedBound.buffer_cost_proof(paths) <> state_proof()
+      source: ComposedBound.buffer_cost_proof(path_costs(:n)) <> @proof_source
     }
-  end
-
-  defp state_proof() do
-    """
-    structure BufferState where
-      a : List Int
-      b : List Int
-      count : Nat
-      capacity : Nat
-
-    def BufferState.valid (s : BufferState) : Prop :=
-      s.count = s.a.length + s.b.length ∧ s.count ≤ s.capacity ∧
-        (s.b ≠ [] → s.count = s.capacity)
-
-    def insertModel (s : BufferState) (item : Int) : BufferState :=
-      match s.b with
-      | _ :: tail => { s with a := item :: s.a, b := tail }
-      | [] =>
-        if s.count < s.capacity then { s with a := item :: s.a, count := s.count + 1 }
-        else if s.a.isEmpty then s
-        else { s with a := [item], b := (enumReverseList s.a).tail }
-
-    def insertCost (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
-        (s : BufferState) : Nat :=
-      match s.b with
-      | _ :: _ => consumeCost reverseCharge bufferCharge s.a
-      | [] =>
-        if s.count < s.capacity then fillCost reverseCharge bufferCharge s.a
-        else if s.a.isEmpty then zeroCost reverseCharge bufferCharge s.a
-        else rotateCost reverseCharge bufferCharge s.a
-
-    theorem insertPreserves (s : BufferState) (item : Int) (valid : s.valid) :
-        (insertModel s item).valid := by
-      rcases s with ⟨a, b, count, capacity⟩
-      cases b with
-      | nil =>
-        by_cases fills : count < capacity
-        · simp [BufferState.valid, insertModel, fills] at valid ⊢
-          omega
-        · cases a with
-          | nil => simpa [insertModel, fills] using valid
-          | cons head tail =>
-            simp [BufferState.valid, insertModel, fills, enumReverseListValue, List.length_tail] at valid ⊢
-            omega
-      | cons head tail =>
-        simp [BufferState.valid, insertModel] at valid ⊢
-        omega
-
-    theorem bufferRotationSize (s : BufferState) (valid : s.valid)
-        (empty : s.b = []) (full : ¬ s.count < s.capacity) :
-        s.a.length = s.capacity := by
-      rcases valid with ⟨lengths, bounded, _⟩
-      simp [empty] at lengths
-      omega
-
-    theorem insertCostBound (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
-        (s : BufferState) (item : Int) (valid : s.valid) :
-        (insertModel s item).valid ∧
-          insertCost reverseCharge bufferCharge s ≤
-            bufferUpperBound reverseCharge bufferCharge s.capacity := by
-      refine ⟨insertPreserves s item valid, ?_⟩
-      have lengthBound : s.a.length ≤ s.capacity := by
-        rcases valid with ⟨lengths, bounded, _⟩
-        omega
-      rcases s with ⟨a, b, count, capacity⟩
-      cases b with
-      | nil =>
-        by_cases fills : count < capacity
-        · simpa [insertCost, fills] using fillBound reverseCharge bufferCharge a capacity lengthBound
-        · cases a with
-          | nil => simpa [insertCost, fills] using zeroBound reverseCharge bufferCharge [] capacity lengthBound
-          | cons head tail =>
-            simpa [insertCost, fills] using rotateBound reverseCharge bufferCharge
-              (head :: tail) capacity lengthBound
-      | cons head tail =>
-        simpa [insertCost] using consumeBound reverseCharge bufferCharge a capacity lengthBound
-
-    theorem insertZeroCapacity (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
-        (s : BufferState) (item : Int) (valid : s.valid) (zeroCapacity : s.capacity = 0) :
-        insertModel s item = s ∧ insertCost reverseCharge bufferCharge s = bufferCharge 3 := by
-      rcases s with ⟨a, b, count, capacity⟩
-      change capacity = 0 at zeroCapacity
-      simp [BufferState.valid] at valid
-      have ac : a.length = 0 := by omega
-      have bc : b.length = 0 := by omega
-      have cc : count = 0 := by omega
-      simp [insertModel, insertCost, zeroCost, List.length_eq_zero_iff.mp ac,
-        List.length_eq_zero_iff.mp bc, cc, zeroCapacity]
-    """
   end
 end

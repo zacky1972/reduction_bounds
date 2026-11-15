@@ -30,7 +30,7 @@ defmodule ReductionBounds.CoreFragment do
 
   @spec decode(tuple()) :: {:ok, t()} | {:error, decode_error()}
   def decode({:c_fun, _, parameters, body}) do
-    with {:ok, names} <- map_ok(parameters, &name/1),
+    with {:ok, names} <- map_ok(parameters, &variable_name/1),
          {:ok, expression, opaque} <- decode_expression(body, %{}) do
       {:ok, %{parameters: names, expression: expression, opaque: opaque}}
     end
@@ -38,8 +38,13 @@ defmodule ReductionBounds.CoreFragment do
 
   def decode(other), do: unsupported(other)
 
+  @spec decode_guard(tuple()) :: {:ok, expr() | nil} | {:error, decode_error()}
+  def decode_guard(core) do
+    with {:ok, condition, _opaque} <- decode_guard(core, %{}), do: {:ok, condition}
+  end
+
   defp decode_expression({:c_var, _, _} = var, opaque) do
-    with {:ok, name} <- name(var), do: {:ok, {:var, name}, opaque}
+    with {:ok, name} <- variable_name(var), do: {:ok, {:var, name}, opaque}
   end
 
   defp decode_expression({:c_literal, _, value}, opaque) when is_integer(value),
@@ -49,7 +54,7 @@ defmodule ReductionBounds.CoreFragment do
     do: {:ok, {:atom, Atom.to_string(value)}, opaque}
 
   defp decode_expression({:c_let, _, [var], rhs, body}, opaque) do
-    with {:ok, name} <- name(var),
+    with {:ok, name} <- variable_name(var),
          {:ok, rhs, opaque} <- decode_expression(rhs, opaque),
          {:ok, body, opaque} <- decode_expression(body, opaque) do
       {:ok, {:let_in, name, rhs, body}, opaque}
@@ -63,7 +68,7 @@ defmodule ReductionBounds.CoreFragment do
   end
 
   defp decode_expression({:c_case, _, {:c_values, _, [_, _ | _] = subjects}, _} = core, opaque) do
-    with {:ok, names} <- map_ok(subjects, &name/1) do
+    with {:ok, names} <- map_ok(subjects, &variable_name/1) do
       decode_multi_case(core, names, opaque)
     end
   end
@@ -187,7 +192,7 @@ defmodule ReductionBounds.CoreFragment do
 
   defp decode_multi_clause({:c_clause, _, [first | rest], guard, body}, subjects, opaque) do
     with {:ok, pattern, alias_name} <- decode_map_pattern(first),
-         {:ok, names} <- map_ok(rest, &name/1),
+         {:ok, names} <- map_ok(rest, &variable_name/1),
          {:ok, bindings} <- argument_bindings(subjects, alias_name, names, pattern),
          {:ok, condition, opaque} <- decode_guard(guard, opaque),
          {:ok, body, opaque} <- decode_expression(body, opaque) do
@@ -296,7 +301,7 @@ defmodule ReductionBounds.CoreFragment do
   end
 
   defp decode_map_pattern({:c_alias, _, alias_var, pattern}) do
-    with {:ok, name} <- name(alias_var),
+    with {:ok, name} <- variable_name(alias_var),
          {:ok, decoded, nil} <- decode_map_pattern(pattern),
          false <- Enum.any?(decoded.fields, fn {_key, binder} -> binder == name end) do
       {:ok, decoded, name}
@@ -324,7 +329,7 @@ defmodule ReductionBounds.CoreFragment do
          {:c_map_pair, _, {:c_literal, _, :exact}, {:c_literal, _, key}, {:c_var, _, _} = var}
        )
        when is_atom(key) do
-    with {:ok, name} <- name(var), do: {:ok, {Atom.to_string(key), name, :binder}}
+    with {:ok, name} <- variable_name(var), do: {:ok, {Atom.to_string(key), name, :binder}}
   end
 
   defp decode_pattern_pair(
@@ -344,9 +349,10 @@ defmodule ReductionBounds.CoreFragment do
     Enum.uniq_by(entries, &elem(&1, index)) == entries
   end
 
-  defp name({:c_var, _, id}) when is_integer(id), do: {:ok, "integer:#{id}"}
-  defp name({:c_var, _, id}) when is_atom(id), do: {:ok, "atom:#{id}"}
-  defp name(other), do: unsupported(other)
+  @spec variable_name(tuple()) :: {:ok, name()} | {:error, decode_error()}
+  def variable_name({:c_var, _, id}) when is_integer(id), do: {:ok, "integer:#{id}"}
+  def variable_name({:c_var, _, id}) when is_atom(id), do: {:ok, "atom:#{id}"}
+  def variable_name(other), do: unsupported(other)
 
   defp map_ok([], _function), do: {:ok, []}
 
