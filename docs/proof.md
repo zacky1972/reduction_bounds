@@ -297,8 +297,23 @@ applies the shared `Normalize` rule under the assumption that the
 required fields exist in a valid buffer. It compares the resulting
 clauses with the expected CircularBuffer conditions and updates.
 In `CircularBuffer.lean`, `insertPath` selects the path used by both
-`insertModel` and `insertCost`. The Lean theorem is stated over this
-state model. ExUnit exercises all four paths with the actual library.
+`insertModel` and `insertCost`. The Lean cost theorems are stated over
+this state model. ExUnit exercises all four paths with the actual library.
+
+### Agreement with a bounded FIFO specification
+
+The specification `fifoInsert` represents the retained items as one
+list, in oldest-to-newest order. It appends the incoming item and
+keeps the last `capacity` items. For a modeled buffer,
+`BufferState.contents` reads `b ++ reverse(a)` in that order.
+
+`insertContents` proves that reading the state after `insertModel`
+gives the same list as `fifoInsert` for every valid state and every
+integer item. The fill path appends an item without discarding any.
+The consume and rotate paths discard exactly the oldest item. The
+zero-capacity path retains no items. This theorem connects the
+Lean state model to the independent FIFO specification. ExUnit checks
+the corresponding observable behavior of the Elixir library.
 
 ## Consecutive CircularBuffer insertions
 
@@ -352,6 +367,19 @@ final length lies between one and `m`, so subtracting one and dividing
 by `m` gives the exact quotient. When `a0 + n = 0`, the run is empty.
 At capacity zero the invariant forces both lists to be empty and the
 count to be zero. Each insertion leaves the state unchanged.
+
+`insertManyContents` proves that the retained contents after a run
+equal a left fold of `fifoInsert`, starting from the initial contents
+at the initial capacity. The induction applies `insertContents` at
+each step, using preservation of validity and capacity. It covers
+the empty insertion list, zero capacity, and nonempty initial buffers.
+The equality holds for any assignments of the symbolic charges.
+
+`insertManyLatest` gives the same result directly: concatenate the
+initial contents and the incoming items in chronological order, then
+keep the last `capacity` items. This includes a sequence of length
+zero. Applying the theorem to any prefix gives the retained contents
+at that point in the run, including runs that cross a rotation.
 
 `insertManyCostBoundFrom` bounds the modeled cost by
 `n * c + rotations * r(m)` for positive capacity and `n * C_zero`

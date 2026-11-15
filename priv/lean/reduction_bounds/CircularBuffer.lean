@@ -91,3 +91,61 @@ theorem insertZeroCapacity (reverseCharge : Nat → Nat → Nat) (bufferCharge :
   have cc : count = 0 := by omega
   simp [insertModel, insertCost, insertPath, zeroCost, List.length_eq_zero_iff.mp ac,
     List.length_eq_zero_iff.mp bc, cc, zeroCapacity]
+
+def BufferState.contents (s : BufferState) : List Int :=
+  s.b ++ s.a.reverse
+
+-- The FIFO specification keeps the newest items in oldest-to-newest order.
+def fifoInsert (capacity : Nat) (items : List Int) (item : Int) : List Int :=
+  (items ++ [item]).drop (items.length + 1 - capacity)
+
+private theorem fifoInsertRoom (capacity : Nat) (items : List Int) (item : Int)
+    (room : items.length < capacity) :
+    fifoInsert capacity items item = items ++ [item] := by
+  have drops : items.length + 1 - capacity = 0 := by omega
+  simp only [fifoInsert, drops, List.drop_zero]
+
+private theorem fifoInsertFull (capacity : Nat) (oldest : Int) (rest : List Int)
+    (item : Int) (full : (oldest :: rest).length = capacity) :
+    fifoInsert capacity (oldest :: rest) item = rest ++ [item] := by
+  have drops : (oldest :: rest).length + 1 - capacity = 1 := by omega
+  simp only [fifoInsert, drops, List.cons_append, List.drop_succ_cons, List.drop_zero]
+
+theorem insertContents (s : BufferState) (item : Int) (valid : s.valid) :
+    (insertModel s item).contents = fifoInsert s.capacity s.contents item := by
+  rcases s with ⟨a, b, count, capacity⟩
+  change count = a.length + b.length ∧ count ≤ capacity ∧
+    (b ≠ [] → count = capacity) at valid
+  rcases valid with ⟨lengths, bounded, full⟩
+  cases b with
+  | cons oldest rest =>
+    have atCapacity := full (by simp)
+    simp only [List.length_cons] at lengths
+    have contentsFull : (oldest :: (rest ++ a.reverse)).length = capacity := by
+      simp only [List.length_cons, List.length_append, List.length_reverse]
+      omega
+    simpa [BufferState.contents, insertModel, insertPath, List.reverse_cons, List.append_assoc]
+      using (fifoInsertFull capacity oldest (rest ++ a.reverse) item contentsFull).symm
+  | nil =>
+    simp only [List.length_nil, Nat.add_zero] at lengths
+    by_cases fills : count < capacity
+    · have room : a.reverse.length < capacity := by
+        simp only [List.length_reverse]
+        omega
+      simpa [BufferState.contents, insertModel, insertPath, fills, List.reverse_cons]
+        using (fifoInsertRoom capacity a.reverse item room).symm
+    · have atCapacity : a.length = capacity := by omega
+      cases a with
+      | nil =>
+        have zero : capacity = 0 := atCapacity.symm
+        simp [BufferState.contents, insertModel, insertPath, fifoInsert, zero]
+      | cons newest rest =>
+        cases reversed : (newest :: rest).reverse with
+        | nil =>
+          have impossible := congrArg List.length reversed
+          simp at impossible
+        | cons oldest older =>
+          have contentsFull : (oldest :: older).length = capacity := by
+            rw [← reversed, List.length_reverse, atCapacity]
+          simpa [BufferState.contents, insertModel, insertPath, fills, enumReverseListValue, reversed]
+            using (fifoInsertFull capacity oldest older item contentsFull).symm

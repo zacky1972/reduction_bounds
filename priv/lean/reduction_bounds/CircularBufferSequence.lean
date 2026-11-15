@@ -74,6 +74,52 @@ def insertMany (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat
     ⟨suffix.state, rotationStep s + suffix.rotations,
       insertCost reverseCharge bufferCharge s + suffix.cost⟩
 
+theorem insertManyContents (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
+    (s : BufferState) (items : List Int) (valid : s.valid) :
+    (insertMany reverseCharge bufferCharge s items).state.contents =
+      items.foldl (fifoInsert s.capacity) s.contents := by
+  induction items generalizing s with
+  | nil => rfl
+  | cons item rest ih =>
+    simp only [insertMany, List.foldl_cons]
+    rw [ih (insertModel s item) (insertPreserves s item valid),
+      insertCapacity s item, insertContents s item valid]
+
+def fifoLatest (capacity : Nat) (history : List Int) : List Int :=
+  history.drop (history.length - capacity)
+
+private theorem fifoInsertLatest (capacity : Nat) (history : List Int) (item : Int) :
+    fifoInsert capacity (fifoLatest capacity history) item =
+      fifoLatest capacity (history ++ [item]) := by
+  have dropped : history.length - capacity ≤ history.length := Nat.sub_le _ _
+  unfold fifoInsert fifoLatest
+  rw [← List.drop_append_of_le_length (l₂ := [item]) dropped, List.drop_drop]
+  simp only [List.length_drop, List.length_append, List.length_cons, List.length_nil, Nat.zero_add]
+  congr 1
+  omega
+
+private theorem fifoFoldLatest (capacity : Nat) (initial items : List Int) :
+    items.foldl (fifoInsert capacity) (fifoLatest capacity initial) =
+      fifoLatest capacity (initial ++ items) := by
+  induction items generalizing initial with
+  | nil => simp
+  | cons item rest ih =>
+    rw [List.foldl_cons, fifoInsertLatest, ih]
+    simp [List.append_assoc]
+
+theorem insertManyLatest (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
+    (s : BufferState) (items : List Int) (valid : s.valid) :
+    (insertMany reverseCharge bufferCharge s items).state.contents =
+      fifoLatest s.capacity (s.contents ++ items) := by
+  have bound : s.contents.length ≤ s.capacity := by
+    rcases valid with ⟨lengths, bounded, _⟩
+    simp only [BufferState.contents, List.length_append, List.length_reverse]
+    omega
+  have initial : fifoLatest s.capacity s.contents = s.contents := by
+    simp [fifoLatest, Nat.sub_eq_zero_of_le bound]
+  rw [insertManyContents reverseCharge bufferCharge s items valid]
+  simpa only [initial] using fifoFoldLatest s.capacity s.contents items
+
 theorem insertManyFromPositive (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
     (s : BufferState) (items : List Int) (valid : s.valid) (positive : 0 < s.capacity) :
     let run := insertMany reverseCharge bufferCharge s items
