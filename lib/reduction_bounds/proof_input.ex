@@ -23,19 +23,29 @@ defmodule ReductionBounds.ProofInput do
 
   @spec postludes(Lynx.Lean.t()) ::
           {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
-  def postludes(%Lynx.Lean{} = proof) do
+  def postludes(%Lynx.Lean{} = proof), do: packaged_postludes(proof, @sources)
+
+  @spec execution_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def execution_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, @sources ++ ["ExecutionBound.lean"])
+  end
+
+  defp packaged_postludes(proof, sources) do
     case :code.priv_dir(:reduction_bounds) do
       {:error, reason} -> {:error, {:priv_dir, reason}}
-      directory -> postludes(proof, List.to_string(directory))
+      directory -> load_sources(proof, List.to_string(directory), sources)
     end
   end
 
   @spec postludes(Lynx.Lean.t(), Path.t()) ::
           {:ok, [Lynx.Lean.t()]} | {:error, read_error()}
-  def postludes(%Lynx.Lean{} = proof, priv_dir) do
+  def postludes(%Lynx.Lean{} = proof, priv_dir), do: load_sources(proof, priv_dir, @sources)
+
+  defp load_sources(proof, priv_dir, sources) do
     lean_dir = Path.join([priv_dir, "lean", "reduction_bounds"])
 
-    case Enum.reduce_while(@sources, [], &load_source(&1, &2, lean_dir)) do
+    case Enum.reduce_while(sources, [], &load_source(&1, &2, lean_dir)) do
       {:error, _reason} = error -> error
       sources -> {:ok, Enum.reverse(sources, [proof])}
     end

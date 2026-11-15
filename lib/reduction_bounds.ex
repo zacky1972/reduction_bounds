@@ -186,6 +186,10 @@ defmodule ReductionBounds do
           | {:beam_binaries, [binary()]}
           | {:lean_options, [{atom(), integer() | boolean() | String.t()}]}
 
+  @type execution_inference_option ::
+          struct_inference_option()
+          | {:call_contracts, %{optional(target()) => non_neg_integer()}}
+
   @doc """
   Checks a Lean file or an inline Lean postlude against each target.
 
@@ -439,6 +443,36 @@ defmodule ReductionBounds do
     end
   end
 
+  @doc """
+  Checks a symbolic cost bound for every modeled execution of a supported
+  unary Core Erlang function.
+
+  The input must be a nonnegative integer. The fragment supports a zero
+  clause and a default clause, sequential bindings, zero tests, integer
+  addition, static unary calls, and self calls on the input minus one.
+  The result gives the zero and successor equations for the upper bound.
+  In a successor equation, :previous denotes the bound at the preceding input.
+
+  Supply :call_contracts as a map from static targets to nonnegative
+  symbolic cost limits, excluding the caller's own call charge. Each
+  contract assumes a natural result and normal termination for reachable
+  calls with a natural input. Lean checks the cost bound under the limits
+  and proves termination of the modeled target under the totality
+  assumptions. A missing contract is reported with the callee's target.
+  Unsupported expressions or invalid recursive calls prevent verification.
+  """
+  @spec infer_verified_bound(target(), [execution_inference_option()]) ::
+          {:ok, map()} | {:error, term()}
+  def infer_verified_bound(target, options \\ []) do
+    with :ok <- validate_targets([target]),
+         {:ok, options} <- validate_options(options, :execution_bound),
+         {contracts, options} = Keyword.pop!(options, :call_contracts),
+         {:ok, candidate, proof} <-
+           ReductionBounds.ExecutionBound.infer(target, options[:beam_binaries], contracts) do
+      verify_bound(target, candidate, proof, Keyword.delete(options, :beam_binaries))
+    end
+  end
+
   defp list_size_measure(nil), do: :list_length
   defp list_size_measure(%Lynx.Lean{}), do: :input_size
 
@@ -465,6 +499,10 @@ defmodule ReductionBounds do
   end
 
   defp proof_postludes(proof, :struct_fragment), do: ReductionBounds.ProofInput.postludes(proof)
+
+  defp proof_postludes(proof, :execution_fragment),
+    do: ReductionBounds.ProofInput.execution_postludes(proof)
+
   defp proof_postludes(proof, _definition), do: {:ok, [proof]}
 
   defp resolve_proof(:inline, options) do
@@ -506,10 +544,20 @@ defmodule ReductionBounds do
 
     allowed =
       case source do
-        :inline -> [:postlude | defaults]
-        :list_bound -> [:input_contract | defaults]
-        :struct_bound -> Keyword.delete(defaults, :termination_suffixes)
-        _ -> defaults
+        :inline ->
+          [:postlude | defaults]
+
+        :list_bound ->
+          [:input_contract | defaults]
+
+        :struct_bound ->
+          Keyword.delete(defaults, :termination_suffixes)
+
+        :execution_bound ->
+          [call_contracts: %{}] ++ Keyword.delete(defaults, :termination_suffixes)
+
+        _ ->
+          defaults
       end
 
     with true <- Keyword.keyword?(options),
@@ -531,6 +579,14 @@ defmodule ReductionBounds do
   defp valid_option?({:beam_binaries, values}) do
     is_list(values) and Enum.all?(values, &is_binary/1)
   end
+
+  defp valid_option?({:call_contracts, %{} = contracts}) when not is_struct(contracts) do
+    Enum.all?(contracts, fn {target, bound} ->
+      valid_target?(target) and is_integer(bound) and bound >= 0
+    end)
+  end
+
+  defp valid_option?({:call_contracts, _value}), do: false
 
   defp valid_option?({:termination_suffixes, %{} = suffixes}) when not is_struct(suffixes) do
     Enum.all?(suffixes, fn {target, source} ->
@@ -640,7 +696,8 @@ defmodule ReductionBounds do
     translation |> Lynx.Translation.assemble(cache: false) |> import_postlude("Erlang.lists")
   end
 
-  defp assemble_target(translation, _target, :struct_fragment) do
+  defp assemble_target(translation, _target, fragment)
+       when fragment in [:struct_fragment, :execution_fragment] do
     ReductionBounds.ProofInput.assemble(translation)
   end
 

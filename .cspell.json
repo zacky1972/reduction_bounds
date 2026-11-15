@@ -25,6 +25,8 @@
   ],
   "words": [
     "leanprover",
-    "nolink"
+    "nolink",
+    "callees",
+    "succ"
   ]
 }

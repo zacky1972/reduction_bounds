@@ -60,6 +60,52 @@ short-circuit conjunction, subtraction, and exact field updates.
 `BoundedCounter.set_limit/2` uses the same rules with a different field
 and guard.
 
+## Execution soundness for unary Core Erlang functions
+
+`ReductionBounds.infer_verified_bound/2` checks an upper bound against
+the execution semantics of a unary numeric fragment. The precondition
+is a nonnegative integer input. The function dispatches on zero and a
+default clause. Its body may evaluate bindings, nested zero tests,
+nonnegative integer values, addition, static unary calls, and self
+calls on the input minus one.
+
+The Elixir decoder checks the Core Erlang shape extracted from BEAM
+debug information and resolves its variable bindings. The Lean
+semantics in `ExecutionBound.lean` starts at the reified program.
+`Eval` relates an expression to its value and its charged symbolic
+cost. It evaluates both parts of a binding in order, evaluates the
+test before choosing a branch, and gives each static call any result
+and cost permitted by the callee relation. `Program.runs` covers all
+finite derivations, indexed by a call depth. The evaluator passes the
+actual recursive operand to the next call. A separate checked rule
+establishes that the operand denotes the current input minus one and
+that a self call occurs only in the positive clause. Rebinding a name
+discards its previous predecessor fact.
+
+Each entry in `call_contracts` maps a static callee to its cost limit.
+The limit excludes the caller's own call charge. The cost proof assumes
+that every callee outcome for a natural argument stays within that
+limit. Normal return assumes the callees terminate normally and return
+natural results on those arguments. Lean uses a total relation to
+construct a terminating derivation by induction on the input.
+`targetTerminates` gives a maximum self-call depth of `n + 1`, counting
+the initial call, for this construction.
+
+`Eval.pathCost` constructs a derivation for the existing `CostTree`
+rules. `targetUpperCorrect` checks the candidate equations generated
+in Elixir against the Lean bound. `targetCostBound` then bounds every
+execution in `Program.runs` under the call cost contracts. The result
+contains the precondition, the contracts used, and the zero and
+successor equations. In the successor equation, `:previous` denotes
+the upper bound at the preceding input.
+
+The API reports unsupported source expressions, missing callee
+contracts, and failed Lean checks as errors. Tests confirm that Lean
+rejects a self call on the unchanged argument and a falsified bound.
+Source extraction and the decoder's reification are trusted for this
+numeric fragment. The specialized list, map, and buffer analyses have
+their own proof scopes.
+
 ## User-defined list traversals
 
 `ReductionBounds.infer_list_bound/2` recognizes a traversal with an
