@@ -165,6 +165,7 @@ defmodule ReductionBounds do
           | :missing_postlude
           | {:invalid_option, atom(), term()}
           | {:read_lean, Path.t(), File.posix()}
+          | {:priv_dir, :bad_name}
           | {:beam_registration, %CompileError{}}
 
   @type verification_option ::
@@ -178,6 +179,12 @@ defmodule ReductionBounds do
           {:ok, [{target(), target_result()}]} | {:error, setup_error()}
 
   @type list_inference_option :: verification_option() | {:input_contract, Lynx.Lean.t()}
+
+  @type struct_inference_option ::
+          {:max_concurrency, pos_integer()}
+          | {:timeout, non_neg_integer()}
+          | {:beam_binaries, [binary()]}
+          | {:lean_options, [{atom(), integer() | boolean() | String.t()}]}
 
   @doc """
   Checks a Lean file or an inline Lean postlude against each target.
@@ -403,6 +410,30 @@ defmodule ReductionBounds do
     end
   end
 
+  @doc """
+  Derives a symbolic cost upper bound for a supported Core Erlang function
+  with map or struct operations. Pass the target as a module, function,
+  and arity tuple. Use beam_binaries for in-memory modules. The timeout,
+  max_concurrency, and lean_options settings match those for verification.
+
+      ReductionBounds.infer_struct_bound({MyCounter, :debit, 2})
+
+  Lean checks the bound for every path in the original fragment's cost
+  model. Each opaque path has a separate symbolic cost in the result.
+  The result also contains the normalized fragment and certificates. Lean
+  checks each certified rewrite under the listed field assumptions.
+  """
+  @spec infer_struct_bound(target(), [struct_inference_option()]) ::
+          {:ok, map()} | {:error, term()}
+  def infer_struct_bound(target, options \\ []) do
+    with :ok <- validate_targets([target]),
+         {:ok, options} <- validate_options(options, :struct_bound),
+         {:ok, candidate, proof} <-
+           ReductionBounds.ComposedBound.infer_struct(target, options[:beam_binaries]) do
+      verify_bound(target, candidate, proof, Keyword.delete(options, :beam_binaries))
+    end
+  end
+
   defp list_size_measure(nil), do: :list_length
   defp list_size_measure(%Lynx.Lean{}), do: :input_size
 
@@ -422,10 +453,14 @@ defmodule ReductionBounds do
          {:ok, proof, options} <- resolve_proof(source, options),
          {beams, options} = Keyword.pop!(options, :beam_binaries),
          {suffixes, options} = Keyword.pop!(options, :termination_suffixes),
-         {:ok, translation} <- prepare_translation(proof, beams, suffixes) do
+         {:ok, postludes} <- proof_postludes(proof, definition),
+         {:ok, translation} <- prepare_translation(postludes, beams, suffixes) do
       {:ok, verify_targets(translation, Enum.uniq(targets), options, definition)}
     end
   end
+
+  defp proof_postludes(proof, :struct_fragment), do: ReductionBounds.ProofInput.postludes(proof)
+  defp proof_postludes(proof, _definition), do: {:ok, [proof]}
 
   defp resolve_proof(:inline, options) do
     case Keyword.pop(options, :postlude) do
@@ -468,6 +503,7 @@ defmodule ReductionBounds do
       case source do
         :inline -> [:postlude | defaults]
         :list_bound -> [:input_contract | defaults]
+        :struct_bound -> Keyword.delete(defaults, :termination_suffixes)
         _ -> defaults
       end
 
@@ -539,8 +575,8 @@ defmodule ReductionBounds do
     end
   end
 
-  defp prepare_translation(proof, beams, suffixes) do
-    translation = Lynx.Translation.new(postludes: [proof], termination_suffixes: suffixes)
+  defp prepare_translation(postludes, beams, suffixes) do
+    translation = Lynx.Translation.new(postludes: postludes, termination_suffixes: suffixes)
     {:ok, Enum.reduce(beams, translation, &Lynx.Translation.add(&2, &1))}
   rescue
     error in CompileError -> {:error, {:beam_registration, error}}
@@ -597,6 +633,10 @@ defmodule ReductionBounds do
 
   defp assemble_target(translation, _target, :circular_buffer_model) do
     translation |> Lynx.Translation.assemble(cache: false) |> import_postlude("Erlang.lists")
+  end
+
+  defp assemble_target(translation, _target, :struct_fragment) do
+    ReductionBounds.ProofInput.assemble(translation)
   end
 
   # cspell:words leanj

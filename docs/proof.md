@@ -1,4 +1,46 @@
-# Proofs of symbolic bounds for list operations
+# Proofs of symbolic cost bounds
+
+## Map and struct operations
+
+The decoder handles fixed atom keys and the supported Boolean guard
+forms. For a case over multiple input variables, the first pattern must
+be a supported map pattern and the other patterns must bind distinct
+variables. When a pattern matches and its guard fails, evaluation
+continues with the next clause in the original environment. Case tails
+outside the supported fragment are retained in the returned
+`normalization.program.opaque` map.
+
+For `BoundedCounter.read_checked/1`, the normalizer learns that
+`balance` exists from a successful pattern match and carries the fact
+through the alias. It replaces the subsequent access case with a field
+read. The normalizer leaves `read_unchecked/1` unchanged. For each
+emitted certificate, Lean checks that the original expression, rewritten
+expression, and listed assumptions fit the rule. The theorem
+`checkRewriteSound` proves equality of their modeled results in every
+environment satisfying those assumptions. The Elixir normalizer tracks
+which assumptions are available at each location. There is no Lean
+theorem about the full decoder or the propagation of those assumptions
+through the whole program.
+
+The upper bound is computed for the fragment **before normalization**.
+`{:operation_cost, kind}` denotes a supplied upper charge for an
+operation. `{:opaque_cost, id}` denotes a supplied upper charge for all
+work in a retained path, including exceptional exits where applicable.
+The result lists those identifiers in `opaque_paths`. Sequential cost
+items are added and alternatives are combined with a maximum. The Lean
+theorem `CostTree.pathCostBound` applies to every derivable path whose
+local costs obey the supplied charges. `structCostBound` checks the
+returned formula against the cost tree built in Lean from the decoded
+fragment. The tree can include infeasible paths, such as a compiler
+fallback for updating a value already known to be a map.
+
+Call `ReductionBounds.infer_struct_bound({module, function, arity})` to
+derive a symbolic upper bound for a supported Core Erlang function. For
+an in-memory module, pass its compiled binary in `beam_binaries`.
+`BoundedCounter.debit/2` exercises tagged map patterns, alias bindings,
+short-circuit conjunction, subtraction, and exact field updates.
+`BoundedCounter.set_limit/2` uses the same rules with a different field
+and guard.
 
 ## lists:member/2
 

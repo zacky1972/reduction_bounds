@@ -2,11 +2,110 @@ defmodule ReductionBounds.ComposedBound do
   @moduledoc false
   # cspell:words cerl leanj simp simpa cons primop
 
-  alias ReductionBounds.{ListBound, SearchBound}
+  alias ReductionBounds.{CoreFragment, ListBound, Normalize, ProofInput, SearchBound}
 
   @member {:lists, :member, 2}
   @reverse {:lists, :reverse, 2}
   @buffer_charges %{consume: 0, fill: 1, rotate: 2, zero: 3, enum_reverse: 4}
+
+  @spec infer_struct(ReductionBounds.target(), [binary()]) ::
+          {:ok, map(), Lynx.Lean.t()} | {:error, term()}
+  def infer_struct(target, beams) do
+    with {:ok, core} <- SearchBound.core_function(target, beams),
+         {:ok, program} <- CoreFragment.decode(core) do
+      normalized = Normalize.normalize(program)
+      upper_bound = struct_bound(program.expression)
+
+      candidate = %{
+        target: target,
+        source: :struct_fragment,
+        metric: :symbolic_cost,
+        upper_bound: upper_bound,
+        opaque_paths: Map.keys(program.opaque) |> Enum.sort(),
+        normalization: normalized
+      }
+
+      {:ok, candidate, struct_proof(program.expression, upper_bound, normalized.certificates)}
+    end
+  end
+
+  defp struct_bound({kind, _}) when kind in [:var, :int, :atom], do: 0
+  defp struct_bound({:opaque, id}), do: {:opaque_cost, id}
+
+  defp struct_bound({:let_in, _, rhs, body}),
+    do: add({:operation_cost, :bind}, add(struct_bound(rhs), struct_bound(body)))
+
+  defp struct_bound({:case_map, subject, _, matched, fallback}) do
+    map_branch_bound(subject, struct_bound(matched), struct_bound(fallback))
+  end
+
+  defp struct_bound({:case_map_guarded, subject, _, condition, matched, fallback}) do
+    fallback_bound = struct_bound(fallback)
+    matched_bound = guard_bound(condition, struct_bound(matched), fallback_bound)
+    map_branch_bound(subject, matched_bound, fallback_bound)
+  end
+
+  defp struct_bound({:guarded, condition, success, failure}),
+    do: guard_bound(condition, struct_bound(success), struct_bound(failure))
+
+  defp struct_bound({operation, operand}) when operation in [:is_integer, :is_map],
+    do: add(struct_bound(operand), {:operation_cost, operation})
+
+  defp struct_bound({:field, subject, _key}),
+    do: add(struct_bound(subject), {:operation_cost, :field})
+
+  defp struct_bound({:update, subject, _key, rhs}),
+    do: struct_binary_bound(:update, subject, rhs)
+
+  defp struct_bound({operation, left, right}) when operation in [:ge, :sub],
+    do: struct_binary_bound(operation, left, right)
+
+  defp map_branch_bound(subject, success, failure),
+    do: add(struct_bound(subject), add({:operation_cost, :map_match}, {:max, success, failure}))
+
+  defp guard_bound(condition, success, failure),
+    do: add(struct_bound(condition), add({:operation_cost, :branch}, {:max, success, failure}))
+
+  defp struct_binary_bound(operation, left, right),
+    do: add(struct_bound(left), add(struct_bound(right), {:operation_cost, operation}))
+
+  defp struct_proof(expression, bound, certificates) do
+    source = """
+    namespace ReductionBounds.Core
+
+    def structOriginal : Expr := #{ProofInput.expression(expression)}
+
+    def structUpperBound (charge opaqueCost : String → Nat) : Nat :=
+      #{struct_cost_source(bound)}
+
+    theorem structCostBound (charge opaqueCost : String → Nat) (cost : Nat)
+        (path : CostTree.PathCost (structOriginal.costTree charge opaqueCost) cost) :
+        cost ≤ structUpperBound charge opaqueCost := by
+      simpa [structOriginal, structUpperBound, Expr.costTree, CostTree.upperBound]
+        using CostTree.pathCostBound path
+
+    end ReductionBounds.Core
+    """
+
+    %Lynx.Lean{
+      file: "generated_struct_bound.lean",
+      span: {1, 1},
+      indentation: 0,
+      source: ProofInput.certificate_source(certificates) <> source
+    }
+  end
+
+  defp struct_cost_source({:add, left, right}),
+    do: "(#{struct_cost_source(left)} + #{struct_cost_source(right)})"
+
+  defp struct_cost_source({:max, left, right}),
+    do: "(max #{struct_cost_source(left)} #{struct_cost_source(right)})"
+
+  defp struct_cost_source({:operation_cost, kind}),
+    do: "(charge #{ProofInput.string(Atom.to_string(kind))})"
+
+  defp struct_cost_source({:opaque_cost, id}), do: "(opaqueCost #{ProofInput.string(id)})"
+  defp struct_cost_source(0), do: "0"
 
   @spec infer(tuple(), ReductionBounds.target(), [binary()]) :: {:ok, map()} | {:error, term()}
   def infer(core, {_, _, arity} = target, beams) do

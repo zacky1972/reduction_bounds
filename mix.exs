@@ -13,7 +13,8 @@ defmodule ReductionBounds.MixProject do
       docs: docs(),
       package: package(),
       aliases: aliases(),
-      dialyzer: dialyzer()
+      dialyzer: dialyzer(),
+      test_ignore_filters: [&String.starts_with?(&1, "test/fixtures/")]
     ]
   end
 

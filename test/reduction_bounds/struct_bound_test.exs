@@ -1,0 +1,126 @@
+defmodule ReductionBounds.StructBoundTest do
+  use ExUnit.Case, async: false
+
+  alias ReductionBounds.{CoreFragment, ProofInput, SearchBound}
+  alias ReductionBounds.Fixtures.BoundedCounter
+
+  setup_all do
+    fixture = Path.expand("../fixtures/bounded_counter.ex", __DIR__)
+    [{BoundedCounter, beam}] = Code.compile_file(fixture)
+
+    on_exit(fn ->
+      :code.delete(BoundedCounter)
+      :code.purge(BoundedCounter)
+    end)
+
+    %{beam: beam}
+  end
+
+  test "checks a cost bound for the guarded debit and preserves opaque paths", %{beam: beam} do
+    target = {BoundedCounter, :debit, 2}
+
+    assert {:ok,
+            %{
+              target: ^target,
+              metric: :symbolic_cost,
+              upper_bound: upper_bound,
+              opaque_paths: [_, _] = opaque_paths,
+              normalization: %{certificates: [], program: %{expression: expression}},
+              reports: [%{module: "Erlang.postlude", status: :ok}]
+            }} = ReductionBounds.infer_struct_bound(target, beam_binaries: [beam])
+
+    assert {:case_map_guarded, _, _, _, _, _} = expression
+    charges = charges(upper_bound)
+
+    for operation <- [:map_match, :branch, :is_integer, :ge, :sub, :is_map, :update] do
+      assert {:operation_cost, operation} in charges
+    end
+
+    for id <- opaque_paths, do: assert({:opaque_cost, id} in charges)
+  end
+
+  test "composes a bound for a different field with the same rules", %{beam: beam} do
+    assert {:ok, %{upper_bound: upper_bound, reports: [%{status: :ok}]}} =
+             ReductionBounds.infer_struct_bound({BoundedCounter, :set_limit, 2},
+               beam_binaries: [beam]
+             )
+
+    charges = charges(upper_bound)
+    assert {:operation_cost, :update} in charges
+    refute {:operation_cost, :sub} in charges
+  end
+
+  test "checks a rewrite while bounding the original operation", %{beam: beam} do
+    assert {:ok,
+            %{
+              upper_bound: upper_bound,
+              normalization: %{certificates: [%{path: [:matched, :body], normalized: read}]},
+              reports: [%{status: :ok}]
+            }} =
+             ReductionBounds.infer_struct_bound({BoundedCounter, :read_checked, 1},
+               beam_binaries: [beam]
+             )
+
+    assert {:field, _, "balance"} = read
+    assert {:operation_cost, :map_match} in charges(upper_bound)
+    refute {:operation_cost, :field} in charges(upper_bound)
+  end
+
+  test "Lean evaluates the decoded debit clauses under the model", %{beam: beam} do
+    assert {:ok, core} = SearchBound.core_function({BoundedCounter, :debit, 2}, [beam])
+    assert {:ok, %{expression: expression}} = CoreFragment.decode(core)
+
+    proof = %Lynx.Lean{
+      file: "debit_examples.lean",
+      span: {1, 1},
+      indentation: 0,
+      source: debit_examples(expression)
+    }
+
+    assert {:ok, postludes} = ProofInput.postludes(proof)
+    translation = Lynx.Translation.new(postludes: postludes)
+    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
+
+    assert [%{module: "Erlang.postlude", status: :ok}] =
+             Lynx.Commands.verify!(project, ProofInput.assemble(translation))
+  end
+
+  defp charges({operation, left, right}) when operation in [:add, :max],
+    do: charges(left) ++ charges(right)
+
+  defp charges(cost), do: [cost]
+
+  defp debit_examples(expression) do
+    """
+    namespace ReductionBounds.Core
+
+    def debitExample : Expr := #{ProofInput.expression(expression)}
+
+    def initialCounter : Lynx.Term :=
+      .map [(.atom "__struct__", .atom "Elixir.ReductionBounds.Fixtures.BoundedCounter"),
+            (.atom "balance", .integer 10), (.atom "limit", .integer 20)]
+
+    def debitEnv (counter amount : Lynx.Term) : Env :=
+      fun name => if name = "integer:0" then some counter
+        else if name = "integer:1" then some amount else none
+
+    def runDebit (counter amount : Lynx.Term) : Result :=
+      eval (fun _ _ => none) (debitEnv counter amount) debitExample
+
+    def fieldAfter (key : String) (amount : Lynx.Term) : Option Lynx.Term :=
+      match runDebit initialCounter amount with
+      | some (.ok (.map entries)) => fieldLookup entries key
+      | _ => none
+
+    example : fieldAfter "balance" (.integer 4) = some (.integer 6) := by rfl
+    example : fieldAfter "balance" (.integer 10) = some (.integer 0) := by rfl
+    example : fieldAfter "limit" (.integer 4) = some (.integer 20) := by rfl
+    example : runDebit initialCounter (.integer (-1)) = some (.ok initialCounter) := by rfl
+    example : runDebit initialCounter (.integer 11) = some (.ok initialCounter) := by rfl
+    example : runDebit initialCounter (.atom "bad") = some (.ok initialCounter) := by rfl
+    example : runDebit (.atom "bad") (.integer 1) = none := by rfl
+
+    end ReductionBounds.Core
+    """
+  end
+end
