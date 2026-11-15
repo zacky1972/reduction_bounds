@@ -58,6 +58,35 @@ defmodule ReductionBounds.ProofInput do
     "namespace ReductionBounds.Core\n" <> declarations <> "\nend ReductionBounds.Core\n"
   end
 
+  @spec normalization_source(String.t(), CoreFragment.expr(), CoreFragment.expr()) :: String.t()
+  def normalization_source(source, original, normalized) do
+    """
+    namespace ReductionBounds.Core
+
+    def extractedCore : SourceExpr := #{source}
+    def decodedCore : Expr := #{expression(original)}
+    def normalizedCore : Expr := #{expression(normalized)}
+
+    theorem coreDecoding : extractedCore.lower = decodedCore := by decide
+
+    theorem coreNormalization : CheckedRewrite [] decodedCore normalizedCore := by
+      unfold decodedCore normalizedCore
+      repeat' first
+        | apply CheckedRewrite.same
+        | apply CheckedRewrite.readField
+        | apply CheckedRewrite.caseMap
+        | apply CheckedRewrite.letAlias
+        | decide
+
+    theorem coreValueAgreement (external : OpaqueEval) (env : Env) :
+        extractedCore.run external env = eval external env normalizedCore :=
+      sourceNormalizationSound extractedCore decodedCore normalizedCore
+        (by decide) coreDecoding coreNormalization external env
+
+    end ReductionBounds.Core
+    """
+  end
+
   defp declaration(certificate, index) do
     %{facts: facts, original: original, normalized: normalized, rewrite: rewrite} = certificate
 

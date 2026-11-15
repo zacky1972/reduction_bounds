@@ -420,8 +420,13 @@ defmodule ReductionBounds do
 
   Lean checks the bound for every path in the original fragment's cost
   model. Each opaque path has a separate symbolic cost in the result.
-  The result also contains the normalized fragment and certificates. Lean
-  checks each certified rewrite under the listed field assumptions.
+  The result includes the normalized fragment and certificates. For the
+  supported unguarded map cases and variable aliases, value_agreement is
+  :checked after Lean verifies decoding and normalization from the
+  extracted Core fragment. Lean derives the required field facts in
+  scope and uses the same interpretation of opaque branches on both
+  sides. A value_agreement of :unsupported means Lean checked individual
+  rewrite certificates under their listed field assumptions.
   """
   @spec infer_struct_bound(target(), [struct_inference_option()]) ::
           {:ok, map()} | {:error, term()}

@@ -13,14 +13,32 @@ outside the supported fragment are retained in the returned
 For `BoundedCounter.read_checked/1`, the normalizer learns that
 `balance` exists from a successful pattern match and carries the fact
 through the alias. It replaces the subsequent access case with a field
-read. The normalizer leaves `read_unchecked/1` unchanged. For each
-emitted certificate, Lean checks that the original expression, rewritten
-expression, and listed assumptions fit the rule. The theorem
-`checkRewriteSound` proves equality of their modeled results in every
-environment satisfying those assumptions. The Elixir normalizer tracks
-which assumptions are available at each location. There is no Lean
-theorem about the full decoder or the propagation of those assumptions
-through the whole program.
+read. The normalizer leaves `read_unchecked/1` unchanged.
+
+The value check takes its source tree from the Core Erlang recovered
+from BEAM debug information. The source tree retains map pattern aliases.
+`coreDecoding` checks that the decoder's output equals the result of
+lowering that tree in Lean. `SourceExpr.lowerSound` proves that this
+lowering preserves evaluation and checks that any alias reads the
+original subject before binding its new name.
+
+`coreNormalization` checks the entire rewrite starting with an empty
+set of field facts. A successful map match establishes field presence
+in its matched branch. A variable binding copies the source's facts
+to its new name and removes any facts about the previous binding of
+that name. The fallback uses the incoming facts. `coreValueAgreement`
+combines the decoding and rewrite checks to prove that the extracted
+source tree and the normalized expression evaluate to the same result.
+Lean rejects rewriting an unchecked access to a direct field read.
+
+`infer_struct_bound/2` reports `value_agreement: :checked` for successful
+checks in this source fragment. Extraction and serialization supply the
+tree to Lean. Compiler-generated case tails outside the fragment retain
+their identifiers and are interpreted by the same parameter on both
+sides of the theorem. For a matched `read_checked/1` input, neither side
+uses that parameter. Targets outside this fragment, including the
+guarded examples below, report `value_agreement: :unsupported`. Their
+available local certificates are checked under their listed assumptions.
 
 The upper bound is computed for the fragment **before normalization**.
 `{:operation_cost, kind}` denotes a supplied upper charge for an

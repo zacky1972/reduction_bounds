@@ -1,18 +1,11 @@
 defmodule ReductionBounds.StructBoundTest do
   use ExUnit.Case, async: false
 
-  alias ReductionBounds.{CoreFragment, ProofInput, SearchBound}
+  alias ReductionBounds.{CoreFragment, ProofInput, SearchBound, TestFixtures}
   alias ReductionBounds.Fixtures.BoundedCounter
 
   setup_all do
-    fixture = Path.expand("../fixtures/bounded_counter.ex", __DIR__)
-    [{BoundedCounter, beam}] = Code.compile_file(fixture)
-
-    on_exit(fn ->
-      :code.delete(BoundedCounter)
-      :code.purge(BoundedCounter)
-    end)
-
+    {BoundedCounter, beam} = TestFixtures.bounded_counter()
     %{beam: beam}
   end
 
@@ -23,6 +16,7 @@ defmodule ReductionBounds.StructBoundTest do
             %{
               target: ^target,
               metric: :symbolic_cost,
+              value_agreement: :unsupported,
               upper_bound: upper_bound,
               opaque_paths: [_, _] = opaque_paths,
               normalization: %{certificates: [], program: %{expression: expression}},
@@ -50,10 +44,13 @@ defmodule ReductionBounds.StructBoundTest do
     refute {:operation_cost, :sub} in charges
   end
 
-  test "checks a rewrite while bounding the original operation", %{beam: beam} do
+  test "proves value agreement from extracted Core while bounding the original operation", %{
+    beam: beam
+  } do
     assert {:ok,
             %{
               upper_bound: upper_bound,
+              value_agreement: :checked,
               normalization: %{certificates: [%{path: [:matched, :body], normalized: read}]},
               reports: [%{status: :ok}]
             }} =

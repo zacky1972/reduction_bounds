@@ -2,7 +2,7 @@ defmodule ReductionBounds.ComposedBound do
   @moduledoc false
   # cspell:words cerl leanj simp simpa cons primop
 
-  alias ReductionBounds.{CoreFragment, ListBound, Normalize, ProofInput, SearchBound}
+  alias ReductionBounds.{CoreFragment, CoreSource, ListBound, Normalize, ProofInput, SearchBound}
 
   @member {:lists, :member, 2}
   @reverse {:lists, :reverse, 2}
@@ -15,17 +15,19 @@ defmodule ReductionBounds.ComposedBound do
          {:ok, program} <- CoreFragment.decode(core) do
       normalized = Normalize.normalize(program)
       upper_bound = struct_bound(program.expression)
+      {agreement, normalization_source} = struct_normalization(core, program, normalized)
 
       candidate = %{
         target: target,
         source: :struct_fragment,
         metric: :symbolic_cost,
         upper_bound: upper_bound,
+        value_agreement: agreement,
         opaque_paths: Map.keys(program.opaque) |> Enum.sort(),
         normalization: normalized
       }
 
-      {:ok, candidate, struct_proof(program.expression, upper_bound, normalized.certificates)}
+      {:ok, candidate, struct_proof(program.expression, upper_bound, normalization_source)}
     end
   end
 
@@ -69,7 +71,24 @@ defmodule ReductionBounds.ComposedBound do
   defp struct_binary_bound(operation, left, right),
     do: add(struct_bound(left), add(struct_bound(right), {:operation_cost, operation}))
 
-  defp struct_proof(expression, bound, certificates) do
+  defp struct_normalization(core, program, normalized) do
+    case CoreSource.serialize(core, program.opaque) do
+      {:ok, source} ->
+        proof =
+          ProofInput.normalization_source(
+            source,
+            program.expression,
+            normalized.program.expression
+          )
+
+        {:checked, proof}
+
+      :unsupported ->
+        {:unsupported, ProofInput.certificate_source(normalized.certificates)}
+    end
+  end
+
+  defp struct_proof(expression, bound, normalization_source) do
     source = """
     namespace ReductionBounds.Core
 
@@ -91,7 +110,7 @@ defmodule ReductionBounds.ComposedBound do
       file: "generated_struct_bound.lean",
       span: {1, 1},
       indentation: 0,
-      source: ProofInput.certificate_source(certificates) <> source
+      source: normalization_source <> source
     }
   end
 

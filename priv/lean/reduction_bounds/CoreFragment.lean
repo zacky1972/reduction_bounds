@@ -103,3 +103,113 @@ def eval (external : OpaqueEval) (env : Env) : Expr → Result
   | .opaque id => external id env
 
 end ReductionBounds.Core
+
+namespace ReductionBounds.Core
+
+def MapPattern.keeps (pat : MapPattern) (name : String) : Bool :=
+  pat.fields.all fun field => field.2 != name
+
+theorem bindFieldsKeeps (entries : List (Lynx.Term × Lynx.Term))
+    (fields : List (String × String)) (env bindings : Env) (name : String)
+    (matched : bindFields entries fields env = some bindings)
+    (keeps : fields.all (fun field => field.2 != name) = true) :
+    bindings name = env name := by
+  induction fields generalizing env with
+  | nil =>
+    have same : env = bindings := Option.some.inj matched
+    rw [same]
+  | cons field rest ih =>
+    have headAndRest := Bool.and_eq_true_iff.mp keeps
+    cases lookup : fieldLookup entries field.1 with
+    | none => simp [bindFields, lookup] at matched
+    | some value =>
+      have tailMatch : bindFields entries rest (env.bind field.2 value) = some bindings := by
+        simpa [bindFields, lookup] using matched
+      rw [ih _ tailMatch headAndRest.2]
+      have different : field.2 ≠ name := by simpa using headAndRest.1
+      simp [Env.bind, Ne.symm different]
+
+theorem mapMatchKeeps (pat : MapPattern) (value : Lynx.Term) (env bindings : Env)
+    (name : String) (matched : matchMap pat value env = some bindings)
+    (keeps : pat.keeps name = true) :
+    bindings name = env name := by
+  cases value <;> simp only [matchMap] at matched
+  all_goals try contradiction
+  split at matched
+  · exact bindFieldsKeeps _ _ _ _ _ matched keeps
+  · contradiction
+
+-- The reified Core fragment retains aliases on patterns. The analysis expression
+-- represents an alias instead by a let in the matched branch.
+inductive SourceExpr where
+  | var (name : String)
+  | int (value : Int)
+  | atom (name : String)
+  | letIn (name : String) (rhs body : SourceExpr)
+  | caseMap (subject : String) (pat : MapPattern) (aliasName : Option String)
+      (matched fallback : SourceExpr)
+  | opaque (id : String)
+
+def SourceExpr.run (external : OpaqueEval) (env : Env) : SourceExpr → Result
+  | .var name => (env name).map Except.ok
+  | .int value => some (.ok (.integer value))
+  | .atom name => some (.ok (.atom name))
+  | .letIn name rhs body =>
+    bindResult (run external env rhs) fun value => run external (env.bind name value) body
+  | .caseMap subject pat aliasName matched fallback =>
+    (env subject).bind fun value =>
+      match matchMap pat value env with
+      | none => run external env fallback
+      | some bindings =>
+        match aliasName with
+        | none => run external bindings matched
+        | some name => run external (bindings.bind name value) matched
+  | .opaque id => external id env
+
+def SourceExpr.lower : SourceExpr → Expr
+  | .var name => .var name
+  | .int value => .int value
+  | .atom name => .atom name
+  | .letIn name rhs body => .letIn name rhs.lower body.lower
+  | .caseMap subject pat aliasName matched fallback =>
+    let body := match aliasName with
+      | none => matched.lower
+      | some name => .letIn name (.var subject) matched.lower
+    .caseMap (.var subject) pat body fallback.lower
+  | .opaque id => .opaque id
+
+def SourceExpr.scopeSafe : SourceExpr → Bool
+  | .letIn _ rhs body => rhs.scopeSafe && body.scopeSafe
+  | .caseMap subject pat aliasName matched fallback =>
+    (aliasName.isNone || pat.keeps subject) && (matched.scopeSafe && fallback.scopeSafe)
+  | _ => true
+
+theorem SourceExpr.lowerSound (external : OpaqueEval) (env : Env) (source : SourceExpr)
+    (safe : source.scopeSafe = true) : source.run external env = eval external env source.lower := by
+  induction source generalizing env with
+  | var | int | atom | «opaque» => rfl
+  | letIn name rhs body rhsIH bodyIH =>
+    have ⟨rhsSafe, bodySafe⟩ := Bool.and_eq_true_iff.mp safe
+    simp only [SourceExpr.run, SourceExpr.lower, eval, rhsIH _ rhsSafe, bodyIH _ bodySafe]
+  | caseMap subject pat aliasName matched fallback matchedIH fallbackIH =>
+    have ⟨aliasSafe, branchesSafe⟩ := Bool.and_eq_true_iff.mp safe
+    have ⟨matchedSafe, fallbackSafe⟩ := Bool.and_eq_true_iff.mp branchesSafe
+    cases input : env subject with
+    | none => simp [SourceExpr.run, SourceExpr.lower, eval, input, bindResult]
+    | some value =>
+      cases matchedMap : matchMap pat value env with
+      | none =>
+        simpa [SourceExpr.run, SourceExpr.lower, eval, input, bindResult, matchedMap]
+          using fallbackIH env fallbackSafe
+      | some bindings =>
+        cases aliasName with
+        | none =>
+          simpa [SourceExpr.run, SourceExpr.lower, eval, input, bindResult, matchedMap]
+            using matchedIH bindings matchedSafe
+        | some name =>
+          have keeps : pat.keeps subject = true := by simpa using aliasSafe
+          have sourceValue := mapMatchKeeps pat value env bindings subject matchedMap keeps
+          simpa [SourceExpr.run, SourceExpr.lower, eval, input, bindResult, matchedMap,
+            sourceValue] using matchedIH (bindings.bind name value) matchedSafe
+
+end ReductionBounds.Core

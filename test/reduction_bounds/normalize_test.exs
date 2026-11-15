@@ -1,18 +1,11 @@
 defmodule ReductionBounds.NormalizeTest do
   use ExUnit.Case, async: true
 
-  alias ReductionBounds.{CoreFragment, Normalize, ProofInput, SearchBound}
-
-  @fixture Path.expand("../fixtures/bounded_counter.ex", __DIR__)
+  alias ReductionBounds.{CoreFragment, CoreSource, Normalize, ProofInput, SearchBound}
+  alias ReductionBounds.TestFixtures
 
   setup_all do
-    [{module, beam}] = Code.compile_file(@fixture)
-
-    on_exit(fn ->
-      :code.delete(module)
-      :code.purge(module)
-    end)
-
+    {module, beam} = TestFixtures.bounded_counter()
     %{fixture: module, beam: beam}
   end
 
@@ -112,19 +105,38 @@ defmodule ReductionBounds.NormalizeTest do
     assert %{certificates: [certificate]} =
              Normalize.normalize(fixture_program(module, :read_checked, beam))
 
-    proof = %Lynx.Lean{
-      file: "invalid_certificate.lean",
-      span: {1, 1},
-      indentation: 0,
-      source: ProofInput.certificate_source([%{certificate | facts: []}])
-    }
+    assert %{status: :error, diagnostics: [_ | _]} =
+             verify(ProofInput.certificate_source([%{certificate | facts: []}]))
+  end
 
-    assert {:ok, postludes} = ProofInput.postludes(proof)
-    translation = Lynx.Translation.new(postludes: postludes)
-    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
+  test "Lean rejects a fabricated field fact at an unchecked read", %{fixture: module, beam: beam} do
+    {source, %{parameters: [input]} = program} = fixture_source(module, :read_unchecked, beam)
+    %{program: normalized, certificates: [_]} = Normalize.normalize(program, [{input, "balance"}])
 
-    assert [%{module: "Erlang.postlude", status: :error, diagnostics: [_ | _]}] =
-             Lynx.Commands.verify!(project, ProofInput.assemble(translation))
+    assert %{status: :error, diagnostics: diagnostics} =
+             verify(
+               ProofInput.normalization_source(source, program.expression, normalized.expression)
+             )
+
+    assert Enum.any?(diagnostics, &(&1.severity == :error and &1.message =~ ~s(key := "balance")))
+  end
+
+  test "Lean rejects a decoded expression that differs from the extracted Core", %{
+    fixture: module,
+    beam: beam
+  } do
+    {source, program} = fixture_source(module, :read_checked, beam)
+    changed = {:atom, "changed"}
+
+    assert program.expression != changed
+
+    assert %{status: :error, diagnostics: diagnostics} =
+             verify(ProofInput.normalization_source(source, changed, changed))
+
+    assert Enum.any?(
+             diagnostics,
+             &(&1.severity == :error and &1.message =~ "extractedCore.lower")
+           )
   end
 
   test "discards facts when a binding shadows the subject" do
@@ -146,6 +158,31 @@ defmodule ReductionBounds.NormalizeTest do
     {:ok, core} = SearchBound.core_function({module, name, 1}, [beam])
     {:ok, program} = CoreFragment.decode(core)
     program
+  end
+
+  defp fixture_source(module, name, beam) do
+    {:ok, core} = SearchBound.core_function({module, name, 1}, [beam])
+    {:ok, program} = CoreFragment.decode(core)
+    {:ok, source} = CoreSource.serialize(core, program.opaque)
+    {source, program}
+  end
+
+  defp verify(source) do
+    proof = %Lynx.Lean{
+      file: "normalization_test.lean",
+      span: {1, 1},
+      indentation: 0,
+      source: source
+    }
+
+    assert {:ok, postludes} = ProofInput.postludes(proof)
+    translation = Lynx.Translation.new(postludes: postludes)
+    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
+
+    assert [%{module: "Erlang.postlude"} = report] =
+             Lynx.Commands.verify!(project, ProofInput.assemble(translation))
+
+    report
   end
 
   defp field_case(subject, key) do
