@@ -377,6 +377,25 @@ defmodule ReductionBoundsTest do
     end
   end
 
+  test "counts rotations from reachable states and preserves FIFO contents" do
+    for capacity <- 0..5 do
+      empty = CircularBuffer.new(capacity)
+      states = [empty | Enum.scan(1..(2 * capacity + 2), empty, &CircularBuffer.insert(&2, &1))]
+
+      for initial <- states, insertions <- 0..(2 * capacity + 2) do
+        expected =
+          case capacity do
+            0 -> 0
+            m -> div(max(length(initial.a) + insertions - 1, 0), m)
+          end
+
+        assert check_fifo_insertions(initial, insertions) == expected,
+               "rotation count for capacity #{capacity}, a length #{length(initial.a)}, " <>
+                 "and #{insertions} new items"
+      end
+    end
+  end
+
   test "checks input contracts for traversals and reuses a theorem in a local wrapper" do
     beam = compile_fixture_in_memory()
     on_exit(&unload_fixture/0)
@@ -444,6 +463,23 @@ defmodule ReductionBoundsTest do
       Enum.reduce(1..insertions//1, {CircularBuffer.new(capacity), 0}, fn item, {buffer, count} ->
         rotates = buffer.count == capacity and buffer.b == [] and buffer.a != []
         {CircularBuffer.insert(buffer, item), count + if(rotates, do: 1, else: 0)}
+      end)
+
+    rotations
+  end
+
+  defp check_fifo_insertions(initial, insertions) do
+    capacity = initial.max_size
+    initial_run = {initial, CircularBuffer.to_list(initial), 0}
+
+    {_, _, rotations} =
+      Enum.reduce(1..insertions//1, initial_run, fn item, {buffer, fifo, rotations} ->
+        item = -item
+        next = CircularBuffer.insert(buffer, item)
+        fifo = Enum.take(fifo ++ [item], -capacity)
+        assert CircularBuffer.to_list(next) == fifo
+        rotated = buffer.count == capacity and next.a == [item]
+        {next, fifo, rotations + if(rotated, do: 1, else: 0)}
       end)
 
     rotations

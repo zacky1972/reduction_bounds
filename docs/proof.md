@@ -337,6 +337,33 @@ capacity zero the state stays empty on every step.
 rotation count. The returned `rotation_count` expression uses natural
 number subtraction, so `n - 1` is zero when `n = 0`.
 
+### Starting from a valid buffer
+
+Let `a0` be the initial length of the newer list `a`. For any state
+satisfying `BufferState.valid`, `insertManyRotationCountFrom` proves
+that the modeled number of rotations is zero at capacity zero and
+`floor(max(a0 + n - 1, 0) / m)` for `m > 0`. The first rotation takes
+place on insertion `m - a0 + 1` if the sequence reaches that point.
+Later rotations are `m` insertions apart.
+
+For positive capacity the proof uses
+`a0 + n = rotations * m + length(final_a)`. When `a0 + n > 0`, the
+final length lies between one and `m`, so subtracting one and dividing
+by `m` gives the exact quotient. When `a0 + n = 0`, the run is empty.
+At capacity zero the invariant forces both lists to be empty and the
+count to be zero. Each insertion leaves the state unchanged.
+
+`insertManyCostBoundFrom` bounds the modeled cost by
+`n * c + rotations * r(m)` for positive capacity and `n * C_zero`
+at capacity zero. The existing empty-initialization theorems specialize
+these results to `a0 = 0`. The public inference entry point still
+returns the bound for a run starting from `new/1`.
+
+ExUnit checks states reached by insertion into the actual library for
+capacities zero through five. It compares observed rotation counts
+with the formula and compares the contents after each insertion with
+a FIFO list that discards its oldest item at capacity.
+
 ## Scope
 
 The inequalities bound the symbolic cost model. To obtain an upper
