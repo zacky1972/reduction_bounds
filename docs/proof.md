@@ -300,7 +300,7 @@ Use `ReductionBounds.infer_list_bound/2` with the function's module,
 name, and arity. The generated theorem proves that the function returns
 the reversed list on a hit and the original list on a miss. It also
 proves the following symbolic bounds. Here
-`M(n)` and `R(n)` are the proved upper bounds for membership and reversal,
+`M(n)` is the refined membership bound and `R(n)` is the reversal bound,
 `n` bounds the input list length, and `B_hit` and `B_miss` are
 nonnegative symbolic charges for the respective branch operations
 outside the calls.
@@ -498,6 +498,83 @@ ExUnit checks states reached by insertion into the actual library for
 capacities zero through five. It compares observed rotation counts
 with the formula and compares the contents after each insertion with
 a FIFO list that discards its oldest item at capacity.
+
+## Reproduce the case studies
+
+With the project's test dependencies installed, including
+`circular_buffer` 1.1.0 and the Lynx toolchain, run:
+
+```sh
+mix test --only case_study
+```
+
+The six tagged tests in `test/reduction_bounds_test.exs` also run in
+`mix test`. They call the public inference functions and check the
+returned formulas, input domains, size measures, and proof reports.
+They also exercise the actual Erlang or Elixir functions with boundary
+inputs and compare buffer contents with a FIFO list.
+
+Each inference call enters the common `verify_bound` path. This path
+selects the source for the case, sends the resulting postlude to the
+Lynx runner, and asks Lean to audit the named theorems for unexpected
+axioms. A successful result records the audited names in
+`checked_theorems`. The tests check those names, the postlude identity,
+and its successful status. Named theorem checks reject dependencies
+on unfinished proofs such as `sorryAx`.
+
+| Case | Source checked | Rules and contracts reused | Lean evidence |
+| --- | --- | --- | --- |
+| `lists:member/2` | Lynx's bundled value model | Empty, stop, and tail-step rules of `ListCost` | `searchCostDerivation`, `listRulesSound`, `listPathBounds`, `listValueAndBound` |
+| Conditional reversal | Lynx translation of the compiled test function | The refined membership bound on both paths, reversal with an empty accumulator on a hit, sequential addition, and the maximum of the branch bounds | `Member.listValueAndBound`, `Reverse.listValueAndBound`, `programValueAndBound` |
+| One insertion | Buffer state model selected by checking the Core Erlang clauses | The list clauses of `Enum.reverse/1`, the reversal contract, and the maximum of the four path bounds | `enumReverseListValue`, `enumReverseCostBound`, `bufferRotationSize`, `insertCostBound`, `insertContents` |
+| Consecutive insertions | The same state model and a checked empty initializer | Single-insertion budgets, invariant preservation, and the common periodic reset rule | `bufferObligations`, `Periodic.eventCount`, `Periodic.costBound`, `insertManyRotationCountFrom`, `insertManyCostBoundFrom`, `insertManyLatest` |
+
+The tagged reversal test checks the auxiliary `lists:reverse/2`
+contract independently. The tests also compare each embedded
+`:call_bound` expression with its primitive formula. The buffer shape
+checks are performed by the Elixir analyzer. The corresponding Lean
+theorems range over the buffer state model, and ExUnit exercises the
+actual library on the specified examples.
+
+### Built-in contracts and Lynx laws
+
+`lists:member/2` and `lists:reverse/2` enter the analysis through their
+bundled `Erlang.lists` definitions. Their cost recurrences belong to
+`reduction_bounds`. Membership requires an integer key and a proper
+integer list, and returns an atom indicating whether an exact match
+exists. Reversal requires two proper integer lists and returns the
+reverse of the first followed by the accumulator. Both contracts
+use an upper bound on the length of the list they traverse and
+allow arbitrary natural-valued symbolic charges. Each continuation
+consumes one cell. Lean checks each result equation and cost
+inequality against the corresponding model.
+
+In a [Lynx law][lynx-laws], `requires:` expresses a Boolean predicate on
+Erlang inputs, and `expects:` expresses a Boolean property of the
+successful computation. The following are specifications that can
+be stated in that form, using helpers for the input predicates and
+reference results. The tagged suite checks the generated Lean
+theorems listed above.
+
+| Case | Condition expressible in `requires:` | Value property expressible in `expects:` |
+| --- | --- | --- |
+| Membership | Integer key, proper integer list, and list length at most `n` | The returned Boolean equals a reference exact-membership implementation |
+| Reversal contract | Proper integer lists for the input and accumulator, with input length at most `n` | The result equals the reversed input followed by the accumulator |
+| Conditional reversal | Integer key and proper integer list of length at most `n` | The result equals the reverse on a hit and the input on a miss |
+| One insertion | Valid buffer state with integer elements and an integer item | The result is valid and its contents equal one bounded FIFO insertion |
+| Consecutive insertions | Nonnegative capacity and a proper integer list of items | The retained contents equal the latest `m` items after the insertions |
+
+Translation support is required for a law's helpers and target.
+For the buffer cases, the value properties in the table describe the
+state-model theorems. The Lean cost obligations are separate
+inequalities over costed models, including the per-cell charges,
+static call bounds, rotation budget, and count of rotations. The
+law vocabulary can express a numeric bound when an explicit cost
+function is available. A value law alone observes the result of the
+computation, while the inequalities here relate that result model
+to a separately defined symbolic cost.
+
+[lynx-laws]: https://github.com/josevalim/lynx/blob/d74890ac7a446d57b762d0e4fcd3c848146b2ff6/README.md#getting-started-with-proofs
 
 ## Scope
 

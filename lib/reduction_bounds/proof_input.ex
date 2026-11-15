@@ -4,6 +4,14 @@ defmodule ReductionBounds.ProofInput do
   alias ReductionBounds.{CoreFragment, Normalize}
 
   @sources ["CoreFragment.lean", "StructRules.lean", "Normalize.lean"]
+  @insertion_theorems ~w(
+    Reverse.listValueAndBound
+    enumReverseListValue
+    enumReverseCostBound
+    bufferRotationSize
+    insertCostBound
+    insertContents
+  )
 
   @type read_error :: {:read_lean, Path.t(), File.posix()}
   @typep translation :: %Lynx.Translation{}
@@ -57,6 +65,56 @@ defmodule ReductionBounds.ProofInput do
   rescue
     error in File.Error -> {:halt, {:error, {:read_lean, error.path, error.reason}}}
   end
+
+  @spec audit_bound(Lynx.Lean.t(), map()) :: {Lynx.Lean.t(), map()}
+  def audit_bound(%Lynx.Lean{} = proof, candidate) do
+    case case_study_theorems(candidate) do
+      [] ->
+        {proof, %{}}
+
+      theorems ->
+        names = Enum.map_join(theorems, ", ", &"``#{&1}")
+
+        audit = """
+
+        open Lean in
+        run_cmd do
+          for theoremName in #[#{names}] do
+            for dependency in ← Lean.collectAxioms theoremName do
+              unless #[``propext, ``Classical.choice, ``Quot.sound].contains dependency do
+                throwError m!"Unexpected axiom in {theoremName}: {dependency}"
+        """
+
+        {%{proof | source: proof.source <> audit}, %{checked_theorems: theorems}}
+    end
+  end
+
+  defp case_study_theorems(%{source: :lynx_builtin, value_model: :membership}),
+    do: ~w(listRulesSound listPathBounds searchCostDerivation listValueAndBound)
+
+  defp case_study_theorems(%{source: :lynx_builtin, value_model: :reversal}),
+    do: ~w(listRulesSound reverseCostDerivation reverseResult listValueAndBound)
+
+  defp case_study_theorems(%{source: :composed}),
+    do: ~w(Member.listValueAndBound Reverse.listValueAndBound programValueAndBound)
+
+  defp case_study_theorems(%{value_model: :circular_buffer_model}), do: @insertion_theorems
+
+  defp case_study_theorems(%{value_model: :circular_buffer_sequence_model}) do
+    @insertion_theorems ++
+      ~w(
+        bufferObligations
+        ReductionBounds.Periodic.eventCount
+        ReductionBounds.Periodic.costBound
+        insertManyRotationCountFrom
+        insertManyCostBoundFrom
+        insertManyRotationCount
+        insertManyCostBound
+        insertManyLatest
+      )
+  end
+
+  defp case_study_theorems(_candidate), do: []
 
   @spec certificate_source([Normalize.certificate()]) :: String.t()
   def certificate_source(certificates) do

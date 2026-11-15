@@ -509,11 +509,17 @@ defmodule ReductionBounds do
 
   defp verify_bound(target, candidate, proof, options) do
     source = Map.get(candidate, :source, :translated)
+    {proof, evidence} = ReductionBounds.ProofInput.audit_bound(proof, candidate)
 
     case verify_source(:inline, [target], [postlude: proof] ++ options, source) do
-      {:ok, [{^target, {:ok, reports}}]} -> {:ok, Map.put(candidate, :reports, reports)}
-      {:ok, [{^target, {:error, reason}}]} -> {:error, reason}
-      {:error, _reason} = error -> error
+      {:ok, [{^target, {:ok, reports}}]} ->
+        {:ok, candidate |> Map.merge(evidence) |> Map.put(:reports, reports)}
+
+      {:ok, [{^target, {:error, reason}}]} ->
+        {:error, reason}
+
+      {:error, _reason} = error ->
+        error
     end
   end
 

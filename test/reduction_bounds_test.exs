@@ -228,42 +228,60 @@ defmodule ReductionBoundsTest do
              ReductionBounds.infer_list_bound({Fixture, :no_progress, 2}, beam_binaries: [beam])
   end
 
+  @tag :case_study
   test "checks symbolic bounds for the built-in lists membership function" do
     target = {:lists, :member, 2}
 
     assert {:ok, bound} = ReductionBounds.infer_list_bound(target)
-    assert bound.target == target
-    assert bound.source == :lynx_builtin
-    assert bound.metric == :symbolic_cost
+
+    assert_case_study(
+      bound,
+      target,
+      :lynx_builtin,
+      "generated_list_bound.lean",
+      ~w(listRulesSound listPathBounds searchCostDerivation listValueAndBound)
+    )
+
     assert bound.size_measure == :list_length
     assert bound.value_model == :membership
     assert bound.domain == :proper_integer_list_with_integer_key_if_present
-    assert [{:empty, empty, 0}, {:guarded_cons, hit, 0}, {:cons, step, 1}] = bound.recurrence
+    {empty, hit, step} = member_charges()
+    assert bound.recurrence == [{:empty, empty, 0}, {:guarded_cons, hit, 0}, {:cons, step, 1}]
     assert bound.upper_bound == {:add, {:max, empty, hit}, {:mul, :n, step}}
 
-    assert bound.refined_upper_bound ==
-             {:if_zero, :n, empty,
-              {:max, {:add, empty, {:mul, :n, step}}, {:add, hit, {:mul, {:sub, :n, 1}, step}}}}
-
-    assert [%{module: "Erlang.postlude", status: :ok}] = bound.reports
+    assert bound.refined_upper_bound == member_contract_upper()
+    assert :lists.member(2, []) == false
+    assert :lists.member(2, [2, 1]) == true
+    assert :lists.member(-1, [2, -1]) == true
+    assert :lists.member(2, [1, 3]) == false
   end
 
+  @tag :case_study
   test "checks symbolic bounds for the built-in reversal with an accumulator" do
     target = {:lists, :reverse, 2}
 
     assert {:ok, bound} = ReductionBounds.infer_list_bound(target)
-    assert bound.target == target
-    assert bound.source == :lynx_builtin
-    assert bound.metric == :symbolic_cost
+
+    assert_case_study(
+      bound,
+      target,
+      :lynx_builtin,
+      "generated_list_bound.lean",
+      ~w(listRulesSound reverseCostDerivation reverseResult listValueAndBound)
+    )
+
     assert bound.size_measure == :list_length
     assert bound.value_model == :reversal
     assert bound.domain == :proper_integer_lists
-    assert [{:empty, empty, 0}, {:cons, step, 1}] = bound.recurrence
-    assert bound.upper_bound == {:add, empty, {:mul, :n, step}}
+    {empty, step} = reverse_charges()
+    assert bound.recurrence == [{:empty, empty, 0}, {:cons, step, 1}]
+    assert bound.upper_bound == reverse_contract_upper(:n)
     assert bound.refined_upper_bound == bound.upper_bound
-    assert [%{module: "Erlang.postlude", status: :ok}] = bound.reports
+    assert :lists.reverse([], [3, 4]) == [3, 4]
+    assert :lists.reverse([1, 2], [3, 4]) == [2, 1, 3, 4]
   end
 
+  @tag :case_study
   test "composes bounds for static calls, bindings, and Boolean branches" do
     beam = compile_fixture_in_memory()
     on_exit(&unload_fixture/0)
@@ -271,20 +289,28 @@ defmodule ReductionBoundsTest do
     target = {Fixture, :reverse_on_hit, 2}
 
     assert {:ok, bound} = ReductionBounds.infer_list_bound(target, options)
+
+    assert_case_study(
+      bound,
+      target,
+      :composed,
+      "generated_composed_bound.lean",
+      ~w(Member.listValueAndBound Reverse.listValueAndBound programValueAndBound)
+    )
+
+    assert Enum.any?(bound.reports, &(&1.module == Atom.to_string(Fixture) and &1.status == :ok))
     assert bound.value_model == :composed
-    assert bound.metric == :symbolic_cost
+    assert bound.domain == :proper_integer_list_with_integer_key_if_present
     assert bound.size_measure == :list_length
     paths = bound.path_bounds
 
-    assert %{
-             hit:
-               {:add, {:call_bound, {:lists, :member, 2}, _} = search,
-                {:add, {:branch_cost, :hit}, {:call_bound, {:lists, :reverse, 2}, _}}} = hit,
-             miss: {:add, search, {:branch_cost, :miss}} = miss
-           } = paths
+    search = {:call_bound, {:lists, :member, 2}, member_contract_upper()}
+    reversal = {:call_bound, {:lists, :reverse, 2}, reverse_contract_upper(:n)}
+    hit = {:add, search, {:add, {:branch_cost, :hit}, reversal}}
+    miss = {:add, search, {:branch_cost, :miss}}
 
+    assert paths == %{hit: hit, miss: miss}
     assert bound.upper_bound == {:max, hit, miss}
-    assert Enum.any?(bound.reports, &match?(%{module: "Erlang.postlude", status: :ok}, &1))
     reverse_on_hit = Function.capture(Fixture, :reverse_on_hit, 2)
     assert reverse_on_hit.(2, [1, 2, 3]) == [3, 2, 1]
     assert reverse_on_hit.(4, [1, 2, 3]) == [1, 2, 3]
@@ -309,26 +335,28 @@ defmodule ReductionBoundsTest do
              twice
   end
 
+  @tag :case_study
   test "checks the symbolic bound for one circular buffer insertion" do
     assert {:ok, bound} = ReductionBounds.infer_circular_buffer_bound()
-    assert bound.target == {CircularBuffer, :insert, 2}
+
+    assert_case_study(
+      bound,
+      {CircularBuffer, :insert, 2},
+      :circular_buffer_model,
+      "generated_circular_buffer_bound.lean",
+      ~w(Reverse.listValueAndBound enumReverseListValue enumReverseCostBound bufferRotationSize insertCostBound insertContents)
+    )
+
     assert bound.domain == :valid_integer_circular_buffer
-    assert bound.metric == :symbolic_cost
+    assert bound.value_model == :circular_buffer_model
     assert bound.size_measure == :capacity
 
-    assert %{
-             consume: {:buffer_charge, :consume} = consume,
-             fill: {:buffer_charge, :fill} = fill,
-             rotate:
-               {:add, {:buffer_charge, :rotate},
-                {:call_bound, {Enum, :reverse, 1},
-                 {:add, {:buffer_charge, :enum_reverse},
-                  {:call_bound, {:lists, :reverse, 2}, {:add, _, {:mul, :n, _}}}}}} = rotate,
-             zero: {:buffer_charge, :zero} = zero
-           } = bound.path_bounds
-
+    consume = {:buffer_charge, :consume}
+    fill = {:buffer_charge, :fill}
+    rotate = {:add, {:buffer_charge, :rotate}, rotation_surcharge(:n)}
+    zero = {:buffer_charge, :zero}
+    assert bound.path_bounds == %{consume: consume, fill: fill, rotate: rotate, zero: zero}
     assert bound.upper_bound == {:max, consume, {:max, fill, {:max, rotate, zero}}}
-    assert [%{module: "Erlang.postlude", status: :ok}] = bound.reports
 
     empty = CircularBuffer.new(0)
     assert CircularBuffer.insert(empty, 1) == empty
@@ -341,10 +369,21 @@ defmodule ReductionBoundsTest do
     assert %{a: [5, 4], b: [3], count: 3} = CircularBuffer.insert(rotated, 5)
   end
 
+  @tag :case_study
   test "checks the symbolic cost and rotation count of consecutive insertions" do
     assert {:ok, bound} = ReductionBounds.infer_circular_buffer_sequence_bound()
-    assert bound.target == {CircularBuffer, :insert, 2}
-    assert bound.metric == :symbolic_cost
+
+    assert_case_study(
+      bound,
+      {CircularBuffer, :insert, 2},
+      :circular_buffer_model,
+      "generated_circular_buffer_sequence_bound.lean",
+      ~w(bufferObligations ReductionBounds.Periodic.eventCount ReductionBounds.Periodic.costBound
+         insertManyRotationCountFrom insertManyCostBoundFrom insertManyRotationCount
+         insertManyCostBound insertManyLatest)
+    )
+
+    assert bound.domain == :integer_insertions_from_empty_circular_buffer
     assert bound.size_measure == %{m: :capacity, n: :insertions}
     assert bound.value_model == :circular_buffer_sequence_model
     assert bound.periodic_rule == :constant_stride_reset
@@ -352,17 +391,16 @@ defmodule ReductionBoundsTest do
     assert {:size_measure, :front_list_length} in derived
     assert bound.rotation_count == {:if_zero, :m, 0, {:div, {:sub, :n, 1}, :m}}
 
-    assert {:call_bound, {Enum, :reverse, 1},
-            {:add, {:buffer_charge, :enum_reverse},
-             {:call_bound, {:lists, :reverse, 2}, {:add, _, {:mul, :m, _}}}}} =
-             bound.rotation_surcharge
+    assert bound.rotation_surcharge == rotation_surcharge(:m)
+
+    assert bound.base_cost ==
+             {:max, {:buffer_charge, :consume},
+              {:max, {:buffer_charge, :fill}, {:buffer_charge, :rotate}}}
 
     assert bound.upper_bound ==
              {:if_zero, :m, {:mul, :n, {:buffer_charge, :zero}},
               {:add, {:mul, :n, bound.base_cost},
                {:mul, bound.rotation_count, bound.rotation_surcharge}}}
-
-    assert [%{module: "Erlang.postlude", status: :ok}] = bound.reports
 
     for {capacity, insertions, expected} <- [
           {0, 0, 0},
@@ -380,6 +418,7 @@ defmodule ReductionBoundsTest do
     end
   end
 
+  @tag :case_study
   test "counts rotations from reachable states and preserves FIFO contents" do
     for capacity <- 0..5 do
       empty = CircularBuffer.new(capacity)
@@ -459,6 +498,42 @@ defmodule ReductionBoundsTest do
                beam_binaries: [beam],
                input_contract: ~LEAN"def inputSize (_ : List Int) : Nat := 0"
              )
+  end
+
+  defp assert_case_study(bound, target, source, file, theorems) do
+    assert %{target: ^target, source: ^source, metric: :symbolic_cost} = bound
+
+    assert [%{status: :ok, file: ^file}] =
+             Enum.filter(bound.reports, &(&1.module == "Erlang.postlude"))
+
+    assert Enum.all?(theorems, &(&1 in bound.checked_theorems))
+  end
+
+  defp member_charges() do
+    {list_charge(0, :value), list_charge(1, :value), list_charge(2, :recursive_call)}
+  end
+
+  defp member_contract_upper() do
+    {empty, hit, step} = member_charges()
+
+    {:if_zero, :n, empty,
+     {:max, {:add, empty, {:mul, :n, step}}, {:add, hit, {:mul, {:sub, :n, 1}, step}}}}
+  end
+
+  defp reverse_charges(), do: {list_charge(0, :value), list_charge(1, :recursive_call)}
+
+  defp reverse_contract_upper(size) do
+    {empty, step} = reverse_charges()
+    {:add, empty, {:mul, size, step}}
+  end
+
+  defp list_charge(clause, operation),
+    do: {:add, {:charge, clause, :dispatch}, {:charge, clause, operation}}
+
+  defp rotation_surcharge(size) do
+    {:call_bound, {Enum, :reverse, 1},
+     {:add, {:buffer_charge, :enum_reverse},
+      {:call_bound, {:lists, :reverse, 2}, reverse_contract_upper(size)}}}
   end
 
   defp actual_rotations(capacity, insertions) do
