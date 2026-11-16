@@ -9,13 +9,42 @@ preconditions, such as a maximum list length. A bound in reductions
 expresses work in BEAM's scheduling units. Turning it into a bound on
 elapsed time requires separate, platform-specific timing evidence.
 
-## Lean prerequisites
+## Installation
 
-For Lynx-based proof checking, install [Elan](https://github.com/leanprover/elan),
-Lean's toolchain manager, and make sure `lake` is available on `PATH`.
-Use the Lean version specified by Lynx's `lean-toolchain` file. The
-[referenced Lynx revision](https://github.com/josevalim/lynx/blob/d74890ac7a446d57b762d0e4fcd3c848146b2ff6/lean-toolchain)
-specifies Lean 4.35.0 (`leanprover/lean4:v4.35.0`).
+Use [Git](https://git-scm.com/) and Elixir 1.20 or later in the 1.x series
+with a compatible Erlang/OTP version.
+
+### Lean prerequisites
+
+Install [Elan](https://github.com/leanprover/elan), Lean's toolchain manager,
+and ensure that its `lake` executable is on `PATH`. Lynx uses Lake to
+build its Lean components and run proof checks.
+
+### Install from GitHub
+
+Add the following entry to `deps/0` in your project's `mix.exs` to
+install from the `main` branch.
+
+```elixir
+{:reduction_bounds, github: "zacky1972/reduction_bounds", branch: "main"}
+```
+
+Run the following commands from your project's root. Mix fetches Lynx
+as a dependency of `reduction_bounds`. The fetched Lynx checkout
+specifies the required Lean toolchain.
+
+```sh
+mix deps.get
+export ELAN_TOOLCHAIN="$(cat deps/lynx/lean-toolchain)"
+elan toolchain install "$ELAN_TOOLCHAIN"
+lake --version
+mix compile
+```
+
+Set `ELAN_TOOLCHAIN` from the same file in each shell where you build the
+project or run Lynx-based verification. The [Lynx revision recorded in
+this repository's lockfile](https://github.com/josevalim/lynx/blob/d74890ac7a446d57b762d0e4fcd3c848146b2ff6/lean-toolchain)
+uses Lean 4.35.0 (`leanprover/lean4:v4.35.0`).
 
 ## Verify Lean declarations
 
