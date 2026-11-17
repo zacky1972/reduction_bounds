@@ -1,6 +1,6 @@
 defmodule ReductionBounds.IntegerSize do
   @moduledoc """
-  Holds an integer's inclusive value range and magnitude bit-length bound.
+  Represents integer size information, including an unreachable state.
 
   The lower and upper bounds describe the same integer as the magnitude
   bit-length bound. A finite lower bound `lower` means `lower <= value`,
@@ -21,6 +21,13 @@ defmodule ReductionBounds.IntegerSize do
   These definitions use mathematical integers and do not assume any
   particular runtime representation.
 
+  `unknown/0` returns the default struct, which admits every integer.
+  `unreachable/0` returns `:unreachable`, which admits no integer.
+  `normalize/1` converts contradictory constraints to `:unreachable`
+  and preserves every satisfiable struct unchanged. Unknown information
+  must not be used to represent an impossible branch. This domain does
+  not by itself establish whether a program branch can execute.
+
   ## Examples
 
       iex> alias ReductionBounds.IntegerSize
@@ -40,23 +47,89 @@ defmodule ReductionBounds.IntegerSize do
   @typedoc "An upper bound on magnitude bit length, or unknown information."
   @type magnitude_bits :: non_neg_integer() | :unknown
 
-  @typedoc "Value-range and magnitude bit-length information for an integer."
-  @type t :: %__MODULE__{
+  @typedoc "Value-range and magnitude constraints before normalization."
+  @type constraints :: %__MODULE__{
           lower: bound(),
           upper: bound(),
           magnitude_bits: magnitude_bits()
         }
 
+  @typedoc "Integer constraints, or an explicit state admitting no integer."
+  @type t :: constraints() | :unreachable
+
   defstruct lower: :unbounded, upper: :unbounded, magnitude_bits: :unknown
 
   @doc """
-  Returns whether all fields have their declared types.
+  Returns unconstrained information, which admits every integer.
+
+      iex> ReductionBounds.IntegerSize.unknown()
+      %ReductionBounds.IntegerSize{}
+  """
+  @spec unknown() :: constraints()
+  def unknown(), do: %__MODULE__{}
+
+  @doc """
+  Returns the state admitting no integer.
+
+      iex> ReductionBounds.IntegerSize.unreachable()
+      :unreachable
+  """
+  @spec unreachable() :: :unreachable
+  def unreachable(), do: :unreachable
+
+  @doc """
+  Converts constraints admitting no integer to `:unreachable`.
+
+  All satisfiable structs are returned unchanged. The check tests the
+  interval's point nearest zero against all constraints. If any integer
+  satisfies them, that point does too. No enumeration is required.
+
+  Raises `ArgumentError` for malformed information.
+
+      iex> alias ReductionBounds.IntegerSize
+      iex> IntegerSize.normalize(IntegerSize.unknown())
+      %IntegerSize{}
+      iex> IntegerSize.normalize(%IntegerSize{lower: 8, magnitude_bits: 3})
+      :unreachable
+      iex> IntegerSize.normalize(%IntegerSize{lower: 0, magnitude_bits: 0})
+      %IntegerSize{lower: 0, magnitude_bits: 0}
+  """
+  @spec normalize(t()) :: t()
+  def normalize(:unreachable), do: :unreachable
+
+  def normalize(%__MODULE__{} = size) do
+    ensure_valid!(size)
+    if contains?(size, witness(size)), do: size, else: :unreachable
+  end
+
+  def normalize(_size), do: raise(ArgumentError, "invalid integer size information")
+
+  @doc """
+  Returns whether the information admits no integer.
+
+  This checks both the explicit state and contradictory constraints.
+  Unknown information returns false. Program reachability requires
+  separate evidence connecting these constraints to a program state.
+
+      iex> alias ReductionBounds.IntegerSize
+      iex> IntegerSize.unreachable?(IntegerSize.unknown())
+      false
+      iex> IntegerSize.unreachable?(%IntegerSize{lower: 2, upper: 1})
+      true
+  """
+  @spec unreachable?(t()) :: boolean()
+  def unreachable?(size), do: normalize(size) == :unreachable
+
+  @doc """
+  Returns whether the information has a valid representation.
 
   This checks the representation, not whether its constraints admit an
-  integer. For example, `lower: 2, upper: 1` is a valid representation
-  of the empty set.
+  integer. The explicit `:unreachable` state is valid. For example,
+  `lower: 2, upper: 1` is a valid representation of the empty set.
   """
   @spec valid?(term()) :: boolean()
+  def valid?(:unreachable), do: true
+
   def valid?(%__MODULE__{lower: lower, upper: upper, magnitude_bits: bits}) do
     valid_bound?(lower) and valid_bound?(upper) and valid_bits?(bits)
   end
@@ -68,7 +141,8 @@ defmodule ReductionBounds.IntegerSize do
 
   Endpoints are inclusive; the magnitude limit is strict. Unspecified
   fields impose no constraint. Contradictory constraints represent the
-  empty set and never contain a value.
+  empty set and never contain a value. The explicit `:unreachable`
+  state also returns false for every integer.
 
   Raises `ArgumentError` for a malformed representation or a non-integer
   value. This function does not infer or normalize bounds.
@@ -84,16 +158,27 @@ defmodule ReductionBounds.IntegerSize do
       true
   """
   @spec contains?(t(), integer()) :: boolean()
+  def contains?(:unreachable, value) when is_integer(value), do: false
+
   def contains?(%__MODULE__{} = size, value) when is_integer(value) do
-    unless valid?(size), do: raise(ArgumentError, "invalid integer size representation")
+    ensure_valid!(size)
 
     above_lower?(size.lower, value) and below_upper?(size.upper, value) and
       within_bits?(size.magnitude_bits, value)
   end
 
   def contains?(_size, _value) do
-    raise ArgumentError, "expected an IntegerSize struct and an integer value"
+    raise ArgumentError, "expected integer size information and an integer value"
   end
+
+  defp ensure_valid!(size) do
+    unless valid?(size), do: raise(ArgumentError, "invalid integer size information")
+  end
+
+  defp witness(%__MODULE__{lower: :unbounded, upper: :unbounded}), do: 0
+  defp witness(%__MODULE__{lower: :unbounded, upper: upper}), do: min(0, upper)
+  defp witness(%__MODULE__{lower: lower, upper: :unbounded}), do: max(lower, 0)
+  defp witness(%__MODULE__{lower: lower, upper: upper}), do: max(lower, min(0, upper))
 
   defp valid_bound?(:unbounded), do: true
   defp valid_bound?(value), do: is_integer(value)

@@ -116,4 +116,83 @@ defmodule ReductionBounds.IntegerSizeTest do
     refute IntegerSize.contains?(size, limit)
     refute IntegerSize.contains?(size, -limit)
   end
+
+  test "unknown and unreachable denote different sets" do
+    assert IntegerSize.unknown() == %IntegerSize{}
+    assert IntegerSize.unreachable() == :unreachable
+    assert IntegerSize.valid?(:unreachable)
+    refute IntegerSize.unreachable?(IntegerSize.unknown())
+    assert IntegerSize.unreachable?(:unreachable)
+
+    for value <- [-Integer.pow(2, 200), -1, 0, 1, Integer.pow(2, 200)] do
+      assert IntegerSize.contains?(IntegerSize.unknown(), value)
+      refute IntegerSize.contains?(:unreachable, value)
+    end
+
+    assert_raise ArgumentError, fn -> IntegerSize.contains?(:unreachable, 1.0) end
+  end
+
+  test "normalization detects every kind of empty constraint set" do
+    limit = Integer.pow(2, 200)
+
+    for size <- [
+          %IntegerSize{lower: 2, upper: 1},
+          %IntegerSize{lower: 8, magnitude_bits: 3},
+          %IntegerSize{upper: -8, magnitude_bits: 3},
+          %IntegerSize{lower: 1, magnitude_bits: 0},
+          %IntegerSize{upper: -1, magnitude_bits: 0},
+          %IntegerSize{lower: limit, magnitude_bits: 200},
+          %IntegerSize{upper: -limit, magnitude_bits: 200}
+        ] do
+      assert IntegerSize.normalize(size) == :unreachable
+      assert IntegerSize.unreachable?(size)
+    end
+  end
+
+  test "normalization preserves satisfiable constraints unchanged" do
+    limit = Integer.pow(2, 200)
+
+    for size <- [
+          IntegerSize.unknown(),
+          %IntegerSize{lower: 3},
+          %IntegerSize{upper: -3},
+          %IntegerSize{lower: -7, upper: -3, magnitude_bits: 3},
+          %IntegerSize{lower: 0, upper: 0, magnitude_bits: 0},
+          %IntegerSize{lower: -8, upper: 7, magnitude_bits: 4},
+          %IntegerSize{lower: limit, upper: limit, magnitude_bits: 201}
+        ] do
+      assert IntegerSize.normalize(size) == size
+      refute IntegerSize.unreachable?(size)
+    end
+  end
+
+  test "normalization preserves membership and is idempotent on an exhaustive small domain" do
+    endpoints = [:unbounded | Enum.to_list(-5..5)]
+
+    for lower <- endpoints, upper <- endpoints, bits <- [:unknown, 0, 1, 2, 3] do
+      size = %IntegerSize{lower: lower, upper: upper, magnitude_bits: bits}
+      normalized = IntegerSize.normalize(size)
+      members = Enum.filter(-16..16, &IntegerSize.contains?(size, &1))
+
+      assert normalized == :unreachable == (members == [])
+      assert IntegerSize.normalize(normalized) == normalized
+      assert Enum.filter(-16..16, &IntegerSize.contains?(normalized, &1)) == members
+    end
+
+    assert IntegerSize.normalize(:unreachable) == :unreachable
+  end
+
+  test "normalization rejects malformed information instead of treating it as unreachable" do
+    for size <- [
+          nil,
+          :unknown,
+          %{},
+          %IntegerSize{lower: nil},
+          %IntegerSize{upper: 1.5},
+          %IntegerSize{magnitude_bits: -1}
+        ] do
+      assert_raise ArgumentError, fn -> IntegerSize.normalize(size) end
+      assert_raise ArgumentError, fn -> IntegerSize.unreachable?(size) end
+    end
+  end
 end

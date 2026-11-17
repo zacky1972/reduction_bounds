@@ -81,4 +81,87 @@ theorem reversedRange (lower upper : Int) (reversed : upper < lower) (value : In
   simp only [Holds, LowerHolds, UpperHolds, MagnitudeHolds]
   omega
 
+/-- A candidate nearest zero; it satisfies every constraint whenever any value does. -/
+def Bounds.witness (bounds : Bounds) : Int :=
+  match bounds.lower, bounds.upper with
+  | some lower, some upper => max lower (min 0 upper)
+  | some lower, none => max lower 0
+  | none, some upper => min 0 upper
+  | none, none => 0
+
+theorem witnessHolds (bounds : Bounds) (value : Int) (held : Holds bounds value) :
+    Holds bounds bounds.witness := by
+  rcases bounds with ⟨lower, upper, bits⟩
+  cases lower <;> cases upper <;> cases bits <;>
+    simp [Holds, LowerHolds, UpperHolds, MagnitudeHolds, Bounds.witness] at * <;> omega
+
+/-- Separate unconstrained integer information from the empty set. -/
+inductive Domain where
+  | bounded (bounds : Bounds)
+  | unreachable
+  deriving DecidableEq
+
+def Domain.Holds : Domain → Int → Prop
+  | .bounded bounds, value => ReductionBounds.IntegerSize.Holds bounds value
+  | .unreachable, _ => False
+
+instance (domain : Domain) (value : Int) : Decidable (domain.Holds value) := by
+  cases domain <;> unfold Domain.Holds <;> infer_instance
+
+def Domain.contains (domain : Domain) (value : Int) : Bool :=
+  decide (domain.Holds value)
+
+/-- Preserve satisfiable constraints and replace empty constraints by unreachable. -/
+def Domain.normalize : Domain → Domain
+  | .unreachable => .unreachable
+  | .bounded bounds =>
+    if ReductionBounds.IntegerSize.contains bounds bounds.witness then
+      .bounded bounds
+    else
+      .unreachable
+
+theorem domainContainsCorrect (domain : Domain) (value : Int) :
+    domain.contains value = true ↔ domain.Holds value := by
+  simp [Domain.contains]
+
+theorem unknownHolds (value : Int) : Domain.Holds (.bounded {}) value :=
+  unconstrained value
+
+theorem unreachableHolds (value : Int) : ¬ Domain.Holds .unreachable value := by
+  simp [Domain.Holds]
+
+theorem normalizeSound (domain : Domain) (value : Int) :
+    domain.normalize.Holds value ↔ domain.Holds value := by
+  cases domain with
+  | unreachable => rfl
+  | bounded bounds =>
+    by_cases witness : Holds bounds bounds.witness
+    · simp [Domain.normalize, contains, witness, Domain.Holds]
+    · have empty : ¬ Holds bounds value := fun held => witness (witnessHolds bounds value held)
+      simp [Domain.normalize, contains, witness, Domain.Holds, empty]
+
+theorem normalizeUnreachableIff (domain : Domain) :
+    domain.normalize = .unreachable ↔ ¬ ∃ value, domain.Holds value := by
+  cases domain with
+  | unreachable => simp [Domain.normalize, Domain.Holds]
+  | bounded bounds =>
+    by_cases witness : Holds bounds bounds.witness
+    · have existsValue : ∃ value, Holds bounds value := ⟨bounds.witness, witness⟩
+      simp [Domain.normalize, contains, witness, Domain.Holds, existsValue]
+    · have empty : ¬ ∃ value, Holds bounds value := by
+        rintro ⟨value, held⟩
+        exact witness (witnessHolds bounds value held)
+      simp [Domain.normalize, contains, witness, Domain.Holds, empty]
+
+theorem normalizeIdempotent (domain : Domain) :
+    domain.normalize.normalize = domain.normalize := by
+  cases domain with
+  | unreachable => rfl
+  | bounded bounds =>
+    by_cases witness : contains bounds bounds.witness = true <;>
+      simp [Domain.normalize, witness]
+
+theorem unknownNotUnreachable : Domain.normalize (.bounded {}) ≠ .unreachable := by
+  simp [Domain.normalize, contains, Holds, LowerHolds, UpperHolds, MagnitudeHolds]
+
 end ReductionBounds.IntegerSize

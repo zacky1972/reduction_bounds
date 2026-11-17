@@ -24,10 +24,39 @@ defmodule ReductionBounds.IntegerSizeProofTest do
     assert Enum.any?(reports, &(&1.status == :error))
   end
 
-  defp examples do
+  test "Lean agrees on normalization, unknown information, and unreachable information" do
+    checks =
+      for size <- [:unreachable | examples()], into: "" do
+        original = domain(size)
+        normalized = domain(IntegerSize.normalize(size))
+
+        membership =
+          for value <- values(), into: "" do
+            expected = IntegerSize.contains?(size, value)
+            "example : Domain.contains #{original} (#{value}) = #{expected} := by decide\n"
+          end
+
+        "example : Domain.normalize #{original} = #{normalized} := by decide\n" <> membership
+      end
+
+    assert [%{module: "Erlang.postlude", status: :ok}] = verify(checks <> audit())
+  end
+
+  test "Lean rejects classifying unknown information as unreachable" do
+    reports = verify("example : Domain.normalize (.bounded {}) = .unreachable := by decide")
+    assert Enum.any?(reports, &(&1.status == :error))
+  end
+
+  defp domain(:unreachable), do: "(.unreachable : Domain)"
+  defp domain(size), do: "(.bounded #{bounds(size)} : Domain)"
+
+  defp examples() do
     [
       %IntegerSize{},
       %IntegerSize{lower: 0},
+      %IntegerSize{lower: 3},
+      %IntegerSize{lower: 1, magnitude_bits: 0},
+      %IntegerSize{upper: -1, magnitude_bits: 0},
       %IntegerSize{upper: -1},
       %IntegerSize{magnitude_bits: 0},
       %IntegerSize{lower: -8, upper: 7, magnitude_bits: 3},
@@ -35,11 +64,12 @@ defmodule ReductionBounds.IntegerSizeProofTest do
       %IntegerSize{lower: 2, upper: 1},
       %IntegerSize{lower: 8, magnitude_bits: 3},
       %IntegerSize{upper: -8, magnitude_bits: 3},
-      %IntegerSize{magnitude_bits: 200}
+      %IntegerSize{magnitude_bits: 200},
+      %IntegerSize{lower: Integer.pow(2, 200), magnitude_bits: 200}
     ]
   end
 
-  defp values do
+  defp values() do
     limit = Integer.pow(2, 200)
     [-limit, -limit + 1, -9, -8, -7, -1, 0, 1, 7, 8, 9, limit - 1, limit]
   end
@@ -73,7 +103,7 @@ defmodule ReductionBounds.IntegerSizeProofTest do
     Lynx.Commands.verify!(project, Lynx.Translation.assemble(translation, cache: false))
   end
 
-  defp audit do
+  defp audit() do
     """
     open Lean in
     run_cmd do
@@ -83,7 +113,15 @@ defmodule ReductionBounds.IntegerSizeProofTest do
           ``ReductionBounds.IntegerSize.upperBound,
           ``ReductionBounds.IntegerSize.magnitudeBound,
           ``ReductionBounds.IntegerSize.zeroMagnitude,
-          ``ReductionBounds.IntegerSize.reversedRange] do
+          ``ReductionBounds.IntegerSize.reversedRange,
+          ``ReductionBounds.IntegerSize.witnessHolds,
+          ``ReductionBounds.IntegerSize.domainContainsCorrect,
+          ``ReductionBounds.IntegerSize.unknownHolds,
+          ``ReductionBounds.IntegerSize.unreachableHolds,
+          ``ReductionBounds.IntegerSize.normalizeSound,
+          ``ReductionBounds.IntegerSize.normalizeUnreachableIff,
+          ``ReductionBounds.IntegerSize.normalizeIdempotent,
+          ``ReductionBounds.IntegerSize.unknownNotUnreachable] do
         for dependency in ← Lean.collectAxioms theoremName do
           unless #[``propext, ``Classical.choice, ``Quot.sound].contains dependency do
             throwError m!"Unexpected axiom in {theoremName}: {dependency}"
