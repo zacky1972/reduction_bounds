@@ -53,4 +53,67 @@ defmodule ReductionBounds.IntegerSizeTest do
     assert size.upper == limit
     assert size.magnitude_bits == 201
   end
+
+  test "membership enforces every supplied constraint and strict magnitude endpoints" do
+    size = %IntegerSize{lower: -8, upper: 7, magnitude_bits: 3}
+
+    assert Enum.filter(-10..10, &IntegerSize.contains?(size, &1)) == Enum.to_list(-7..7)
+    assert IntegerSize.contains?(%IntegerSize{lower: -8, upper: 7, magnitude_bits: 4}, -8)
+    refute IntegerSize.contains?(%IntegerSize{magnitude_bits: 3}, 8)
+    refute IntegerSize.contains?(%IntegerSize{magnitude_bits: 3}, -8)
+  end
+
+  test "absent components impose no constraints" do
+    for value <- [-Integer.pow(2, 200), -1, 0, 1, Integer.pow(2, 200)] do
+      assert IntegerSize.contains?(%IntegerSize{}, value)
+    end
+
+    assert IntegerSize.contains?(%IntegerSize{lower: 0}, 0)
+    refute IntegerSize.contains?(%IntegerSize{lower: 0}, -1)
+    assert IntegerSize.contains?(%IntegerSize{upper: -1}, -1)
+    refute IntegerSize.contains?(%IntegerSize{upper: -1}, 0)
+  end
+
+  test "zero magnitude admits only zero" do
+    size = %IntegerSize{magnitude_bits: 0}
+    assert IntegerSize.contains?(size, 0)
+    refute IntegerSize.contains?(size, -1)
+    refute IntegerSize.contains?(size, 1)
+  end
+
+  test "contradictory constraints are well formed but admit no integer" do
+    for size <- [
+          %IntegerSize{lower: 2, upper: 1},
+          %IntegerSize{lower: 8, magnitude_bits: 3},
+          %IntegerSize{upper: -8, magnitude_bits: 3}
+        ] do
+      assert IntegerSize.valid?(size)
+      refute Enum.any?(-20..20, &IntegerSize.contains?(size, &1))
+    end
+  end
+
+  test "rejects malformed fields and noninteger values" do
+    for size <- [
+          %IntegerSize{lower: nil},
+          %IntegerSize{upper: 1.5},
+          %IntegerSize{magnitude_bits: -1},
+          %IntegerSize{magnitude_bits: 1.5}
+        ] do
+      refute IntegerSize.valid?(size)
+      assert_raise ArgumentError, fn -> IntegerSize.contains?(size, 0) end
+    end
+
+    refute IntegerSize.valid?(%{})
+    assert_raise ArgumentError, fn -> IntegerSize.contains?(%IntegerSize{}, 1.0) end
+    assert_raise ArgumentError, fn -> IntegerSize.contains?(%{}, 0) end
+  end
+
+  test "membership supports magnitudes above a machine word" do
+    limit = Integer.pow(2, 200)
+    size = %IntegerSize{lower: -limit, upper: limit, magnitude_bits: 200}
+    assert IntegerSize.contains?(size, limit - 1)
+    assert IntegerSize.contains?(size, -limit + 1)
+    refute IntegerSize.contains?(size, limit)
+    refute IntegerSize.contains?(size, -limit)
+  end
 end

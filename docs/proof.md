@@ -1,143 +1,4 @@
-# Proofs of symbolic cost bounds
-
-## Map and struct operations
-
-The decoder handles fixed atom keys and the supported Boolean guard
-forms. For a case over multiple input variables, the first pattern must
-be a supported map pattern and the other patterns must bind distinct
-variables. When a pattern matches and its guard fails, evaluation
-continues with the next clause in the original environment. Case tails
-outside the supported fragment are retained in the returned
-`normalization.program.opaque` map.
-
-For `BoundedCounter.read_checked/1`, the normalizer learns that
-`balance` exists from a successful pattern match and carries the fact
-through the alias. It replaces the subsequent access case with a field
-read. The normalizer leaves `read_unchecked/1` unchanged.
-
-The value check takes its source tree from the Core Erlang recovered
-from BEAM debug information. The source tree retains map pattern aliases.
-`coreDecoding` checks that the decoder's output equals the result of
-lowering that tree in Lean. `SourceExpr.lowerSound` proves that this
-lowering preserves evaluation and checks that any alias reads the
-original subject before binding its new name.
-
-`coreNormalization` checks the entire rewrite starting with an empty
-set of field facts. A successful map match establishes field presence
-in its matched branch. A variable binding copies the source's facts
-to its new name and removes any facts about the previous binding of
-that name. The fallback uses the incoming facts. `coreValueAgreement`
-combines the decoding and rewrite checks to prove that the extracted
-source tree and the normalized expression evaluate to the same result.
-Lean rejects rewriting an unchecked access to a direct field read.
-
-`infer_struct_bound/2` reports `value_agreement: :checked` for successful
-checks in this source fragment. Extraction and serialization supply the
-tree to Lean. Compiler-generated case tails outside the fragment retain
-their identifiers and are interpreted by the same parameter on both
-sides of the theorem. For a matched `read_checked/1` input, neither side
-uses that parameter. Targets outside this fragment, including the
-guarded examples below, report `value_agreement: :unsupported`. Their
-available local certificates are checked under their listed assumptions.
-
-The upper bound is computed for the fragment **before normalization**.
-`{:operation_cost, kind}` denotes a supplied upper charge for an
-operation. `{:opaque_cost, id}` denotes a supplied upper charge for all
-work in a retained path, including exceptional exits where applicable.
-The result lists those identifiers in `opaque_paths`. Sequential cost
-items are added and alternatives are combined with a maximum. The Lean
-theorem `CostTree.pathCostBound` applies to every derivable path whose
-local costs obey the supplied charges. `structCostBound` checks the
-returned formula against the cost tree built in Lean from the decoded
-fragment. The tree can include infeasible paths, such as a compiler
-fallback for updating a value already known to be a map.
-
-Call `ReductionBounds.infer_struct_bound({module, function, arity})` to
-derive a symbolic upper bound for a supported Core Erlang function. For
-an in-memory module, pass its compiled binary in `beam_binaries`.
-`BoundedCounter.debit/2` exercises tagged map patterns, alias bindings,
-short-circuit conjunction, subtraction, and exact field updates.
-`BoundedCounter.set_limit/2` uses the same rules with a different field
-and guard.
-
-## Execution soundness for unary Core Erlang functions
-
-`ReductionBounds.infer_verified_bound/2` checks an upper bound against
-the execution semantics of a unary numeric fragment. The precondition
-is a nonnegative integer input. The function dispatches on zero and a
-default clause. Its body may evaluate bindings, nested zero tests,
-nonnegative integer values, addition, static unary calls, and self
-calls on the input minus one.
-
-The Elixir decoder checks the Core Erlang shape extracted from BEAM
-debug information and resolves its variable bindings. The Lean
-semantics in `ExecutionBound.lean` starts at the reified program.
-`Eval` relates an expression to its value and its charged symbolic
-cost. It evaluates both parts of a binding in order, evaluates the
-test before choosing a branch, and gives each static call any result
-and cost permitted by the callee relation. `Program.runs` covers all
-finite derivations, indexed by a call depth. The evaluator passes the
-actual recursive operand to the next call. A separate checked rule
-establishes that the operand denotes the current input minus one and
-that a self call occurs only in the positive clause. Rebinding a name
-discards its previous predecessor fact.
-
-Each entry in `call_contracts` maps a static callee to its cost limit.
-The limit excludes the caller's own call charge. The cost proof assumes
-that every callee outcome for a natural argument stays within that
-limit. Normal return assumes the callees terminate normally and return
-natural results on those arguments. Lean uses a total relation to
-construct a terminating derivation by induction on the input.
-`targetTerminates` gives a maximum self-call depth of `n + 1`, counting
-the initial call, for this construction.
-
-`Eval.pathCost` constructs a derivation for the existing `CostTree`
-rules. `targetUpperCorrect` checks the candidate equations generated
-in Elixir against the Lean bound. `targetCostBound` then bounds every
-execution in `Program.runs` under the call cost contracts. The result
-contains the precondition, the contracts used, and the zero and
-successor equations. In the successor equation, `:previous` denotes
-the upper bound at the preceding input.
-
-The API reports unsupported source expressions, missing callee
-contracts, and failed Lean checks as errors. Tests confirm that Lean
-rejects a self call on the unchanged argument and a falsified bound.
-Source extraction and the decoder's reification are trusted for this
-numeric fragment. The specialized list, map, and buffer analyses have
-their own proof scopes.
-
-## User-defined list traversals
-
-`ReductionBounds.infer_list_bound/2` recognizes a traversal with an
-empty-list clause and nonempty-list clauses. A nonempty clause may
-return immediately or call itself once on the tail, passing the same
-key when there is one. The analyzer assigns symbolic charges to clause
-dispatch, values, integer addition, and recursive calls. It adds the
-costs of sequential expressions. A dispatch charge covers the tests
-that led to the selected clause, including rejected earlier clauses.
-
-Lean's `ListCost` relation describes the costs of these three cases.
-`listRulesSound` bounds every derivation by `base + n * step` when
-`n` bounds the list length, `base` bounds the empty and early-stop
-charges, and `step` bounds the local cost of a recursive clause. The
-proof uses the fact that a recursive clause makes at most one call
-and consumes one list cell. `listPathBounds` distinguishes paths that
-reach the empty list from paths that stop early. An early stop requires
-a remaining cell, so it can follow at most `n - 1` recursive steps.
-The result exposes both `upper_bound` and `refined_upper_bound`.
-
-For recognized membership and length functions on proper integer lists,
-Lean also checks that the costed model returns the same value as the
-Lynx translation. When `value_model` is `nil`, the checked claim is the
-cost inequality for the modeled derivations.
-
-`ReductionBounds.infer_search_bound/2` provides a dedicated analysis for
-the membership pattern. The function returns false for an empty list,
-returns true on an exact match at the head, and otherwise searches the
-tail with the same key. Its `searchCostBound` theorem bounds the cost
-model by `max(c_empty, c_hit) + n * c_step`, where `c_step` is the
-local charge of a miss before continuing. This entry point checks the
-cost inequality for that model.
+# Proofs of symbolic bounds for list operations
 
 ## lists:member/2
 
@@ -233,31 +94,6 @@ and both inequalities for all values of `acc` in the stated domain.
 When supplied, an `input_contract` constrains `xs` and supplies its
 size measure.
 
-## Input contracts and forwarding calls
-
-For a recognized value model, `infer_list_bound/2` accepts a Lean block
-as the `input_contract` option. The block defines `inputPrecondition`,
-`inputInvariant`, and a natural-valued measure `inputSize` on integer
-lists. It proves that the precondition establishes the invariant
-(`inputInvariantInit`), that the invariant holds for the tail
-(`inputInvariantTail`), and that the measure decreases by at least one
-on a tail step (`inputSizeTail`).
-
-`inputLengthBound` then proves `xs.length ≤ inputSize xs` by induction
-on the list. The generated theorem `listInputValueAndBound` applies
-the model's cost theorem with `inputSize xs` under the precondition
-and includes value agreement. For example, a contract can require
-`xs.length < 100` and supply `xs.length + 2` as the size measure.
-
-`ReductionBounds.infer_list_call_bound/3` checks that a local wrapper
-forwards every argument in the original order to a different function in
-the same module. It supports recognized membership, length, and reversal
-models. Lean checks the callee theorem in the same run and applies it in
-`listCallerValueAndBound`. The wrapper's upper bound is
-`caller_cost + callee_refined_bound`. The symbolic `caller_cost` covers
-the wrapper's own work. With an input contract, the wrapper proof uses
-the same precondition and size measure as the callee.
-
 ## Composing static calls, bindings, and Boolean branches
 
 The analyzer reads Core Erlang from BEAM debug information. It follows
@@ -300,7 +136,7 @@ Use `ReductionBounds.infer_list_bound/2` with the function's module,
 name, and arity. The generated theorem proves that the function returns
 the reversed list on a hit and the original list on a miss. It also
 proves the following symbolic bounds. Here
-`M(n)` is the refined membership bound and `R(n)` is the reversal bound,
+`M(n)` and `R(n)` are the proved upper bounds for membership and reversal,
 `n` bounds the input list length, and `B_hit` and `B_miss` are
 nonnegative symbolic charges for the respective branch operations
 outside the calls.
@@ -335,7 +171,7 @@ capacity.
 
 | Path | State update | Symbolic upper bound |
 | --- | --- | --- |
-| `consume` | Remove the head of `b` and prepend the new item to `a` | `C_consume` |
+| `consume` | Remove the head of `b` and prepend to `a` | `C_consume` |
 | `fill` | Prepend to `a` and increase the count | `C_fill` |
 | `rotate` | Reverse `a`, drop the oldest element, and start a new `a` | `C_rotate + C_enum_reverse + R(n)` |
 | `zero` | Return the original buffer | `C_zero` |
@@ -356,83 +192,17 @@ reverses an `a` of length equal to the capacity, and that the modeled
 cost fits the returned bound. At capacity zero, Lean proves that the
 state is unchanged and that the cost is `C_zero`.
 
-The Elixir analysis decodes field accesses with `CoreFragment` and
-applies the shared `Normalize` rule under the assumption that the
-required fields exist in a valid buffer. It compares the resulting
-clauses with the expected CircularBuffer conditions and updates.
-In `CircularBuffer.lean`, `insertPath` selects the path used by both
-`insertModel` and `insertCost`. The Lean cost theorems are stated over
-this state model. ExUnit exercises all four paths with the actual library.
-
-### Agreement with a bounded FIFO specification
-
-The specification `fifoInsert` represents the retained items as one
-list, in oldest-to-newest order. It appends the incoming item and
-keeps the last `capacity` items. For a modeled buffer,
-`BufferState.contents` reads `b ++ reverse(a)` in that order.
-
-`insertContents` proves that reading the state after `insertModel`
-gives the same list as `fifoInsert` for every valid state and every
-integer item. The fill path appends an item without discarding any.
-The consume and rotate paths discard exactly the oldest item. The
-zero-capacity path retains no items. This theorem connects the
-Lean state model to the independent FIFO specification. ExUnit checks
-the corresponding observable behavior of the Elixir library.
-
-## Fixed progress and periodic resets
-
-`Periodic.lean` gives the common rule for a sequence of state
-transitions with a constant increment and periodic resets. Let `m` be
-a positive period, `d` the increment, `o` the lower endpoint after a
-step, and `size(s)` the progress in state `s`. The inferred proof
-obligations check invariant preservation, `size(s) < m + o` in valid
-states, and the following equation for each valid step:
-
-```text
-size(s) + d = events_this_step * m + size(next)
-```
-
-The next state must also satisfy `o ≤ size(next)`. The rule allows
-an initial size below `o` and handles an empty sequence separately.
-Lean's `accumulate` combines the transition obligations by induction.
-`eventCount` derives `floor(max(initial + n * d - o, 0) / m)`. Here
-`initial` denotes the initial size and `n` the number of steps.
-`costBound` sums the per-step budgets to give
-`n * base + events * surcharge`.
-
-`infer_periodic_bound/2` recognizes a two-argument transition that
-adds a positive constant to a pending count. At the threshold it
-subtracts the period and returns an event flag. Below the threshold it
-keeps the advanced count and returns false. The invariant is
-`pending < period`, with a period at least as large as the increment.
-For a function that enqueues two items at a time and signals a batch
-when it is ready, the rule gives `floor((pending + 2 * n) / period)`.
-The counter decoder checks this source shape in Core Erlang. The
-counter proof checks the transition's obligations in its natural
-number model. The symbolic surcharge is the extra modeled cost of an
-event step.
-
-The return value lists `conditions.derived` and `conditions.supplied`
-separately. A `periodic_contract` Lean block may specify an extra
-predicate `periodicInvariant period state` and a natural-valued
-`periodicMeasure period state`. The block proves
-`periodicInvariantStep` under `periodicDomain` and
-`periodicMeasureBounds` to justify using the measure in place of the
-initial pending count. The API returns the supplied Lean source and
-separate measured bounds. Lean checks these obligations and rejects a
-contract that relies on an unfinished proof or an extra axiom. The
-periodic bound tests demonstrate an even-period, even-count invariant
-and a measure of `state + 2`.
+The Elixir analysis checks the Core Erlang shapes before applying this
+Lean state model. The Lean theorem is stated over the state model.
+ExUnit also exercises all four paths with the actual library.
 
 ## Consecutive CircularBuffer insertions
 
 Call `ReductionBounds.infer_circular_buffer_sequence_bound/0` to
 derive a bound for `n` calls to `CircularBuffer.insert/2` with integer
-items after `CircularBuffer.new(m)` has returned. The analyzer reuses
-the single-insertion analysis with `m` as the capacity variable.
-It also uses `CoreFragment` to decode the initializer's guard and
-checks that the nonnegative integer capacity is stored in an empty
-buffer with count zero.
+items after `CircularBuffer.new(m)` has returned. The analyzer checks
+the initializer's Core Erlang in addition to the insertion and reversal
+clauses checked for one call.
 
 Let `c` be the maximum of the local charges for consuming, filling, and
 rotating. Let `r(m)` be the extra cost bound for the rotation's
@@ -445,136 +215,19 @@ rotating. Let `r(m)` be the extra cost bound for the rotation's
 | `m > 0` and `n = 0` | `0` | `0` |
 | `m > 0` and `n > 0` | `floor((n - 1) / m)` | `n * c + q(m, n) * r(m)` |
 
-`CircularBufferSequence.lean` uses the fixed-progress rule with
-`size(s) = length(a)`, increment one, and lower endpoint one. Its
-`rotationStep` counts a rotation exactly when `insertPath` selects the
-rotate path. With positive capacity, an ordinary step increases the
-length of `a` by one. A rotation takes place with `length(a) = m` and
-leaves the new `a` with length one. `bufferObligations` discharges the
-shared rule's premises using the single-insertion model.
-`insertManyRotationCount` specializes the shared count theorem to an
-empty initial buffer. At capacity zero the state remains empty.
+The proof threads the state after each insertion into the next call.
+For positive capacity, a step without rotation increases the length of
+`a` by one. A rotation takes place with `length(a) = m` and leaves the
+new `a` with length one. Starting with an empty `a`, the theorem
+`insertManyFromPositive` gives
+`n = q * m + length(final_a)`. For a nonempty insertion sequence,
+`length(final_a)` lies between one and `m`, so
+`insertManyRotationCount` derives the quotient in the table. At
+capacity zero the state stays empty on every step.
 
 `insertManyCostBound` then combines the per-step cost with the exact
 rotation count. The returned `rotation_count` expression uses natural
 number subtraction, so `n - 1` is zero when `n = 0`.
-
-### Starting from a valid buffer
-
-Let `a0` be the initial length of the newer list `a`. For any state
-satisfying `BufferState.valid`, `insertManyRotationCountFrom` proves
-that the modeled number of rotations is zero at capacity zero and
-`floor(max(a0 + n - 1, 0) / m)` for `m > 0`. The first rotation takes
-place on insertion `m - a0 + 1` if the sequence reaches that point.
-Later rotations are `m` insertions apart.
-
-For positive capacity the proof uses
-`a0 + n = rotations * m + length(final_a)`. When `a0 + n > 0`, the
-final length lies between one and `m`, so subtracting one and dividing
-by `m` gives the exact quotient. When `a0 + n = 0`, the run is empty.
-At capacity zero the invariant forces both lists to be empty and the
-count to be zero. Each insertion leaves the state unchanged.
-
-`insertManyContents` proves that the retained contents after a run
-equal a left fold of `fifoInsert`, starting from the initial contents
-at the initial capacity. The induction applies `insertContents` at
-each step, using preservation of validity and capacity. It covers
-the empty insertion list, zero capacity, and nonempty initial buffers.
-The equality holds for any assignments of the symbolic charges.
-
-`insertManyLatest` gives the same result directly: concatenate the
-initial contents and the incoming items in chronological order, then
-keep the last `capacity` items. This includes a sequence of length
-zero. Applying the theorem to any prefix gives the retained contents
-at that point in the run, including runs that cross a rotation.
-
-`insertManyCostBoundFrom` bounds the modeled cost by
-`n * c + rotations * r(m)` for positive capacity and `n * C_zero`
-at capacity zero. The existing empty-initialization theorems specialize
-these results to `a0 = 0`. The public inference entry point still
-returns the bound for a run starting from `new/1`.
-
-ExUnit checks states reached by insertion into the actual library for
-capacities zero through five. It compares observed rotation counts
-with the formula and compares the contents after each insertion with
-a FIFO list that discards its oldest item at capacity.
-
-## Reproduce the case studies
-
-With the project's test dependencies installed, including
-`circular_buffer` 1.1.0 and the Lynx toolchain, run:
-
-```sh
-mix test --only case_study
-```
-
-The six tagged tests in `test/reduction_bounds_test.exs` also run in
-`mix test`. They call the public inference functions and check the
-returned formulas, input domains, size measures, and proof reports.
-They also exercise the actual Erlang or Elixir functions with boundary
-inputs and compare buffer contents with a FIFO list.
-
-Each inference call enters the common `verify_bound` path. This path
-selects the source for the case, sends the resulting postlude to the
-Lynx runner, and asks Lean to audit the named theorems for unexpected
-axioms. A successful result records the audited names in
-`checked_theorems`. The tests check those names, the postlude identity,
-and its successful status. Named theorem checks reject dependencies
-on unfinished proofs such as `sorryAx`.
-
-| Case | Source checked | Rules and contracts reused | Lean evidence |
-| --- | --- | --- | --- |
-| `lists:member/2` | Lynx's bundled value model | Empty, stop, and tail-step rules of `ListCost` | `searchCostDerivation`, `listRulesSound`, `listPathBounds`, `listValueAndBound` |
-| Conditional reversal | Lynx translation of the compiled test function | The refined membership bound on both paths, reversal with an empty accumulator on a hit, sequential addition, and the maximum of the branch bounds | `Member.listValueAndBound`, `Reverse.listValueAndBound`, `programValueAndBound` |
-| One insertion | Buffer state model selected by checking the Core Erlang clauses | The list clauses of `Enum.reverse/1`, the reversal contract, and the maximum of the four path bounds | `enumReverseListValue`, `enumReverseCostBound`, `bufferRotationSize`, `insertCostBound`, `insertContents` |
-| Consecutive insertions | The same state model and a checked empty initializer | Single-insertion budgets, invariant preservation, and the common periodic reset rule | `bufferObligations`, `Periodic.eventCount`, `Periodic.costBound`, `insertManyRotationCountFrom`, `insertManyCostBoundFrom`, `insertManyLatest` |
-
-The tagged reversal test checks the auxiliary `lists:reverse/2`
-contract independently. The tests also compare each embedded
-`:call_bound` expression with its primitive formula. The buffer shape
-checks are performed by the Elixir analyzer. The corresponding Lean
-theorems range over the buffer state model, and ExUnit exercises the
-actual library on the specified examples.
-
-### Built-in contracts and Lynx laws
-
-`lists:member/2` and `lists:reverse/2` enter the analysis through their
-bundled `Erlang.lists` definitions. Their cost recurrences belong to
-`reduction_bounds`. Membership requires an integer key and a proper
-integer list, and returns an atom indicating whether an exact match
-exists. Reversal requires two proper integer lists and returns the
-reverse of the first followed by the accumulator. Both contracts
-use an upper bound on the length of the list they traverse and
-allow arbitrary natural-valued symbolic charges. Each continuation
-consumes one cell. Lean checks each result equation and cost
-inequality against the corresponding model.
-
-In a [Lynx law][lynx-laws], `requires:` expresses a Boolean predicate on
-Erlang inputs, and `expects:` expresses a Boolean property of the
-successful computation. The following are specifications that can
-be stated in that form, using helpers for the input predicates and
-reference results. The tagged suite checks the generated Lean
-theorems listed above.
-
-| Case | Condition expressible in `requires:` | Value property expressible in `expects:` |
-| --- | --- | --- |
-| Membership | Integer key, proper integer list, and list length at most `n` | The returned Boolean equals a reference exact-membership implementation |
-| Reversal contract | Proper integer lists for the input and accumulator, with input length at most `n` | The result equals the reversed input followed by the accumulator |
-| Conditional reversal | Integer key and proper integer list of length at most `n` | The result equals the reverse on a hit and the input on a miss |
-| One insertion | Valid buffer state with integer elements and an integer item | The result is valid and its contents equal one bounded FIFO insertion |
-| Consecutive insertions | Nonnegative capacity and a proper integer list of items | The retained contents equal the latest `m` items after the insertions |
-
-Translation support is required for a law's helpers and target.
-For the buffer cases, the value properties in the table describe the
-state-model theorems. The Lean cost obligations are separate
-inequalities over costed models, including the per-cell charges,
-static call bounds, rotation budget, and count of rotations. The
-law vocabulary can express a numeric bound when an explicit cost
-function is available. A value law alone observes the result of the
-computation, while the inequalities here relate that result model
-to a separately defined symbolic cost.
-
-[lynx-laws]: https://github.com/josevalim/lynx/blob/d74890ac7a446d57b762d0e4fcd3c848146b2ff6/README.md#getting-started-with-proofs
 
 ## Scope
 
