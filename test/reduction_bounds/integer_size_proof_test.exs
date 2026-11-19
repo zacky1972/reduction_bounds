@@ -47,6 +47,58 @@ defmodule ReductionBounds.IntegerSizeProofTest do
     assert Enum.any?(reports, &(&1.status == :error))
   end
 
+  test "Lean checks constant descriptions and arithmetic transfer results" do
+    constants =
+      for value <- values(), into: "" do
+        size = IntegerSize.from_integer(value)
+
+        """
+        example : singleton (#{value}) = #{bounds(size)} := by decide
+        """
+      end
+
+    checks =
+      for operation <- [:add, :subtract, :multiply],
+          left <- arithmetic_examples(),
+          right <- arithmetic_examples(),
+          into: "" do
+        result = apply(IntegerSize, operation, [left, right])
+
+        """
+        example : Domain.#{operation} #{domain(left)} #{domain(right)} = #{domain(result)} := by decide
+        """
+      end
+
+    assert [%{module: "Erlang.postlude", status: :ok}] =
+             verify(
+               "set_option exponentiation.threshold 1024\n" <> constants <> checks <> audit()
+             )
+  end
+
+  test "Lean rejects forgetting the carry bit and treating unrelated inputs as equal" do
+    for source <- [
+          "example : Holds { magnitudeBits := some 3 } (7 + 1) := by decide",
+          "example : Holds { lower := some 0, upper := some 0 } ((1 : Int) - 3) := by decide"
+        ] do
+      assert Enum.any?(verify(source), &(&1.status == :error))
+    end
+  end
+
+  defp arithmetic_examples() do
+    [
+      IntegerSize.unknown(),
+      :unreachable,
+      %IntegerSize{lower: 2, upper: 1},
+      %IntegerSize{magnitude_bits: 0},
+      IntegerSize.from_integer(-8),
+      IntegerSize.from_integer(7),
+      %IntegerSize{lower: -3, upper: 4, magnitude_bits: 3},
+      %IntegerSize{lower: 0},
+      %IntegerSize{upper: -1},
+      %IntegerSize{magnitude_bits: 200}
+    ]
+  end
+
   defp domain(:unreachable), do: "(.unreachable : Domain)"
   defp domain(size), do: "(.bounded #{bounds(size)} : Domain)"
 
@@ -121,7 +173,29 @@ defmodule ReductionBounds.IntegerSizeProofTest do
           ``ReductionBounds.IntegerSize.normalizeSound,
           ``ReductionBounds.IntegerSize.normalizeUnreachableIff,
           ``ReductionBounds.IntegerSize.normalizeIdempotent,
-          ``ReductionBounds.IntegerSize.unknownNotUnreachable] do
+          ``ReductionBounds.IntegerSize.unknownNotUnreachable,
+          ``ReductionBounds.IntegerSize.magnitudeBitsCorrect,
+          ``ReductionBounds.IntegerSize.magnitudeBitsMinimal,
+          ``ReductionBounds.IntegerSize.singletonExact,
+          ``ReductionBounds.IntegerSize.lowerAddSound,
+          ``ReductionBounds.IntegerSize.upperAddSound,
+          ``ReductionBounds.IntegerSize.lowerSubtractSound,
+          ``ReductionBounds.IntegerSize.upperSubtractSound,
+          ``ReductionBounds.IntegerSize.addMagnitudeBound,
+          ``ReductionBounds.IntegerSize.addBitsSound,
+          ``ReductionBounds.IntegerSize.multiplyMagnitudeBound,
+          ``ReductionBounds.IntegerSize.multiplyBitsSound,
+          ``ReductionBounds.IntegerSize.boundsAddSound,
+          ``ReductionBounds.IntegerSize.boundsSubtractSound,
+          ``ReductionBounds.IntegerSize.scaledInterval,
+          ``ReductionBounds.IntegerSize.productInterval,
+          ``ReductionBounds.IntegerSize.productRangeSound,
+          ``ReductionBounds.IntegerSize.zeroValue,
+          ``ReductionBounds.IntegerSize.boundsMultiplySound,
+          ``ReductionBounds.IntegerSize.binarySound,
+          ``ReductionBounds.IntegerSize.addSound,
+          ``ReductionBounds.IntegerSize.subtractSound,
+          ``ReductionBounds.IntegerSize.multiplySound] do
         for dependency in ← Lean.collectAxioms theoremName do
           unless #[``propext, ``Classical.choice, ``Quot.sound].contains dependency do
             throwError m!"Unexpected axiom in {theoremName}: {dependency}"

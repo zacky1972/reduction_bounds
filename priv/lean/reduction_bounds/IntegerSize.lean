@@ -164,4 +164,239 @@ theorem normalizeIdempotent (domain : Domain) :
 theorem unknownNotUnreachable : Domain.normalize (.bounded {}) ≠ .unreachable := by
   simp [Domain.normalize, contains, Holds, LowerHolds, UpperHolds, MagnitudeHolds]
 
+
+def magnitudeBits (value : Int) : Nat :=
+  if value = 0 then 0 else value.natAbs.log2 + 1
+
+theorem magnitudeBitsCorrect (value : Int) : value.natAbs < 2 ^ magnitudeBits value := by
+  by_cases zero : value = 0
+  · simp [magnitudeBits, zero]
+  · have nonzero : value.natAbs ≠ 0 := by omega
+    simpa [magnitudeBits, zero] using
+      (Nat.log2_lt nonzero).mp (by omega : value.natAbs.log2 < value.natAbs.log2 + 1)
+
+theorem magnitudeBitsMinimal (value : Int) (width : Nat)
+    (bound : value.natAbs < 2 ^ width) : magnitudeBits value ≤ width := by
+  by_cases zero : value = 0
+  · simp [magnitudeBits, zero]
+  · have nonzero : value.natAbs ≠ 0 := by omega
+    have := (Nat.log2_lt nonzero).mpr bound
+    simp [magnitudeBits, zero]
+    omega
+
+def singleton (value : Int) : Bounds :=
+  ⟨some value, some value, some (magnitudeBits value)⟩
+
+theorem singletonExact (constant value : Int) : Holds (singleton constant) value ↔ value = constant := by
+  constructor
+  · intro held
+    simp only [Holds, singleton, LowerHolds, UpperHolds] at held
+    omega
+  · rintro rfl
+    exact ⟨Int.le_refl _, Int.le_refl _, magnitudeBitsCorrect value⟩
+
+def endpointAdd : Option Int → Option Int → Option Int
+  | some left, some right => some (left + right)
+  | _, _ => none
+
+def endpointSubtract : Option Int → Option Int → Option Int
+  | some left, some right => some (left - right)
+  | _, _ => none
+
+def addBits : Option Nat → Option Nat → Option Nat
+  | some left, some right => some (max left right + 1)
+  | _, _ => none
+
+def multiplyBits : Option Nat → Option Nat → Option Nat
+  | some left, some right => some (left + right)
+  | _, _ => none
+
+theorem lowerAddSound (left right : Option Int) (u v : Int)
+    (hu : LowerHolds left u) (hv : LowerHolds right v) :
+    LowerHolds (endpointAdd left right) (u + v) := by
+  cases left <;> cases right <;> simp_all [LowerHolds, endpointAdd] <;> omega
+
+theorem upperAddSound (left right : Option Int) (u v : Int)
+    (hu : UpperHolds left u) (hv : UpperHolds right v) :
+    UpperHolds (endpointAdd left right) (u + v) := by
+  cases left <;> cases right <;> simp_all [UpperHolds, endpointAdd] <;> omega
+
+theorem lowerSubtractSound (left right : Option Int) (u v : Int)
+    (hu : LowerHolds left u) (hv : UpperHolds right v) :
+    LowerHolds (endpointSubtract left right) (u - v) := by
+  cases left <;> cases right <;> simp_all [LowerHolds, UpperHolds, endpointSubtract] <;> omega
+
+theorem upperSubtractSound (left right : Option Int) (u v : Int)
+    (hu : UpperHolds left u) (hv : LowerHolds right v) :
+    UpperHolds (endpointSubtract left right) (u - v) := by
+  cases left <;> cases right <;> simp_all [LowerHolds, UpperHolds, endpointSubtract] <;> omega
+
+theorem addMagnitudeBound (u v : Int) (a b : Nat)
+    (hu : u.natAbs < 2 ^ a) (hv : v.natAbs < 2 ^ b) :
+    (u + v).natAbs < 2 ^ (max a b + 1) ∧ (u - v).natAbs < 2 ^ (max a b + 1) := by
+  have leftCap := Nat.pow_le_pow_right (n := 2) (by decide) (Nat.le_max_left a b)
+  have rightCap := Nat.pow_le_pow_right (n := 2) (by decide) (Nat.le_max_right a b)
+  have sumBound : (u + v).natAbs ≤ u.natAbs + v.natAbs := by omega
+  have differenceBound : (u - v).natAbs ≤ u.natAbs + v.natAbs := by omega
+  rw [Nat.pow_succ]
+  omega
+
+theorem addBitsSound (left right : Option Nat) (u v : Int)
+    (hu : MagnitudeHolds left u) (hv : MagnitudeHolds right v) :
+    MagnitudeHolds (addBits left right) (u + v) ∧
+    MagnitudeHolds (addBits left right) (u - v) := by
+  cases left with
+  | none => simp [addBits, MagnitudeHolds]
+  | some a =>
+    cases right with
+    | none => simp [addBits, MagnitudeHolds]
+    | some b => exact addMagnitudeBound u v a b hu hv
+
+theorem multiplyMagnitudeBound (u v : Int) (a b : Nat)
+    (hu : u.natAbs < 2 ^ a) (hv : v.natAbs < 2 ^ b) :
+    (u * v).natAbs < 2 ^ (a + b) := by
+  rw [Int.natAbs_mul, Nat.pow_add]
+  by_cases zero : v.natAbs = 0
+  · simp [zero, Nat.pow_pos (a := 2) (by decide)]
+  · have product := Nat.mul_lt_mul_of_pos_right hu (by omega : 0 < v.natAbs)
+    exact Nat.lt_of_lt_of_le product (Nat.mul_le_mul_left _ (Nat.le_of_lt hv))
+
+theorem multiplyBitsSound (left right : Option Nat) (u v : Int)
+    (hu : MagnitudeHolds left u) (hv : MagnitudeHolds right v) :
+    MagnitudeHolds (multiplyBits left right) (u * v) := by
+  cases left with
+  | none => simp [multiplyBits, MagnitudeHolds]
+  | some a =>
+    cases right with
+    | none => simp [multiplyBits, MagnitudeHolds]
+    | some b => exact multiplyMagnitudeBound u v a b hu hv
+
+def Bounds.add (left right : Bounds) : Bounds :=
+  ⟨endpointAdd left.lower right.lower, endpointAdd left.upper right.upper,
+    addBits left.magnitudeBits right.magnitudeBits⟩
+
+def Bounds.subtract (left right : Bounds) : Bounds :=
+  ⟨endpointSubtract left.lower right.upper, endpointSubtract left.upper right.lower,
+    addBits left.magnitudeBits right.magnitudeBits⟩
+
+theorem boundsAddSound (left right : Bounds) (u v : Int)
+    (hu : Holds left u) (hv : Holds right v) : Holds (left.add right) (u + v) :=
+  ⟨lowerAddSound _ _ u v hu.1 hv.1, upperAddSound _ _ u v hu.2.1 hv.2.1,
+    (addBitsSound _ _ u v hu.2.2 hv.2.2).1⟩
+
+theorem boundsSubtractSound (left right : Bounds) (u v : Int)
+    (hu : Holds left u) (hv : Holds right v) : Holds (left.subtract right) (u - v) :=
+  ⟨lowerSubtractSound _ _ u v hu.1 hv.2.1, upperSubtractSound _ _ u v hu.2.1 hv.1,
+    (addBitsSound _ _ u v hu.2.2 hv.2.2).2⟩
+
+theorem scaledInterval (lower value upper factor : Int)
+    (lo : lower ≤ value) (hi : value ≤ upper) :
+    min (lower * factor) (upper * factor) ≤ value * factor ∧
+    value * factor ≤ max (lower * factor) (upper * factor) := by
+  by_cases nonnegative : 0 ≤ factor
+  · have left := Int.mul_le_mul_of_nonneg_right lo nonnegative
+    have right := Int.mul_le_mul_of_nonneg_right hi nonnegative
+    omega
+  · have left := Int.mul_le_mul_of_nonpos_right lo (by omega : factor ≤ 0)
+    have right := Int.mul_le_mul_of_nonpos_right hi (by omega : factor ≤ 0)
+    omega
+
+theorem productInterval (a b c d u v : Int)
+    (hu : a ≤ u ∧ u ≤ b) (hv : c ≤ v ∧ v ≤ d) :
+    min (min (a * c) (a * d)) (min (b * c) (b * d)) ≤ u * v ∧
+    u * v ≤ max (max (a * c) (a * d)) (max (b * c) (b * d)) := by
+  have valueBounds := scaledInterval a u b v hu.1 hu.2
+  have leftBounds := scaledInterval c v d a hv.1 hv.2
+  have rightBounds := scaledInterval c v d b hv.1 hv.2
+  simp only [Int.mul_comm] at leftBounds rightBounds
+  omega
+
+def productRange : Option Int → Option Int → Option Int → Option Int → Option Int × Option Int
+  | some a, some b, some c, some d =>
+    (some (min (min (a * c) (a * d)) (min (b * c) (b * d))),
+     some (max (max (a * c) (a * d)) (max (b * c) (b * d))))
+  | _, _, _, _ => (none, none)
+
+theorem productRangeSound (a b c d : Option Int) (u v : Int)
+    (hu : LowerHolds a u ∧ UpperHolds b u) (hv : LowerHolds c v ∧ UpperHolds d v) :
+    LowerHolds (productRange a b c d).1 (u * v) ∧
+    UpperHolds (productRange a b c d).2 (u * v) := by
+  cases a <;> cases b <;> cases c <;> cases d <;>
+    simp_all only [productRange, LowerHolds, UpperHolds, true_and, and_true]
+  exact productInterval _ _ _ _ u v hu hv
+
+def Bounds.isZero (bounds : Bounds) : Bool :=
+  decide (bounds.magnitudeBits = some 0 ∨ bounds.lower = some 0 ∧ bounds.upper = some 0)
+
+theorem zeroValue (bounds : Bounds) (value : Int)
+    (zero : bounds.isZero = true) (held : Holds bounds value) : value = 0 := by
+  have test := of_decide_eq_true zero
+  rcases test with bits | ⟨lo, hi⟩
+  · have bound := magnitudeBound bounds value 0 held bits
+    simp only [Nat.pow_zero] at bound
+    omega
+  · have lower := lowerBound bounds value 0 held lo
+    have upper := upperBound bounds value 0 held hi
+    omega
+
+def Bounds.multiply (left right : Bounds) : Bounds :=
+  if left.isZero || right.isZero then singleton 0 else
+    let range := productRange left.lower left.upper right.lower right.upper
+    ⟨range.1, range.2, multiplyBits left.magnitudeBits right.magnitudeBits⟩
+
+theorem boundsMultiplySound (left right : Bounds) (u v : Int)
+    (hu : Holds left u) (hv : Holds right v) : Holds (left.multiply right) (u * v) := by
+  unfold Bounds.multiply
+  split
+  · rename_i zero
+    simp only [Bool.or_eq_true] at zero
+    rcases zero with zero | zero
+    · apply (singletonExact _ _).mpr
+      rw [zeroValue left u zero hu, Int.zero_mul]
+    · apply (singletonExact _ _).mpr
+      rw [zeroValue right v zero hv, Int.mul_zero]
+  · have range := productRangeSound left.lower left.upper right.lower right.upper u v
+      ⟨hu.1, hu.2.1⟩ ⟨hv.1, hv.2.1⟩
+    exact ⟨range.1, range.2, multiplyBitsSound _ _ u v hu.2.2 hv.2.2⟩
+
+def Domain.binary (operation : Bounds → Bounds → Bounds) (left right : Domain) : Domain :=
+  match left.normalize, right.normalize with
+  | .bounded a, .bounded b => (Domain.bounded (operation a b)).normalize
+  | _, _ => .unreachable
+
+theorem binarySound (operation : Bounds → Bounds → Bounds) (evaluate : Int → Int → Int)
+    (sound : ∀ a b u v, Holds a u → Holds b v → Holds (operation a b) (evaluate u v))
+    (left right : Domain) (u v : Int) (hu : left.Holds u) (hv : right.Holds v) :
+    (Domain.binary operation left right).Holds (evaluate u v) := by
+  have leftHeld := (normalizeSound left u).mpr hu
+  have rightHeld := (normalizeSound right v).mpr hv
+  unfold Domain.binary
+  cases leftCase : left.normalize with
+  | unreachable => simp [leftCase, Domain.Holds] at leftHeld
+  | bounded a =>
+    cases rightCase : right.normalize with
+    | unreachable => simp [rightCase, Domain.Holds] at rightHeld
+    | bounded b =>
+      simp only [leftCase, rightCase, Domain.Holds] at leftHeld rightHeld ⊢
+      exact (normalizeSound (Domain.bounded (operation a b)) (evaluate u v)).mpr
+        (sound a b u v leftHeld rightHeld)
+
+def Domain.add : Domain → Domain → Domain := Domain.binary Bounds.add
+
+def Domain.subtract : Domain → Domain → Domain := Domain.binary Bounds.subtract
+
+def Domain.multiply : Domain → Domain → Domain := Domain.binary Bounds.multiply
+
+theorem addSound (left right : Domain) (u v : Int) (hu : left.Holds u) (hv : right.Holds v) :
+    (left.add right).Holds (u + v) :=
+  binarySound Bounds.add (· + ·) boundsAddSound left right u v hu hv
+
+theorem subtractSound (left right : Domain) (u v : Int) (hu : left.Holds u) (hv : right.Holds v) :
+    (left.subtract right).Holds (u - v) :=
+  binarySound Bounds.subtract (· - ·) boundsSubtractSound left right u v hu hv
+
+theorem multiplySound (left right : Domain) (u v : Int) (hu : left.Holds u) (hv : right.Holds v) :
+    (left.multiply right).Holds (u * v) :=
+  binarySound Bounds.multiply (· * ·) boundsMultiplySound left right u v hu hv
+
 end ReductionBounds.IntegerSize

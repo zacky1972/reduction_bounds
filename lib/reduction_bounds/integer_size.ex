@@ -28,6 +28,13 @@ defmodule ReductionBounds.IntegerSize do
   must not be used to represent an impossible branch. This domain does
   not by itself establish whether a program branch can execute.
 
+  `from_integer/1` describes a constant. `add/2`, `subtract/2`, and
+  `multiply/2` propagate size information for independently chosen operand
+  values. They validate and normalize both operands, propagate unreachable
+  states, and return conservative descriptions of the results. They are
+  reusable domain operations; automatic extraction from program expressions
+  and size-dependent cost inference are subsequent work.
+
   ## Examples
 
       iex> alias ReductionBounds.IntegerSize
@@ -170,6 +177,144 @@ defmodule ReductionBounds.IntegerSize do
   def contains?(_size, _value) do
     raise ArgumentError, "expected integer size information and an integer value"
   end
+
+  @doc """
+  Returns exact range and magnitude information for an integer constant.
+
+      iex> ReductionBounds.IntegerSize.from_integer(-8)
+      %ReductionBounds.IntegerSize{lower: -8, upper: -8, magnitude_bits: 4}
+      iex> ReductionBounds.IntegerSize.from_integer(0)
+      %ReductionBounds.IntegerSize{lower: 0, upper: 0, magnitude_bits: 0}
+  """
+  @spec from_integer(integer()) :: constraints()
+  def from_integer(value) when is_integer(value) do
+    bits = if value == 0, do: 0, else: length(Integer.digits(abs(value), 2))
+    %__MODULE__{lower: value, upper: value, magnitude_bits: bits}
+  end
+
+  def from_integer(_value), do: raise(ArgumentError, "expected an integer constant")
+
+  @doc """
+  Bounds addition for every pair of values in the operand descriptions.
+
+  Finite lower bounds are added, as are finite upper bounds. If both
+  magnitude bounds are known, the result uses `max(left_bits, right_bits) + 1`.
+  An unknown component stays unknown when the rule cannot bound it.
+  An unreachable operand makes the result unreachable.
+
+      iex> alias ReductionBounds.IntegerSize
+      iex> IntegerSize.add(IntegerSize.from_integer(7), IntegerSize.from_integer(1))
+      %IntegerSize{lower: 8, upper: 8, magnitude_bits: 4}
+  """
+  @spec add(t(), t()) :: t()
+  def add(left, right), do: combine(left, right, &add_constraints/2)
+
+  @doc """
+  Bounds subtraction for every pair of values in the operand descriptions.
+
+  The lower endpoint is `left.lower - right.upper`, and the upper endpoint
+  is `left.upper - right.lower`, when the required endpoints are finite.
+  Known magnitude bounds use `max(left_bits, right_bits) + 1`.
+  Reusing the same description on both sides does not imply that the
+  concrete operands are equal; this domain does not track correlations.
+
+      iex> alias ReductionBounds.IntegerSize
+      iex> IntegerSize.subtract(IntegerSize.from_integer(8), IntegerSize.from_integer(8))
+      %IntegerSize{lower: 0, upper: 0, magnitude_bits: 5}
+  """
+  @spec subtract(t(), t()) :: t()
+  def subtract(left, right), do: combine(left, right, &subtract_constraints/2)
+
+  @doc """
+  Bounds multiplication for every pair of values in the operand descriptions.
+
+  When all endpoints are finite, the range uses the minimum and maximum
+  of the four endpoint products. Otherwise both range endpoints are
+  unbounded. Known magnitude bounds are added. A known zero operand
+  yields exact zero unless an operand is unreachable.
+
+  This rule is sound but may lose information for one-sided ranges.
+  These functions do not assign costs or model a runtime integer format.
+
+      iex> alias ReductionBounds.IntegerSize
+      iex> IntegerSize.multiply(IntegerSize.from_integer(-8), IntegerSize.from_integer(2))
+      %IntegerSize{lower: -16, upper: -16, magnitude_bits: 6}
+  """
+  @spec multiply(t(), t()) :: t()
+  def multiply(left, right), do: combine(left, right, &multiply_constraints/2)
+
+  defp combine(left, right, operation) do
+    case {normalize(left), normalize(right)} do
+      {:unreachable, _right} -> :unreachable
+      {_left, :unreachable} -> :unreachable
+      {left, right} -> normalize(operation.(left, right))
+    end
+  end
+
+  defp add_constraints(left, right) do
+    %__MODULE__{
+      lower: add_endpoint(left.lower, right.lower),
+      upper: add_endpoint(left.upper, right.upper),
+      magnitude_bits: arithmetic_bits(left.magnitude_bits, right.magnitude_bits, :add)
+    }
+  end
+
+  defp subtract_constraints(left, right) do
+    %__MODULE__{
+      lower: subtract_endpoint(left.lower, right.upper),
+      upper: subtract_endpoint(left.upper, right.lower),
+      magnitude_bits: arithmetic_bits(left.magnitude_bits, right.magnitude_bits, :add)
+    }
+  end
+
+  defp multiply_constraints(left, right) do
+    if zero?(left) or zero?(right) do
+      from_integer(0)
+    else
+      {lower, upper} = product_range(left, right)
+
+      %__MODULE__{
+        lower: lower,
+        upper: upper,
+        magnitude_bits: arithmetic_bits(left.magnitude_bits, right.magnitude_bits, :multiply)
+      }
+    end
+  end
+
+  defp add_endpoint(:unbounded, _right), do: :unbounded
+  defp add_endpoint(_left, :unbounded), do: :unbounded
+  defp add_endpoint(left, right), do: left + right
+
+  defp subtract_endpoint(:unbounded, _right), do: :unbounded
+  defp subtract_endpoint(_left, :unbounded), do: :unbounded
+  defp subtract_endpoint(left, right), do: left - right
+
+  defp arithmetic_bits(:unknown, _right, _operation), do: :unknown
+  defp arithmetic_bits(_left, :unknown, _operation), do: :unknown
+  defp arithmetic_bits(left, right, :add), do: max(left, right) + 1
+  defp arithmetic_bits(left, right, :multiply), do: left + right
+
+  defp zero?(%__MODULE__{magnitude_bits: 0}), do: true
+  defp zero?(%__MODULE__{lower: 0, upper: 0}), do: true
+  defp zero?(_size), do: false
+
+  defp product_range(
+         %__MODULE__{lower: lower_left, upper: upper_left},
+         %__MODULE__{lower: lower_right, upper: upper_right}
+       )
+       when is_integer(lower_left) and is_integer(upper_left) and
+              is_integer(lower_right) and is_integer(upper_right) do
+    products = [
+      lower_left * lower_right,
+      lower_left * upper_right,
+      upper_left * lower_right,
+      upper_left * upper_right
+    ]
+
+    {Enum.min(products), Enum.max(products)}
+  end
+
+  defp product_range(_left, _right), do: {:unbounded, :unbounded}
 
   defp ensure_valid!(size) do
     unless valid?(size), do: raise(ArgumentError, "invalid integer size information")

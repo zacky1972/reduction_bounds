@@ -195,4 +195,122 @@ defmodule ReductionBounds.IntegerSizeTest do
       assert_raise ArgumentError, fn -> IntegerSize.unreachable?(size) end
     end
   end
+
+  test "integer constants have exact signed ranges and minimal magnitude widths" do
+    for {value, width} <- [{0, 0}, {1, 1}, {-1, 1}, {7, 3}, {-8, 4}] do
+      assert IntegerSize.from_integer(value) ==
+               %IntegerSize{lower: value, upper: value, magnitude_bits: width}
+    end
+
+    large = Integer.pow(2, 200)
+    assert IntegerSize.from_integer(large).magnitude_bits == 201
+    assert IntegerSize.from_integer(-large).magnitude_bits == 201
+    assert_raise ArgumentError, fn -> IntegerSize.from_integer(1.0) end
+  end
+
+  test "addition and subtraction propagate signed endpoints and magnitude bounds" do
+    left = %IntegerSize{lower: -4, upper: 7, magnitude_bits: 3}
+    right = %IntegerSize{lower: -2, upper: 1, magnitude_bits: 2}
+
+    assert IntegerSize.add(left, right) ==
+             %IntegerSize{lower: -6, upper: 8, magnitude_bits: 4}
+
+    assert IntegerSize.subtract(left, right) ==
+             %IntegerSize{lower: -5, upper: 9, magnitude_bits: 4}
+  end
+
+  test "multiplication accounts for all signed endpoint products" do
+    left = %IntegerSize{lower: -4, upper: 7, magnitude_bits: 3}
+    right = %IntegerSize{lower: -2, upper: 1, magnitude_bits: 2}
+
+    assert IntegerSize.multiply(left, right) ==
+             %IntegerSize{lower: -14, upper: 8, magnitude_bits: 5}
+
+    assert IntegerSize.multiply(
+             %IntegerSize{lower: -5, upper: -2},
+             %IntegerSize{lower: -3, upper: -1}
+           ) == %IntegerSize{lower: 2, upper: 15}
+  end
+
+  test "partial information remains sound and zero multiplication stays precise" do
+    assert IntegerSize.add(%IntegerSize{lower: 2}, %IntegerSize{lower: 3}) ==
+             %IntegerSize{lower: 5}
+
+    assert IntegerSize.subtract(%IntegerSize{lower: 2}, %IntegerSize{upper: 3}) ==
+             %IntegerSize{lower: -1}
+
+    assert IntegerSize.multiply(%IntegerSize{lower: 2}, IntegerSize.unknown()) ==
+             IntegerSize.unknown()
+
+    assert IntegerSize.multiply(%IntegerSize{magnitude_bits: 3}, %IntegerSize{magnitude_bits: 4}) ==
+             %IntegerSize{magnitude_bits: 7}
+
+    for zero <- [%IntegerSize{magnitude_bits: 0}, %IntegerSize{lower: 0, upper: 0}] do
+      assert IntegerSize.multiply(zero, IntegerSize.unknown()) == IntegerSize.from_integer(0)
+      assert IntegerSize.multiply(IntegerSize.unknown(), zero) == IntegerSize.from_integer(0)
+    end
+  end
+
+  test "arithmetic propagates unreachable operands while rejecting malformed operands" do
+    empty = %IntegerSize{lower: 3, upper: 2}
+    zero = IntegerSize.from_integer(0)
+
+    for operation <- [:add, :subtract, :multiply],
+        unreachable <- [:unreachable, empty] do
+      assert apply(IntegerSize, operation, [unreachable, zero]) == :unreachable
+      assert apply(IntegerSize, operation, [zero, unreachable]) == :unreachable
+      assert_raise ArgumentError, fn -> apply(IntegerSize, operation, [:unreachable, nil]) end
+      assert_raise ArgumentError, fn -> apply(IntegerSize, operation, [nil, :unreachable]) end
+    end
+  end
+
+  test "arithmetic bounds contain every result on a finite operand domain" do
+    descriptions = [
+      IntegerSize.unknown(),
+      :unreachable,
+      %IntegerSize{lower: 2, upper: 1},
+      %IntegerSize{magnitude_bits: 0},
+      %IntegerSize{lower: -5, upper: -2, magnitude_bits: 3},
+      %IntegerSize{lower: -3, upper: 4, magnitude_bits: 3},
+      %IntegerSize{lower: 0},
+      %IntegerSize{upper: -1},
+      %IntegerSize{magnitude_bits: 3}
+    ]
+
+    for left <- descriptions, right <- descriptions do
+      add = IntegerSize.add(left, right)
+      difference = IntegerSize.subtract(left, right)
+      product = IntegerSize.multiply(left, right)
+
+      for u <- -8..8,
+          v <- -8..8,
+          IntegerSize.contains?(left, u),
+          IntegerSize.contains?(right, v) do
+        assert IntegerSize.contains?(add, u + v)
+        assert IntegerSize.contains?(difference, u - v)
+        assert IntegerSize.contains?(product, u * v)
+      end
+    end
+  end
+
+  test "independent operands and large intermediate results are not inferred from final cancellation" do
+    interval = %IntegerSize{lower: 1, upper: 3, magnitude_bits: 2}
+
+    assert IntegerSize.subtract(interval, interval) ==
+             %IntegerSize{lower: -2, upper: 2, magnitude_bits: 3}
+
+    value = Integer.pow(2, 200)
+    input = IntegerSize.from_integer(value)
+    product = IntegerSize.multiply(input, input)
+    cancelled = IntegerSize.subtract(product, product)
+
+    assert product == %IntegerSize{
+             lower: value * value,
+             upper: value * value,
+             magnitude_bits: 402
+           }
+
+    assert cancelled == %IntegerSize{lower: 0, upper: 0, magnitude_bits: 403}
+    assert IntegerSize.contains?(cancelled, 0)
+  end
 end

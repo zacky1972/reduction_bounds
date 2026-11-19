@@ -35,9 +35,9 @@ and Elixir predicates on signed boundary cases and values around
 `2^200`, and confirms that Lean rejects an invalid membership claim.
 These finite comparisons check the serialization and examples; they
 are not a universal proof of the Elixir implementation. The generic
-theorems apply to the Lean definitions. Arithmetic size propagation,
-inference from program expressions, and operation-cost contracts are
-subsequent work. No immediate-integer threshold or ERTS reduction
+theorems apply to the Lean definitions. Basic arithmetic size propagation
+is described below. Inference from program expressions and operation-cost
+contracts are subsequent work. No immediate-integer threshold or ERTS reduction
 accounting is assumed here.
 
 ### Unknown information and unreachable states
@@ -83,6 +83,76 @@ do not establish universal correctness of the Elixir implementation.
 The domain is not yet connected to branch conditions in the analyzers;
 a claim that actual program control cannot reach a branch will also need
 proof that the constraints describe all states at that point.
+
+### Constants and arithmetic size propagation
+
+The common integer domain now provides `from_integer/1`, `add/2`,
+`subtract/2`, and `multiply/2`. For every pair of integer operands
+satisfying the supplied descriptions, the result description contains
+the corresponding arithmetic result. These are domain operations;
+they are not yet applied automatically to extracted Core Erlang.
+
+For a constant `z`, `from_integer(z)` has the exact interval `[z, z]`
+and the smallest magnitude width with `abs(z) < 2^width`. Zero has
+width zero. Let `[L1, U1]` and `[L2, U2]` denote finite operand
+intervals, and let `w1` and `w2` be known magnitude bounds.
+
+| Operation | Interval rule | Magnitude bound |
+| --- | --- | --- |
+| Addition | `[L1 + L2, U1 + U2]` | `max(w1, w2) + 1` |
+| Subtraction | `[L1 - U2, U1 - L2]` | `max(w1, w2) + 1` |
+| Multiplication | Minimum and maximum of `L1*L2`, `L1*U2`, `U1*L2`, `U1*U2` | `w1 + w2` |
+
+For addition and subtraction, an endpoint is unknown if a required
+operand endpoint is unknown. The magnitude result is unknown if either
+operand magnitude is unknown. For multiplication, this first rule uses
+unbounded endpoints unless all four operand endpoints are finite. It
+still propagates known magnitude bounds. A valid operand with magnitude
+zero, or with both endpoints zero, gives an exact zero product when the
+other operand is not unreachable. The one-sided multiplication rule
+is deliberately conservative and can be refined later.
+
+Both operands are validated and normalized before every operation.
+If either denotes the empty set, the result is `:unreachable`, including
+zero times an unreachable operand. Malformed information remains an
+error, even if the other operand is unreachable. Result normalization
+preserves the represented set.
+
+The domain does not track correlations between operands. Subtracting
+`[1, 3]` from the same description therefore gives `[-2, 2]` rather
+than inferring zero. Constant cancellation can still produce the exact
+interval `[0, 0]`, while the propagated magnitude bound is deliberately
+coarse. The analysis keeps descriptions of intermediate values separate:
+a zero final result does not reduce the bound on an earlier product.
+For example, squaring `2^200` has exact value `2^400` and a propagated
+magnitude bound of 402, even if subtracting that product from itself
+later produces zero.
+
+In Lean, `magnitudeBitsCorrect` and `magnitudeBitsMinimal` characterize
+the constant width, and `singletonExact` characterizes its represented
+set. The endpoint and magnitude lemmas establish the arithmetic rules
+for all integer values. `productInterval` bounds the signed product by
+the four corners, and `zeroValue` justifies the zero shortcut.
+`boundsAddSound`, `boundsSubtractSound`, and `boundsMultiplySound`
+combine interval and magnitude constraints. `binarySound` lifts these
+rules through input and output normalization. `addSound`,
+`subtractSound`, and `multiplySound` state the final domain guarantees
+under operand membership assumptions. The same axiom audit covers
+all these theorems.
+
+The existing two integer-size test files also cover carry bits,
+negative products, one-sided bounds, unreachable inputs, invalid inputs,
+large intermediate products, and cancellation. Finite-domain tests
+check every admitted operand pair in the chosen small grid. The proof
+test compares the Elixir and Lean transfer results for all combinations
+of its example descriptions and rejects false claims about a missing
+carry bit and unrelated operands. These comparisons test agreement on
+examples; the universal theorems apply to the Lean definitions.
+
+Shifts, bitwise operations, branch refinement, propagation through
+program bindings and calls, recursive size invariants, and size-dependent
+operation-cost contracts remain subsequent work. No runtime word size,
+small-integer boundary, or ERTS reduction formula is fixed here.
 
 ## Map and struct operations
 
