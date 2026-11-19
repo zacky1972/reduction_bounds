@@ -416,4 +416,78 @@ defmodule ReductionBounds.IntegerSizeTest do
     assert IntegerSize.contains?(masked, 0)
     assert shifted.magnitude_bits == 201
   end
+
+  test "right shifts round negative values downward and XOR handles signed values" do
+    assert IntegerSize.shift_right(%IntegerSize{lower: -9, upper: 8, magnitude_bits: 4}, 3) ==
+             %IntegerSize{lower: -2, upper: 1, magnitude_bits: 4}
+
+    assert IntegerSize.bit_xor(IntegerSize.from_integer(-1), IntegerSize.from_integer(7)) ==
+             %IntegerSize{magnitude_bits: 4}
+
+    for x <- -16..16, y <- -16..16 do
+      size = IntegerSize.bit_xor(IntegerSize.from_integer(x), IntegerSize.from_integer(y))
+      assert IntegerSize.contains?(size, Bitwise.bxor(x, y))
+
+      for amount <- [0, 1, 8] do
+        shifted = IntegerSize.shift_right(IntegerSize.from_integer(x), amount)
+        assert IntegerSize.contains?(shifted, Bitwise.bsr(x, amount))
+      end
+    end
+
+    assert IntegerSize.bit_xor(:unreachable, IntegerSize.unknown()) == :unreachable
+    assert IntegerSize.shift_right(:unreachable, 0) == :unreachable
+    assert_raise ArgumentError, fn -> IntegerSize.shift_right(:unreachable, -1) end
+  end
+
+  test "join includes each input and unreachable is its identity" do
+    left = %IntegerSize{lower: -4, upper: -1, magnitude_bits: 3}
+    right = %IntegerSize{lower: 2, upper: 7, magnitude_bits: 3}
+    assert IntegerSize.join(left, right) == %IntegerSize{lower: -4, upper: 7, magnitude_bits: 3}
+    assert IntegerSize.join(:unreachable, left) == left
+    assert IntegerSize.join(left, :unreachable) == left
+    assert IntegerSize.join(left, IntegerSize.unknown()) == IntegerSize.unknown()
+
+    for x <- -10..10, IntegerSize.contains?(left, x) or IntegerSize.contains?(right, x) do
+      assert IntegerSize.contains?(IntegerSize.join(left, right), x)
+    end
+  end
+
+  test "assumptions preserve branch values and detect contradictory paths" do
+    size = %IntegerSize{lower: -4, upper: 7, magnitude_bits: 3}
+
+    assert IntegerSize.assume(size, :lt, 0, true) == %IntegerSize{
+             lower: -4,
+             upper: -1,
+             magnitude_bits: 3
+           }
+
+    assert IntegerSize.assume(size, :ge, 0, true) == %IntegerSize{
+             lower: 0,
+             upper: 7,
+             magnitude_bits: 3
+           }
+
+    assert IntegerSize.assume(size, :lt, -4, true) == :unreachable
+
+    tests = [
+      lt: &Kernel.</2,
+      le: &Kernel.<=/2,
+      eq: &Kernel.==/2,
+      ne: &Kernel.!=/2,
+      ge: &Kernel.>=/2,
+      gt: &Kernel.>/2
+    ]
+
+    for {op, predicate} <- tests,
+        constant <- -5..8,
+        truth <- [true, false],
+        value <- -10..10,
+        IntegerSize.contains?(size, value),
+        predicate.(value, constant) == truth do
+      narrowed = IntegerSize.assume(size, op, constant, truth)
+      assert IntegerSize.contains?(narrowed, value)
+    end
+
+    assert_raise ArgumentError, fn -> IntegerSize.assume(size, :unknown, 0, true) end
+  end
 end

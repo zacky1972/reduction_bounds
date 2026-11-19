@@ -32,12 +32,18 @@ defmodule ReductionBounds.IntegerSize do
   `multiply/2` propagate size information for independently chosen operand
   values. They validate and normalize both operands, propagate unreachable
   states, and return conservative descriptions of the results. They are
-  reusable domain operations; automatic extraction from program expressions
-  and size-dependent cost inference are subsequent work.
+  reusable domain operations. `ReductionBounds.infer_integer_sizes/2`
+  applies them to a supported Core Erlang fragment; size-dependent cost
+  inference remains subsequent work.
 
-  `shift_left/2` and `mask/2` handle constant nonnegative shift amounts
-  and mask widths. They preserve intermediate-size descriptions: applying
+  `shift_left/2`, `shift_right/2`, and `mask/2` handle constant
+  nonnegative shift amounts and mask widths. `bit_xor/2` covers signed
+  integer XOR. They preserve intermediate-size descriptions: applying
   a mask does not change a description already obtained for its input.
+
+  `assume/4` narrows a description using a comparison with a constant.
+  `join/2` combines alternative results, retaining bounds that cover both
+  alternatives. Unreachable information is the identity of this join.
 
   ## Examples
 
@@ -291,6 +297,111 @@ defmodule ReductionBounds.IntegerSize do
   end
 
   def mask(_size, _width), do: raise(ArgumentError, "expected a nonnegative integer mask width")
+
+  @doc "Bounds arithmetic right shift by a nonnegative constant; known magnitude bounds do not grow."
+  @spec shift_right(t(), non_neg_integer()) :: t()
+  def shift_right(size, amount) when is_integer(amount) and amount >= 0 do
+    transform(size, fn %__MODULE__{} = size ->
+      divisor = Integer.pow(2, amount)
+
+      %__MODULE__{
+        size
+        | lower: divide_endpoint(size.lower, divisor),
+          upper: divide_endpoint(size.upper, divisor)
+      }
+    end)
+  end
+
+  def shift_right(_size, _amount),
+    do: raise(ArgumentError, "expected a nonnegative integer shift amount")
+
+  @doc "Bounds signed XOR. Known operand widths give max(left_bits, right_bits) + 1; ranges are unbounded."
+  @spec bit_xor(t(), t()) :: t()
+  def bit_xor(left, right) do
+    combine(left, right, fn left, right ->
+      %__MODULE__{
+        magnitude_bits: arithmetic_bits(left.magnitude_bits, right.magnitude_bits, :add)
+      }
+    end)
+  end
+
+  @doc "Returns a description containing both operand sets. Unreachable information is the identity."
+  @spec join(t(), t()) :: t()
+  def join(left, right) do
+    case {normalize(left), normalize(right)} do
+      {:unreachable, right} ->
+        right
+
+      {left, :unreachable} ->
+        left
+
+      {left, right} ->
+        normalize(%__MODULE__{
+          lower: join_endpoint(left.lower, right.lower, :min),
+          upper: join_endpoint(left.upper, right.upper, :max),
+          magnitude_bits: join_bits(left.magnitude_bits, right.magnitude_bits)
+        })
+    end
+  end
+
+  @doc """
+  Narrows a description under a comparison with an integer constant.
+
+  Comparisons are :lt, :le, :eq, :ne, :ge, and :gt. The Boolean selects
+  the true or false branch. A comparison excluding one value leaves the description unchanged
+  because this domain cannot represent an interval with one value removed.
+  Contradictions become :unreachable.
+  """
+  @spec assume(t(), :lt | :le | :eq | :ne | :ge | :gt, integer(), boolean()) :: t()
+  def assume(size, comparison, constant, truth)
+      when comparison in [:lt, :le, :eq, :ne, :ge, :gt] and is_integer(constant) and
+             is_boolean(truth) do
+    transform(size, &assume_constraints(&1, comparison, constant, truth))
+  end
+
+  def assume(_size, _comparison, _constant, _truth),
+    do: raise(ArgumentError, "invalid integer comparison")
+
+  defp divide_endpoint(:unbounded, _divisor), do: :unbounded
+  defp divide_endpoint(value, divisor), do: Integer.floor_div(value, divisor)
+
+  defp join_endpoint(:unbounded, _right, _operation), do: :unbounded
+  defp join_endpoint(_left, :unbounded, _operation), do: :unbounded
+  defp join_endpoint(left, right, :min), do: min(left, right)
+  defp join_endpoint(left, right, :max), do: max(left, right)
+
+  defp join_bits(:unknown, _right), do: :unknown
+  defp join_bits(_left, :unknown), do: :unknown
+  defp join_bits(left, right), do: max(left, right)
+
+  defp lower_at_least(size, constant) do
+    lower = if size.lower == :unbounded, do: constant, else: max(size.lower, constant)
+    %{size | lower: lower}
+  end
+
+  defp upper_at_most(size, constant) do
+    upper = if size.upper == :unbounded, do: constant, else: min(size.upper, constant)
+    %{size | upper: upper}
+  end
+
+  defp assume_constraints(size, :lt, constant, true), do: upper_at_most(size, constant - 1)
+  defp assume_constraints(size, :lt, constant, false), do: lower_at_least(size, constant)
+  defp assume_constraints(size, :le, constant, true), do: upper_at_most(size, constant)
+  defp assume_constraints(size, :le, constant, false), do: lower_at_least(size, constant + 1)
+
+  defp assume_constraints(size, :eq, constant, true),
+    do: size |> lower_at_least(constant) |> upper_at_most(constant)
+
+  defp assume_constraints(size, :eq, _constant, false), do: size
+
+  defp assume_constraints(size, :ne, constant, truth),
+    do: assume_constraints(size, :eq, constant, not truth)
+
+  defp assume_constraints(size, :ge, constant, truth),
+    do: assume_constraints(size, :lt, constant, not truth)
+
+  defp assume_constraints(size, :gt, constant, truth),
+    do: assume_constraints(size, :le, constant, not truth)
 
   defp transform(size, operation) do
     case normalize(size) do

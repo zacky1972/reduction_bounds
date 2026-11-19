@@ -39,6 +39,12 @@ defmodule ReductionBounds.ProofInput do
     packaged_postludes(proof, @sources ++ ["ExecutionBound.lean"])
   end
 
+  @spec integer_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def integer_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, ["IntegerSize.lean", "IntegerAnalysis.lean"])
+  end
+
   defp packaged_postludes(proof, sources) do
     case :code.priv_dir(:reduction_bounds) do
       {:error, reason} -> {:error, {:priv_dir, reason}}
@@ -88,6 +94,10 @@ defmodule ReductionBounds.ProofInput do
         {%{proof | source: proof.source <> audit}, %{checked_theorems: theorems}}
     end
   end
+
+  defp case_study_theorems(%{source: :integer_fragment}),
+    do:
+      ~w(ReductionBounds.IntegerAnalysis.inferSound targetIntegerSizeCorrect targetIntegerTraceCorrect targetIntegerSizeBound)
 
   defp case_study_theorems(%{source: :lynx_builtin, value_model: :membership}),
     do: ~w(listRulesSound listPathBounds searchCostDerivation listValueAndBound)

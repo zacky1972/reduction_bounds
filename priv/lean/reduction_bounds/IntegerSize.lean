@@ -551,4 +551,223 @@ theorem maskSound (input : Domain) (value : Int) (width : Nat) (held : input.Hol
   unarySound (fun bounds => bounds.mask width) (fun value => maskValue value width)
     (fun bounds value => boundsMaskSound bounds value width) input value held
 
+
+def rightValue (value : Int) (amount : Nat) : Int := value >>> amount
+
+theorem rightMagnitude (value : Int) (amount : Nat) : (rightValue value amount).natAbs ≤ value.natAbs := by
+  cases value with
+  | ofNat n => exact Nat.shiftRight_le n amount
+  | negSucc n =>
+    change (n >>> amount) + 1 ≤ n + 1
+    have := Nat.shiftRight_le n amount
+    omega
+
+theorem divideMonotone (a b divisor : Int) (positive : 0 < divisor) (ordered : a ≤ b) :
+    a / divisor ≤ b / divisor := by
+  apply (Int.le_ediv_iff_mul_le positive).mpr
+  have := (Int.le_ediv_iff_mul_le positive).mp (Int.le_refl (a / divisor))
+  omega
+
+def divideEndpoint (endpoint : Option Int) (amount : Nat) : Option Int :=
+  endpoint.map (fun value => value / (2 ^ amount : Nat))
+
+def Bounds.shiftRight (bounds : Bounds) (amount : Nat) : Bounds :=
+  ⟨divideEndpoint bounds.lower amount, divideEndpoint bounds.upper amount, bounds.magnitudeBits⟩
+
+theorem boundsShiftRightSound (bounds : Bounds) (value : Int) (amount : Nat)
+    (held : Holds bounds value) : Holds (bounds.shiftRight amount) (rightValue value amount) := by
+  have positive : (0 : Int) < (2 ^ amount : Nat) := by exact_mod_cast Nat.pow_pos (a := 2) (by decide)
+  refine ⟨?_, ?_, ?_⟩
+  · cases lower : bounds.lower with
+    | none => simp [Bounds.shiftRight, divideEndpoint, LowerHolds, lower]
+    | some endpoint =>
+      have lo := lowerBound bounds value endpoint held lower
+      simpa [Bounds.shiftRight, divideEndpoint, LowerHolds, lower, rightValue, Int.shiftRight_eq_div_pow]
+        using divideMonotone endpoint value _ positive lo
+  · cases upper : bounds.upper with
+    | none => simp [Bounds.shiftRight, divideEndpoint, UpperHolds, upper]
+    | some endpoint =>
+      have hi := upperBound bounds value endpoint held upper
+      simpa [Bounds.shiftRight, divideEndpoint, UpperHolds, upper, rightValue, Int.shiftRight_eq_div_pow]
+        using divideMonotone value endpoint _ positive hi
+  · cases bits : bounds.magnitudeBits with
+    | none => simp [Bounds.shiftRight, MagnitudeHolds, bits]
+    | some width =>
+      simpa [Bounds.shiftRight, MagnitudeHolds, bits] using
+        Nat.lt_of_le_of_lt (rightMagnitude value amount) (magnitudeBound _ _ _ held bits)
+
+def xorValue : Int → Int → Int
+  | .ofNat a, .ofNat b => .ofNat (a ^^^ b)
+  | .negSucc a, .negSucc b => .ofNat (a ^^^ b)
+  | .ofNat a, .negSucc b => .negSucc (a ^^^ b)
+  | .negSucc a, .ofNat b => .negSucc (a ^^^ b)
+
+theorem xorMagnitude (u v : Int) (a b : Nat)
+    (hu : u.natAbs < 2 ^ a) (hv : v.natAbs < 2 ^ b) :
+    (xorValue u v).natAbs < 2 ^ (max a b + 1) := by
+  have leftCap := Nat.pow_le_pow_right (n := 2) (by decide) (Nat.le_max_left a b)
+  have rightCap := Nat.pow_le_pow_right (n := 2) (by decide) (Nat.le_max_right a b)
+  have positive : 0 < 2 ^ max a b := Nat.pow_pos (by decide)
+  cases u <;> cases v <;> rename_i x y
+  all_goals
+    simp only [Int.natAbs] at hu hv
+    have cap := Nat.xor_lt_two_pow (x := x) (y := y) (n := max a b) (by omega) (by omega)
+    simp only [xorValue, Int.natAbs]
+    rw [Nat.pow_succ]
+    omega
+
+def Bounds.bitXor (left right : Bounds) : Bounds := ⟨none, none, addBits left.magnitudeBits right.magnitudeBits⟩
+
+theorem boundsXorSound (left right : Bounds) (u v : Int) (hu : Holds left u) (hv : Holds right v) :
+    Holds (left.bitXor right) (xorValue u v) := by
+  refine ⟨trivial, trivial, ?_⟩
+  cases a : left.magnitudeBits <;> cases b : right.magnitudeBits <;>
+    simp [Bounds.bitXor, addBits, MagnitudeHolds, a, b]
+  exact xorMagnitude u v _ _ (magnitudeBound _ _ _ hu a) (magnitudeBound _ _ _ hv b)
+
+def Domain.shiftRight (input : Domain) (amount : Nat) : Domain :=
+  Domain.unary (fun bounds => bounds.shiftRight amount) input
+
+def Domain.bitXor : Domain → Domain → Domain := Domain.binary Bounds.bitXor
+
+theorem shiftRightSound (input : Domain) (value : Int) (amount : Nat) (held : input.Holds value) :
+    (input.shiftRight amount).Holds (rightValue value amount) :=
+  unarySound _ _ (fun bounds value => boundsShiftRightSound bounds value amount) _ _ held
+
+theorem xorSound (left right : Domain) (u v : Int) (hu : left.Holds u) (hv : right.Holds v) :
+    (left.bitXor right).Holds (xorValue u v) := binarySound _ _ boundsXorSound _ _ _ _ hu hv
+
+def joinLower : Option Int → Option Int → Option Int
+  | some a, some b => some (min a b)
+  | _, _ => none
+
+def joinUpper : Option Int → Option Int → Option Int
+  | some a, some b => some (max a b)
+  | _, _ => none
+
+def joinBits : Option Nat → Option Nat → Option Nat
+  | some a, some b => some (max a b)
+  | _, _ => none
+
+def Bounds.join (a b : Bounds) : Bounds :=
+  ⟨joinLower a.lower b.lower, joinUpper a.upper b.upper, joinBits a.magnitudeBits b.magnitudeBits⟩
+
+theorem boundsJoinLeft (a b : Bounds) (value : Int) (held : Holds a value) : Holds (a.join b) value := by
+  refine ⟨?_, ?_, ?_⟩
+  · have lo := held.1
+    cases al : a.lower <;> cases bl : b.lower <;>
+      simp_all [Bounds.join, joinLower, LowerHolds] <;> omega
+  · have hi := held.2.1
+    cases au : a.upper <;> cases bu : b.upper <;>
+      simp_all [Bounds.join, joinUpper, UpperHolds] <;> omega
+  · have bits := held.2.2
+    cases aw : a.magnitudeBits with
+    | none => simp [Bounds.join, joinBits, MagnitudeHolds, aw]
+    | some width =>
+      cases bw : b.magnitudeBits with
+      | none => simp [Bounds.join, joinBits, MagnitudeHolds, bw]
+      | some other =>
+        have cap := Nat.pow_le_pow_right (n := 2) (by decide) (Nat.le_max_left width other)
+        simpa [Bounds.join, joinBits, MagnitudeHolds, aw, bw] using
+          Nat.lt_of_lt_of_le (magnitudeBound a value width held aw) cap
+
+theorem boundsJoinComm (a b : Bounds) : a.join b = b.join a := by
+  rcases a with ⟨al, au, aw⟩
+  rcases b with ⟨bl, bu, bw⟩
+  cases al <;> cases bl <;> cases au <;> cases bu <;> cases aw <;> cases bw <;>
+    simp [Bounds.join, joinLower, joinUpper, joinBits, Int.min_comm, Int.max_comm, Nat.max_comm]
+
+def Domain.join (left right : Domain) : Domain :=
+  match left.normalize, right.normalize with
+  | .unreachable, b => b
+  | a, .unreachable => a
+  | .bounded a, .bounded b => (Domain.bounded (a.join b)).normalize
+
+theorem joinLeftSound (left right : Domain) (value : Int) (held : left.Holds value) :
+    (left.join right).Holds value := by
+  have lh := (normalizeSound left value).mpr held
+  unfold Domain.join
+  cases lc : left.normalize with
+  | unreachable => simp [lc, Domain.Holds] at lh
+  | bounded a =>
+    cases rc : right.normalize with
+    | unreachable => simpa [lc, rc] using lh
+    | bounded b =>
+      simp only [lc, Domain.Holds] at lh ⊢
+      exact (normalizeSound (Domain.bounded (a.join b)) value).mpr (boundsJoinLeft a b value lh)
+
+theorem joinComm (left right : Domain) : left.join right = right.join left := by
+  unfold Domain.join
+  cases left.normalize <;> cases right.normalize <;> simp [boundsJoinComm]
+
+theorem joinRightSound (left right : Domain) (value : Int) (held : right.Holds value) :
+    (left.join right).Holds value := by
+  rw [joinComm]
+  exact joinLeftSound right left value held
+
+inductive Comparison where
+  | lt | le | eq | ne | ge | gt
+  deriving DecidableEq
+
+def Comparison.test (op : Comparison) (value constant : Int) : Bool :=
+  match op with
+  | .lt => decide (value < constant)
+  | .le => decide (value ≤ constant)
+  | .eq => decide (value = constant)
+  | .ne => decide (value ≠ constant)
+  | .ge => decide (constant ≤ value)
+  | .gt => decide (constant < value)
+
+def Bounds.lowerAtLeast (bounds : Bounds) (constant : Int) : Bounds :=
+  { bounds with lower := some (match bounds.lower with | none => constant | some old => max old constant) }
+
+def Bounds.upperAtMost (bounds : Bounds) (constant : Int) : Bounds :=
+  { bounds with upper := some (match bounds.upper with | none => constant | some old => min old constant) }
+
+theorem lowerAtLeastSound (bounds : Bounds) (constant value : Int) (held : Holds bounds value)
+    (lower : constant ≤ value) : Holds (bounds.lowerAtLeast constant) value := by
+  rcases held with ⟨lo, hi, bits⟩
+  refine ⟨?_, hi, bits⟩
+  cases lowerCase : bounds.lower <;> simp_all [Bounds.lowerAtLeast, LowerHolds] <;> omega
+
+theorem upperAtMostSound (bounds : Bounds) (constant value : Int) (held : Holds bounds value)
+    (upper : value ≤ constant) : Holds (bounds.upperAtMost constant) value := by
+  rcases held with ⟨lo, hi, bits⟩
+  refine ⟨lo, ?_, bits⟩
+  cases upperCase : bounds.upper <;> simp_all [Bounds.upperAtMost, UpperHolds] <;> omega
+
+def Bounds.assume (bounds : Bounds) (op : Comparison) (constant : Int) (truth : Bool) : Bounds :=
+  match op, truth with
+  | .lt, true | .ge, false => bounds.upperAtMost (constant - 1)
+  | .lt, false | .ge, true => bounds.lowerAtLeast constant
+  | .le, true | .gt, false => bounds.upperAtMost constant
+  | .le, false | .gt, true => bounds.lowerAtLeast (constant + 1)
+  | .eq, true | .ne, false => (bounds.lowerAtLeast constant).upperAtMost constant
+  | .eq, false | .ne, true => bounds
+
+theorem boundsAssumeSound (bounds : Bounds) (op : Comparison) (constant value : Int) (truth : Bool)
+    (held : Holds bounds value) (branch : op.test value constant = truth) :
+    Holds (bounds.assume op constant truth) value := by
+  cases op <;> cases truth <;> simp only [Comparison.test, decide_eq_false_iff_not, decide_eq_true_eq] at branch
+  all_goals first
+    | exact held
+    | exact lowerAtLeastSound bounds _ value held (by omega)
+    | exact upperAtMostSound bounds _ value held (by omega)
+    | exact upperAtMostSound _ _ value (lowerAtLeastSound bounds _ value held (by omega)) (by omega)
+
+def Domain.assume (input : Domain) (op : Comparison) (constant : Int) (truth : Bool) : Domain :=
+  Domain.unary (fun bounds => bounds.assume op constant truth) input
+
+theorem assumeSound (input : Domain) (op : Comparison) (constant value : Int) (truth : Bool)
+    (held : input.Holds value) (branch : op.test value constant = truth) :
+    (input.assume op constant truth).Holds value := by
+  have normalized := (normalizeSound input value).mpr held
+  unfold Domain.assume Domain.unary
+  cases inputCase : input.normalize with
+  | unreachable => simp [inputCase, Domain.Holds] at normalized
+  | bounded bounds =>
+    simp only [inputCase, Domain.Holds] at normalized ⊢
+    exact (normalizeSound (Domain.bounded (bounds.assume op constant truth)) value).mpr
+      (boundsAssumeSound bounds op constant value truth normalized branch)
+
 end ReductionBounds.IntegerSize

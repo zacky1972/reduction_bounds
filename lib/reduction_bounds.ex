@@ -1,6 +1,6 @@
 defmodule ReductionBounds do
   @moduledoc ~S'''
-  Verifies Lean declarations and infers symbolic costs for supported list traversals.
+  Verifies Lean declarations and infers symbolic costs and integer sizes for supported code.
 
   ## Examples
 
@@ -146,6 +146,42 @@ defmodule ReductionBounds do
   refined bound as the preceding call. `infer_list_call_bound/3` checks the
   callee theorem again and applies it in the same Lean run. `caller_cost`
   represents the wrapper's own symbolic cost.
+
+  ## Inspect integer ranges and intermediate widths
+
+  Define an integer function and retain its BEAM binary, then supply an
+  independent size description for each argument.
+
+  ```elixir
+  alias ReductionBounds.IntegerSize
+
+  {:module, SizeDemo, integer_beam, _} =
+    defmodule SizeDemo do
+      def update(x) do
+        y = x * 3
+        if y < 0, do: y - 1, else: y + 1
+      end
+    end
+
+  {:ok, sizes} =
+    ReductionBounds.infer_integer_sizes({SizeDemo, :update, 1},
+      beam_binaries: [integer_beam],
+      input_sizes: [%IntegerSize{lower: -2, upper: 4, magnitude_bits: 3}]
+    )
+
+  sizes.result_size
+  #=> %IntegerSize{lower: -7, upper: 13, magnitude_bits: 6}
+  sizes.intermediates
+  sizes.unresolved_sizes
+  ```
+
+  Lean checks the final and intermediate descriptions against the shared
+  integer interpreter and proves its size rule under the input conditions.
+  Branch rows expose the conditions used to narrow their descriptions.
+  Unknown widths appear in `unresolved_sizes`. This is a non-recursive
+  mathematical integer model: the source decoder remains trusted, agreement
+  with a Lynx-translated target is not checked, and no runtime cost bound
+  is asserted. See `infer_integer_sizes/2` for the supported fragment.
   '''
 
   @type target :: {module(), atom(), arity()}
@@ -504,6 +540,56 @@ defmodule ReductionBounds do
     end
   end
 
+  @doc """
+  Infers integer ranges and magnitude widths from a supported Core Erlang function.
+
+  The non-recursive fragment supports integer constants and variables, bindings,
+  addition, subtraction, multiplication, XOR, constant nonnegative shifts,
+  low-bit masks, and Boolean cases comparing an integer expression with a constant.
+  All arguments and results are mathematical integers. Input descriptions are
+  independent; relational input assumptions are not supported.
+
+  Pass `input_sizes: [size, ...]` in argument order. Omission uses unknown sizes.
+  `beam_binaries` supports modules compiled in memory. Other verification options
+  include `timeout`, `max_concurrency`, and `lean_options`.
+
+  ```elixir
+  alias ReductionBounds.IntegerSize
+
+  {:module, SizeExample, beam, _} =
+    defmodule SizeExample do
+      def update(x) do
+        y = x * 3
+        if y < 0, do: y - 1, else: y + 1
+      end
+    end
+
+  ReductionBounds.infer_integer_sizes({SizeExample, :update, 1},
+    beam_binaries: [beam],
+    input_sizes: [%IntegerSize{lower: -2, upper: 4, magnitude_bits: 3}]
+  )
+  ```
+
+  The result contains `result_size`, `intermediates`, branch conditions, and
+  `unresolved_sizes`. Lean checks the candidate against the abstract interpreter
+  and proves that every evaluation of the reified fragment satisfies the result
+  description under the input conditions. Source extraction and reification are
+  trusted. `proof_scope: :reified_integer_fragment` and `value_agreement:
+  :not_checked` distinguish this from agreement with a Lynx-translated target.
+  This entry point derives sizes, not reduction or execution-time bounds.
+  Calls outside the fragment and unsupported conditions return contextual errors.
+  """
+  @spec infer_integer_sizes(target(), keyword()) :: {:ok, map()} | {:error, term()}
+  def infer_integer_sizes(target, options \\ []) do
+    with :ok <- validate_targets([target]),
+         {:ok, options} <- validate_options(options, :integer_sizes),
+         {inputs, options} = Keyword.pop!(options, :input_sizes),
+         {:ok, candidate, proof} <-
+           ReductionBounds.IntegerAnalysis.infer(target, options[:beam_binaries], inputs) do
+      verify_bound(target, candidate, proof, Keyword.delete(options, :beam_binaries))
+    end
+  end
+
   defp list_size_measure(nil), do: :list_length
   defp list_size_measure(%Lynx.Lean{}), do: :input_size
 
@@ -534,6 +620,9 @@ defmodule ReductionBounds do
       {:ok, verify_targets(translation, Enum.uniq(targets), options, definition)}
     end
   end
+
+  defp proof_postludes(proof, :integer_fragment),
+    do: ReductionBounds.ProofInput.integer_postludes(proof)
 
   defp proof_postludes(proof, :struct_fragment), do: ReductionBounds.ProofInput.postludes(proof)
 
@@ -590,6 +679,9 @@ defmodule ReductionBounds do
         :struct_bound ->
           Keyword.delete(defaults, :termination_suffixes)
 
+        :integer_sizes ->
+          [input_sizes: nil] ++ Keyword.delete(defaults, :termination_suffixes)
+
         :execution_bound ->
           [call_contracts: %{}] ++ Keyword.delete(defaults, :termination_suffixes)
 
@@ -609,6 +701,12 @@ defmodule ReductionBounds do
       {:error, _keys} -> {:error, :invalid_options}
       {key, value} -> {:error, {:invalid_option, key, value}}
     end
+  end
+
+  defp valid_option?({:input_sizes, nil}), do: true
+
+  defp valid_option?({:input_sizes, values}) do
+    is_list(values) and Enum.all?(values, &ReductionBounds.IntegerSize.valid?/1)
   end
 
   defp valid_option?({:input_contract, value}), do: is_struct(value, Lynx.Lean)
@@ -737,7 +835,8 @@ defmodule ReductionBounds do
     translation |> Lynx.Translation.assemble(cache: false) |> import_postlude("Erlang.lists")
   end
 
-  defp assemble_target(translation, _target, :periodic_fragment) do
+  defp assemble_target(translation, _target, fragment)
+       when fragment in [:periodic_fragment, :integer_fragment] do
     Lynx.Translation.assemble(translation, cache: false)
   end
 

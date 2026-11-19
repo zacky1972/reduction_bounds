@@ -122,6 +122,60 @@ defmodule ReductionBounds.IntegerSizeProofTest do
     end
   end
 
+  test "Lean agrees on XOR, right shifts, joins, and comparison assumptions" do
+    examples = [
+      IntegerSize.unknown(),
+      :unreachable,
+      IntegerSize.from_integer(-1),
+      IntegerSize.from_integer(0),
+      %IntegerSize{lower: -4, upper: 7, magnitude_bits: 3},
+      %IntegerSize{lower: 0},
+      %IntegerSize{lower: 2, upper: 1}
+    ]
+
+    pairs =
+      for left <- examples,
+          right <- examples,
+          {operation, lean} <- [bit_xor: "bitXor", join: "join"],
+          into: "" do
+        result = apply(IntegerSize, operation, [left, right])
+
+        "example : Domain.#{lean} #{domain(left)} #{domain(right)} = #{domain(result)} := by decide\n"
+      end
+
+    shifts =
+      for size <- examples, amount <- [0, 1, 8], into: "" do
+        "example : Domain.shiftRight #{domain(size)} #{amount} = #{domain(IntegerSize.shift_right(size, amount))} := by decide\n"
+      end
+
+    branches =
+      for size <- examples,
+          op <- [:lt, :le, :eq, :ne, :ge, :gt],
+          constant <- [-1, 0, 8],
+          truth <- [true, false],
+          into: "" do
+        narrowed = IntegerSize.assume(size, op, constant, truth)
+
+        "example : Domain.assume #{domain(size)} .#{op} (#{constant}) #{truth} = #{domain(narrowed)} := by decide\n"
+      end
+
+    values =
+      for u <- [-8, -1, 0, 7], v <- [-8, -1, 0, 7], into: "" do
+        "example : xorValue (#{u}) (#{v}) = (#{Bitwise.bxor(u, v)}) := by decide\n"
+      end
+
+    right_values =
+      for value <- values(), amount <- [0, 1, 8], into: "" do
+        "example : rightValue (#{value}) #{amount} = (#{Bitwise.bsr(value, amount)}) := by decide\n"
+      end
+
+    assert [%{status: :ok}] =
+             verify(
+               "set_option exponentiation.threshold 1024\n" <>
+                 pairs <> shifts <> branches <> values <> right_values <> audit()
+             )
+  end
+
   defp arithmetic_examples() do
     [
       IntegerSize.unknown(),
@@ -188,7 +242,13 @@ defmodule ReductionBounds.IntegerSizeProofTest do
       source: "open ReductionBounds.IntegerSize\n" <> source
     }
 
-    translation = Lynx.Translation.new(postludes: [Lynx.Lean.from_file!(path), proof])
+    analysis_path = Path.join(Path.dirname(path), "IntegerAnalysis.lean")
+
+    translation =
+      Lynx.Translation.new(
+        postludes: [Lynx.Lean.from_file!(path), Lynx.Lean.from_file!(analysis_path), proof]
+      )
+
     project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
     Lynx.Commands.verify!(project, Lynx.Translation.assemble(translation, cache: false))
   end
@@ -251,7 +311,24 @@ defmodule ReductionBounds.IntegerSizeProofTest do
           ``ReductionBounds.IntegerSize.boundsMaskSound,
           ``ReductionBounds.IntegerSize.unarySound,
           ``ReductionBounds.IntegerSize.shiftLeftSound,
-          ``ReductionBounds.IntegerSize.maskSound] do
+          ``ReductionBounds.IntegerSize.maskSound,
+          ``ReductionBounds.IntegerSize.rightMagnitude,
+          ``ReductionBounds.IntegerSize.divideMonotone,
+          ``ReductionBounds.IntegerSize.boundsShiftRightSound,
+          ``ReductionBounds.IntegerSize.xorMagnitude,
+          ``ReductionBounds.IntegerSize.boundsXorSound,
+          ``ReductionBounds.IntegerSize.shiftRightSound,
+          ``ReductionBounds.IntegerSize.xorSound,
+          ``ReductionBounds.IntegerSize.boundsJoinLeft,
+          ``ReductionBounds.IntegerSize.boundsJoinComm,
+          ``ReductionBounds.IntegerSize.joinLeftSound,
+          ``ReductionBounds.IntegerSize.joinComm,
+          ``ReductionBounds.IntegerSize.joinRightSound,
+          ``ReductionBounds.IntegerSize.lowerAtLeastSound,
+          ``ReductionBounds.IntegerSize.upperAtMostSound,
+          ``ReductionBounds.IntegerSize.boundsAssumeSound,
+          ``ReductionBounds.IntegerSize.assumeSound,
+          ``ReductionBounds.IntegerAnalysis.inferSound] do
         for dependency in ← Lean.collectAxioms theoremName do
           unless #[``propext, ``Classical.choice, ``Quot.sound].contains dependency do
             throwError m!"Unexpected axiom in {theoremName}: {dependency}"

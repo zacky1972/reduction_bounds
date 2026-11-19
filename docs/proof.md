@@ -149,9 +149,9 @@ of its example descriptions and rejects false claims about a missing
 carry bit and unrelated operands. These comparisons test agreement on
 examples; the universal theorems apply to the Lean definitions.
 
-Constant left shifts and low-bit masks are described below. Right
-shifts, general bitwise operations, branch refinement, propagation through
-program bindings and calls, recursive size invariants, and size-dependent
+The following sections cover constant shifts, low-bit masks, XOR,
+branch refinement, and propagation through supported Core Erlang bindings.
+Propagation through calls, recursive size invariants, and size-dependent
 operation-cost contracts remain subsequent work. No runtime word size,
 small-integer boundary, or ERTS reduction formula is fixed here.
 
@@ -212,10 +212,134 @@ which is zero for this concrete input. The later mask does not reduce
 the recorded bound for the earlier shifted intermediate.
 
 The two integer-size test files listed above reproduce these checks.
-Variable shift amounts, right shifts, XOR and other general bitwise
-operations, automatic Core Erlang propagation, and size-dependent cost
-contracts remain subsequent work. These rules introduce no immediate
-integer boundary or concrete ERTS reduction charges.
+These rules introduce no immediate integer boundary or concrete ERTS
+reduction charges.
+
+### Signed XOR and constant right shifts
+
+`bit_xor/2` propagates a conservative magnitude bound for signed XOR.
+With operand bounds `a` and `b`, the result has magnitude bound
+`max(a, b) + 1`. Its interval endpoints are unbounded. If either
+magnitude is unknown, the result magnitude is unknown. The extra bit
+is necessary for this uniform signed rule: `3 XOR -1 = -4`.
+`xorValue` defines the operation using natural-number XOR and the
+signed complement representation; `xorMagnitude`, `boundsXorSound`,
+and `xorSound` establish the size bound for every pair of admitted
+mathematical integers.
+
+`shift_right/2` accepts a fixed nonnegative amount `k`. It divides
+finite endpoints by `2^k` with floor rounding. The result retains the
+original magnitude bound, a deliberate conservative choice that also
+covers negative values such as `-1 >> k = -1`. `rightValue` uses
+Lean's signed right shift. `rightMagnitude`, `divideMonotone`,
+`boundsShiftRightSound`, and `shiftRightSound` justify the rule.
+Both operations validate and normalize operands and preserve
+unreachable information. The tests compare actual signed Elixir
+operations with the Lean definitions on boundary cases; these finite
+checks are not a proof of an Erlang built-in implementation.
+
+### Comparison assumptions and joins
+
+`assume(size, comparison, constant, truth)` refines an integer
+under a comparison with a constant `k`. The supported comparisons
+are `:lt`, `:le`, `:eq`, `:ne`, `:ge`, and `:gt`. For example,
+the true branch of `x < k` sets an upper bound of `k - 1`, and
+the false branch sets a lower bound of `k`. The true branch of
+`x == k` intersects both endpoints with `k`. Negated equality
+cannot in general be represented as one interval, so it leaves
+the description unchanged. `:ne`, `:ge`, and `:gt` use the
+corresponding complementary rules. Normalization turns contradictory
+branch constraints into `:unreachable`. `assumeSound` proves that
+every admitted value satisfying the selected condition remains admitted.
+
+`join/2` covers the union of two alternatives: take the minimum
+finite lower endpoint, maximum finite upper endpoint, and maximum
+known magnitude bound. An absent endpoint or unknown magnitude on
+either side makes that component unknown. `:unreachable` is the
+identity. `joinLeftSound` and `joinRightSound` prove inclusion of
+both alternatives. The domain does not track operand correlations
+or excluded interior points. Finite endpoints do not automatically
+supply a magnitude bound when `magnitude_bits` is unknown.
+
+### Size propagation through a Core Erlang fragment
+
+`ReductionBounds.infer_integer_sizes/2` extracts a target's Core Erlang
+from its BEAM debug information and decodes a non-recursive integer
+fragment. It supports integer literals, variables, single-variable
+bindings, sequencing of integer expressions, unary signs, addition,
+subtraction, multiplication, XOR, constant nonnegative shifts, low-bit
+masks, and Boolean branches comparing an integer expression with a
+constant. Constants on either side of a comparison are supported.
+An expression used as a test operand is bound to a fresh variable
+before branch refinement. Other function calls, recursion, variable
+shift amounts, general masks, and unsupported conditions are rejected
+with the target and a location in the decoded expression.
+
+```elixir
+alias ReductionBounds.IntegerSize
+
+{:ok, analysis} =
+  ReductionBounds.infer_integer_sizes({MyModule, :update, 1},
+    input_sizes: [%IntegerSize{lower: -2, upper: 4, magnitude_bits: 3}]
+  )
+```
+
+For `update(x)` defined as `y = x * 3` followed by
+`if y < 0, do: y - 1, else: y + 1`, the returned result has
+range `[-7, 13]` and magnitude bound 6. Omitted input descriptions
+are unknown; supplied descriptions must occur in argument order.
+`beam_binaries` supports modules compiled only in memory, as for
+other inference APIs. If an input is unreachable, the entire input
+state is unreachable, including for a constant-returning body.
+
+The result exposes `input_sizes`, `result_size`, and an ordered
+`intermediates` list. Each row records its expression path, operation,
+and inferred size. Operation rows also record operand sizes; rows
+inside a branch include its comparison and refined description.
+`unresolved_sizes` identifies rows without magnitude bounds. Intermediate
+sizes remain recorded before later masking or cancellation. The CRC-style
+fixture therefore reports a 16-bit shifted intermediate and a conservative
+17-bit XOR intermediate before returning an 8-bit masked result.
+
+`IntegerAnalysis.lean` defines a concrete mathematical integer
+evaluator and an abstract interpreter for the same expression datatype.
+`Covers` relates an input environment to its size descriptions.
+`bindCovers` proves preservation when a binding receives a value admitted
+by its inferred description. `refineCovers` proves preservation on a
+selected comparison branch. The structural theorem `inferSound`
+connects these rules: for every environment satisfying `Covers`,
+evaluation returns a value admitted by the inferred result description.
+The evaluator terminates by structural recursion on this finite,
+non-recursive expression syntax.
+
+For each target, `targetIntegerSizeCorrect` checks that the Elixir
+candidate equals the Lean interpreter's inferred result.
+`targetIntegerTraceCorrect` checks the complete ordered list of
+intermediate expression paths and size descriptions against the Lean
+trace. Additional descriptive metadata is not part of this equality.
+`targetIntegerSizeBound` instantiates the universal soundness theorem
+under the supplied input conditions. The common verification path records
+these theorem names and audits their dependencies; only `propext`,
+`Classical.choice`, and `Quot.sound` are permitted as axioms.
+
+The proof starts at the reified integer fragment. Extraction from
+BEAM debug information and the Elixir decoder remain trusted; this
+change does not prove correspondence with the original Core Erlang
+or with a Lynx-translated target. The result explicitly reports
+`proof_scope: :reified_integer_fragment`, `value_agreement: :not_checked`,
+`termination: :structural_model`, and `cost_model: :not_analyzed`.
+The result is size information, not a bound on runtime reductions or
+execution time. Arithmetic cost functions, recursive size invariants,
+and contracts for call results remain subsequent work.
+
+The following commands reproduce the domain tests, Lean comparisons,
+compiled-fixture checks, and rejection of falsified results and traces:
+
+```sh
+mix test test/reduction_bounds/integer_size_test.exs \
+  test/reduction_bounds/integer_size_proof_test.exs \
+  test/reduction_bounds/integer_analysis_test.exs
+```
 
 ## Map and struct operations
 
