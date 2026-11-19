@@ -84,6 +84,44 @@ defmodule ReductionBounds.IntegerSizeProofTest do
     end
   end
 
+  test "Lean agrees on shift and mask transfers and on actual signed bit operations" do
+    transfers =
+      for size <- [:unreachable | examples()], width <- [0, 1, 4, 64, 200], into: "" do
+        shifted = IntegerSize.shift_left(size, width)
+        masked = IntegerSize.mask(size, width)
+
+        """
+        example : Domain.shiftLeft #{domain(size)} #{width} = #{domain(shifted)} := by decide
+        example : Domain.mask #{domain(size)} #{width} = #{domain(masked)} := by decide
+        """
+      end
+
+    values =
+      for value <- values(), width <- [0, 1, 4, 64, 200], into: "" do
+        shifted = Bitwise.bsl(value, width)
+        masked = Bitwise.band(value, Integer.pow(2, width) - 1)
+
+        """
+        example : shiftValue (#{value}) #{width} = (#{shifted}) := by decide
+        example : maskValue (#{value}) #{width} = (#{masked}) := by decide
+        """
+      end
+
+    assert [%{module: "Erlang.postlude", status: :ok}] =
+             verify(
+               "set_option exponentiation.threshold 1024\n" <> transfers <> values <> audit()
+             )
+  end
+
+  test "Lean rejects losing shifted bits and retaining a negative value after masking" do
+    for source <- [
+          "example : Holds { magnitudeBits := some 3 } (shiftValue 7 1) := by decide",
+          "example : maskValue (-1) 4 = -1 := by decide"
+        ] do
+      assert Enum.any?(verify(source), &(&1.status == :error))
+    end
+  end
+
   defp arithmetic_examples() do
     [
       IntegerSize.unknown(),
@@ -195,7 +233,25 @@ defmodule ReductionBounds.IntegerSizeProofTest do
           ``ReductionBounds.IntegerSize.binarySound,
           ``ReductionBounds.IntegerSize.addSound,
           ``ReductionBounds.IntegerSize.subtractSound,
-          ``ReductionBounds.IntegerSize.multiplySound] do
+          ``ReductionBounds.IntegerSize.multiplySound,
+          ``ReductionBounds.IntegerSize.shiftValueMultiply,
+          ``ReductionBounds.IntegerSize.lowerShiftSound,
+          ``ReductionBounds.IntegerSize.upperShiftSound,
+          ``ReductionBounds.IntegerSize.shiftMagnitudeBound,
+          ``ReductionBounds.IntegerSize.shiftBitsSound,
+          ``ReductionBounds.IntegerSize.boundsShiftLeftSound,
+          ``ReductionBounds.IntegerSize.maskRange,
+          ``ReductionBounds.IntegerSize.maskResidue,
+          ``ReductionBounds.IntegerSize.maskUnique,
+          ``ReductionBounds.IntegerSize.maskMagnitudeBound,
+          ``ReductionBounds.IntegerSize.maskZeroWidth,
+          ``ReductionBounds.IntegerSize.maskInRange,
+          ``ReductionBounds.IntegerSize.maskNegativeOne,
+          ``ReductionBounds.IntegerSize.maskAfterFullShift,
+          ``ReductionBounds.IntegerSize.boundsMaskSound,
+          ``ReductionBounds.IntegerSize.unarySound,
+          ``ReductionBounds.IntegerSize.shiftLeftSound,
+          ``ReductionBounds.IntegerSize.maskSound] do
         for dependency in ← Lean.collectAxioms theoremName do
           unless #[``propext, ``Classical.choice, ``Quot.sound].contains dependency do
             throwError m!"Unexpected axiom in {theoremName}: {dependency}"

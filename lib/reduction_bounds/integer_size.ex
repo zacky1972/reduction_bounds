@@ -35,6 +35,10 @@ defmodule ReductionBounds.IntegerSize do
   reusable domain operations; automatic extraction from program expressions
   and size-dependent cost inference are subsequent work.
 
+  `shift_left/2` and `mask/2` handle constant nonnegative shift amounts
+  and mask widths. They preserve intermediate-size descriptions: applying
+  a mask does not change a description already obtained for its input.
+
   ## Examples
 
       iex> alias ReductionBounds.IntegerSize
@@ -242,6 +246,86 @@ defmodule ReductionBounds.IntegerSize do
   """
   @spec multiply(t(), t()) :: t()
   def multiply(left, right), do: combine(left, right, &multiply_constraints/2)
+
+  @doc """
+  Bounds a left shift by a fixed nonnegative number of bits.
+
+  Finite endpoints are multiplied by `2^amount`, including negative
+  endpoints. A known magnitude bound grows by `amount`. Known zero
+  stays exact zero. The shift amount must be an integer constant at
+  analysis time; negative amounts are rejected rather than interpreted
+  as right shifts.
+
+      iex> alias ReductionBounds.IntegerSize
+      iex> IntegerSize.shift_left(IntegerSize.from_integer(-3), 2)
+      %IntegerSize{lower: -12, upper: -12, magnitude_bits: 4}
+  """
+  @spec shift_left(t(), non_neg_integer()) :: t()
+  def shift_left(size, amount) when is_integer(amount) and amount >= 0 do
+    transform(size, &shift_constraints(&1, amount))
+  end
+
+  def shift_left(_size, _amount),
+    do: raise(ArgumentError, "expected a nonnegative integer shift amount")
+
+  @doc """
+  Bounds retaining the low `width` bits of any signed integer.
+
+  The value operation is `Integer.mod(value, 2^width)`, the nonnegative
+  residue that represents the low bits of an integer in two's complement.
+  It corresponds to masking with `2^width - 1`. The general result has
+  range `0..(2^width - 1)` and magnitude bound `width`. This first rule
+  discards other input range information, except for known zero.
+  A width of zero also gives exact zero. Unreachable inputs remain
+  unreachable. The width must be a nonnegative integer constant.
+
+      iex> alias ReductionBounds.IntegerSize
+      iex> IntegerSize.mask(IntegerSize.from_integer(-1), 4)
+      %IntegerSize{lower: 0, upper: 15, magnitude_bits: 4}
+      iex> IntegerSize.mask(IntegerSize.unknown(), 0)
+      %IntegerSize{lower: 0, upper: 0, magnitude_bits: 0}
+  """
+  @spec mask(t(), non_neg_integer()) :: t()
+  def mask(size, width) when is_integer(width) and width >= 0 do
+    transform(size, &mask_constraints(&1, width))
+  end
+
+  def mask(_size, _width), do: raise(ArgumentError, "expected a nonnegative integer mask width")
+
+  defp transform(size, operation) do
+    case normalize(size) do
+      :unreachable -> :unreachable
+      size -> normalize(operation.(size))
+    end
+  end
+
+  defp shift_constraints(size, amount) do
+    if zero?(size) do
+      from_integer(0)
+    else
+      factor = Integer.pow(2, amount)
+
+      %__MODULE__{
+        lower: scale_endpoint(size.lower, factor),
+        upper: scale_endpoint(size.upper, factor),
+        magnitude_bits: shift_bits(size.magnitude_bits, amount)
+      }
+    end
+  end
+
+  defp mask_constraints(size, width) do
+    if zero?(size) do
+      from_integer(0)
+    else
+      %__MODULE__{lower: 0, upper: Integer.pow(2, width) - 1, magnitude_bits: width}
+    end
+  end
+
+  defp scale_endpoint(:unbounded, _factor), do: :unbounded
+  defp scale_endpoint(endpoint, factor), do: endpoint * factor
+
+  defp shift_bits(:unknown, _amount), do: :unknown
+  defp shift_bits(bits, amount), do: bits + amount
 
   defp combine(left, right, operation) do
     case {normalize(left), normalize(right)} do

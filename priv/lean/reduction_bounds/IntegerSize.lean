@@ -399,4 +399,156 @@ theorem multiplySound (left right : Domain) (u v : Int) (hu : left.Holds u) (hv 
     (left.multiply right).Holds (u * v) :=
   binarySound Bounds.multiply (· * ·) boundsMultiplySound left right u v hu hv
 
+
+/-- Mathematical left shift, for any signed integer and a natural amount. -/
+def shiftValue (value : Int) (amount : Nat) : Int := value <<< amount
+
+theorem shiftValueMultiply (value : Int) (amount : Nat) :
+    shiftValue value amount = value * 2 ^ amount := Int.shiftLeft_eq value amount
+
+def scaleEndpoint (endpoint : Option Int) (amount : Nat) : Option Int :=
+  endpoint.map (fun value => value * 2 ^ amount)
+
+def shiftBits (bits : Option Nat) (amount : Nat) : Option Nat :=
+  bits.map (· + amount)
+
+theorem lowerShiftSound (endpoint : Option Int) (value : Int) (amount : Nat)
+    (held : LowerHolds endpoint value) :
+    LowerHolds (scaleEndpoint endpoint amount) (shiftValue value amount) := by
+  cases endpoint with
+  | none => trivial
+  | some lower =>
+    change lower * (2 : Int) ^ amount ≤ shiftValue value amount
+    rw [shiftValueMultiply]
+    exact Int.mul_le_mul_of_nonneg_right held
+      (Int.le_of_lt (Int.pow_pos (n := 2) (m := amount) (by decide)))
+
+theorem upperShiftSound (endpoint : Option Int) (value : Int) (amount : Nat)
+    (held : UpperHolds endpoint value) :
+    UpperHolds (scaleEndpoint endpoint amount) (shiftValue value amount) := by
+  cases endpoint with
+  | none => trivial
+  | some upper =>
+    change shiftValue value amount ≤ upper * (2 : Int) ^ amount
+    rw [shiftValueMultiply]
+    exact Int.mul_le_mul_of_nonneg_right held
+      (Int.le_of_lt (Int.pow_pos (n := 2) (m := amount) (by decide)))
+
+theorem shiftMagnitudeBound (value : Int) (width amount : Nat)
+    (held : value.natAbs < 2 ^ width) :
+    (shiftValue value amount).natAbs < 2 ^ (width + amount) := by
+  rw [shiftValueMultiply, Int.natAbs_mul, Int.natAbs_pow, Nat.pow_add]
+  exact Nat.mul_lt_mul_of_pos_right held (Nat.pow_pos (by decide))
+
+theorem shiftBitsSound (bits : Option Nat) (value : Int) (amount : Nat)
+    (held : MagnitudeHolds bits value) :
+    MagnitudeHolds (shiftBits bits amount) (shiftValue value amount) := by
+  cases bits with
+  | none => trivial
+  | some width => exact shiftMagnitudeBound value width amount held
+
+def Bounds.shiftLeft (bounds : Bounds) (amount : Nat) : Bounds :=
+  if bounds.isZero then singleton 0 else
+    ⟨scaleEndpoint bounds.lower amount, scaleEndpoint bounds.upper amount,
+      shiftBits bounds.magnitudeBits amount⟩
+
+theorem boundsShiftLeftSound (bounds : Bounds) (value : Int) (amount : Nat)
+    (held : Holds bounds value) : Holds (bounds.shiftLeft amount) (shiftValue value amount) := by
+  unfold Bounds.shiftLeft
+  split
+  · rename_i zero
+    apply (singletonExact _ _).mpr
+    rw [shiftValueMultiply, zeroValue bounds value zero held, Int.zero_mul]
+  · exact ⟨lowerShiftSound _ _ _ held.1, upperShiftSound _ _ _ held.2.1,
+      shiftBitsSound _ _ _ held.2.2⟩
+
+/-- Low bits are characterized by the unique nonnegative residue modulo 2^width. -/
+def maskValue (value : Int) (width : Nat) : Int := value % 2 ^ width
+
+theorem maskRange (value : Int) (width : Nat) :
+    0 ≤ maskValue value width ∧ maskValue value width < 2 ^ width := by
+  have positive : (0 : Int) < 2 ^ width := Int.pow_pos (by decide)
+  exact ⟨Int.emod_nonneg value (by omega), Int.emod_lt_of_pos value positive⟩
+
+theorem maskResidue (value : Int) (width : Nat) :
+    maskValue value width % 2 ^ width = value % 2 ^ width :=
+  Int.emod_emod value (2 ^ width)
+
+theorem maskUnique (value result : Int) (width : Nat)
+    (range : 0 ≤ result ∧ result < 2 ^ width)
+    (residue : result % 2 ^ width = value % 2 ^ width) : result = maskValue value width := by
+  rw [Int.emod_eq_of_lt range.1 range.2] at residue
+  exact residue
+
+theorem maskMagnitudeBound (value : Int) (width : Nat) :
+    (maskValue value width).natAbs < 2 ^ width := by
+  obtain ⟨nonnegative, upper⟩ := maskRange value width
+  have absolute := Int.natAbs_of_nonneg nonnegative
+  have power : (2 : Int) ^ width = ((2 ^ width : Nat) : Int) := (Int.natCast_pow 2 width).symm
+  rw [power] at upper
+  omega
+
+theorem maskZeroWidth (value : Int) : maskValue value 0 = 0 := by
+  simp [maskValue]
+
+theorem maskInRange (value : Int) (width : Nat)
+    (range : 0 ≤ value ∧ value < 2 ^ width) : maskValue value width = value :=
+  Int.emod_eq_of_lt range.1 range.2
+
+theorem maskNegativeOne (width : Nat) : maskValue (-1) width = 2 ^ width - 1 := by
+  have positive : (0 : Int) < 2 ^ width := Int.pow_pos (by decide)
+  apply (maskUnique (-1) (2 ^ width - 1) width (by omega) ?_).symm
+  simp
+
+theorem maskAfterFullShift (value : Int) (width : Nat) :
+    maskValue (shiftValue value width) width = 0 := by
+  simp [maskValue, shiftValueMultiply]
+
+def Bounds.mask (bounds : Bounds) (width : Nat) : Bounds :=
+  if bounds.isZero then singleton 0 else ⟨some 0, some (2 ^ width - 1), some width⟩
+
+theorem boundsMaskSound (bounds : Bounds) (value : Int) (width : Nat)
+    (held : Holds bounds value) : Holds (bounds.mask width) (maskValue value width) := by
+  unfold Bounds.mask
+  split
+  · rename_i zero
+    apply (singletonExact _ _).mpr
+    simp [maskValue, zeroValue bounds value zero held]
+  · have range := maskRange value width
+    exact ⟨range.1, by dsimp [UpperHolds]; omega, maskMagnitudeBound value width⟩
+
+def Domain.unary (operation : Bounds → Bounds) (input : Domain) : Domain :=
+  match input.normalize with
+  | .bounded bounds => (Domain.bounded (operation bounds)).normalize
+  | .unreachable => .unreachable
+
+theorem unarySound (operation : Bounds → Bounds) (evaluate : Int → Int)
+    (sound : ∀ bounds value, Holds bounds value → Holds (operation bounds) (evaluate value))
+    (input : Domain) (value : Int) (held : input.Holds value) :
+    (Domain.unary operation input).Holds (evaluate value) := by
+  have normalized := (normalizeSound input value).mpr held
+  unfold Domain.unary
+  cases inputCase : input.normalize with
+  | unreachable => simp [inputCase, Domain.Holds] at normalized
+  | bounded bounds =>
+    simp only [inputCase, Domain.Holds] at normalized ⊢
+    exact (normalizeSound (Domain.bounded (operation bounds)) (evaluate value)).mpr
+      (sound bounds value normalized)
+
+def Domain.shiftLeft (input : Domain) (amount : Nat) : Domain :=
+  Domain.unary (fun bounds => bounds.shiftLeft amount) input
+
+def Domain.mask (input : Domain) (width : Nat) : Domain :=
+  Domain.unary (fun bounds => bounds.mask width) input
+
+theorem shiftLeftSound (input : Domain) (value : Int) (amount : Nat) (held : input.Holds value) :
+    (input.shiftLeft amount).Holds (shiftValue value amount) :=
+  unarySound (fun bounds => bounds.shiftLeft amount) (fun value => shiftValue value amount)
+    (fun bounds value => boundsShiftLeftSound bounds value amount) input value held
+
+theorem maskSound (input : Domain) (value : Int) (width : Nat) (held : input.Holds value) :
+    (input.mask width).Holds (maskValue value width) :=
+  unarySound (fun bounds => bounds.mask width) (fun value => maskValue value width)
+    (fun bounds value => boundsMaskSound bounds value width) input value held
+
 end ReductionBounds.IntegerSize

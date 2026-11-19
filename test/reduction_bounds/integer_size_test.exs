@@ -313,4 +313,107 @@ defmodule ReductionBounds.IntegerSizeTest do
     assert cancelled == %IntegerSize{lower: 0, upper: 0, magnitude_bits: 403}
     assert IntegerSize.contains?(cancelled, 0)
   end
+
+  test "left shifts propagate signed endpoints and constant magnitude growth" do
+    assert IntegerSize.shift_left(IntegerSize.from_integer(-3), 2) ==
+             %IntegerSize{lower: -12, upper: -12, magnitude_bits: 4}
+
+    assert IntegerSize.shift_left(%IntegerSize{lower: -3}, 2) == %IntegerSize{lower: -12}
+    assert IntegerSize.shift_left(%IntegerSize{upper: -3}, 2) == %IntegerSize{upper: -12}
+
+    assert IntegerSize.shift_left(%IntegerSize{magnitude_bits: 3}, 2) ==
+             %IntegerSize{magnitude_bits: 5}
+
+    size = %IntegerSize{lower: -3, upper: 4, magnitude_bits: 3}
+    assert IntegerSize.shift_left(size, 0) == size
+    assert IntegerSize.shift_left(IntegerSize.unknown(), 8) == IntegerSize.unknown()
+  end
+
+  test "low-bit masks bound negative values without carrying over their magnitude bound" do
+    cap = Integer.pow(2, 64) - 1
+    masked = IntegerSize.mask(IntegerSize.from_integer(-1), 64)
+    assert masked == %IntegerSize{lower: 0, upper: cap, magnitude_bits: 64}
+    assert IntegerSize.contains?(masked, Bitwise.band(-1, cap))
+    refute IntegerSize.contains?(masked, -1)
+
+    assert IntegerSize.mask(IntegerSize.unknown(), 4) ==
+             %IntegerSize{lower: 0, upper: 15, magnitude_bits: 4}
+  end
+
+  test "zero and unreachable states survive shifts and masks" do
+    zero = IntegerSize.from_integer(0)
+    empty = %IntegerSize{lower: 3, upper: 2}
+
+    for operation <- [:shift_left, :mask], width <- [0, 1, 64, 200] do
+      assert apply(IntegerSize, operation, [zero, width]) == zero
+      assert apply(IntegerSize, operation, [%IntegerSize{magnitude_bits: 0}, width]) == zero
+      assert apply(IntegerSize, operation, [:unreachable, width]) == :unreachable
+      assert apply(IntegerSize, operation, [empty, width]) == :unreachable
+    end
+
+    assert IntegerSize.mask(IntegerSize.unknown(), 0) == zero
+  end
+
+  test "shift amounts and mask widths must be nonnegative integer constants" do
+    for operation <- [:shift_left, :mask],
+        width <- [-1, 1.0, :unknown, %IntegerSize{lower: 0}],
+        size <- [:unreachable, IntegerSize.unknown()] do
+      assert_raise ArgumentError, fn -> apply(IntegerSize, operation, [size, width]) end
+    end
+
+    for operation <- [:shift_left, :mask] do
+      assert_raise ArgumentError, fn -> apply(IntegerSize, operation, [nil, 4]) end
+
+      assert_raise ArgumentError, fn ->
+        apply(IntegerSize, operation, [%IntegerSize{magnitude_bits: -1}, 4])
+      end
+    end
+  end
+
+  test "shift and mask bounds contain actual bitwise results on signed inputs" do
+    large = Integer.pow(2, 200)
+    values = Enum.to_list(-32..32) ++ [-large, -large + 1, large - 1, large]
+
+    descriptions = [
+      IntegerSize.unknown(),
+      :unreachable,
+      %IntegerSize{lower: 3, upper: 2},
+      %IntegerSize{lower: -5, upper: -1, magnitude_bits: 3},
+      %IntegerSize{lower: -3, upper: 4, magnitude_bits: 3},
+      %IntegerSize{lower: 0},
+      %IntegerSize{upper: -1},
+      %IntegerSize{magnitude_bits: 0}
+    ]
+
+    for size <- descriptions, width <- [0, 1, 2, 4, 8, 64, 200] do
+      shifted = IntegerSize.shift_left(size, width)
+      masked = IntegerSize.mask(size, width)
+      factor = Integer.pow(2, width)
+
+      for value <- values, IntegerSize.contains?(size, value) do
+        actual_shift = Bitwise.bsl(value, width)
+        actual_mask = Bitwise.band(value, factor - 1)
+        assert actual_shift == value * factor
+        assert actual_mask == Integer.mod(value, factor)
+        assert IntegerSize.contains?(shifted, actual_shift)
+        assert IntegerSize.contains?(masked, actual_mask)
+      end
+    end
+  end
+
+  test "a small masked result does not erase a large pre-mask intermediate" do
+    input = IntegerSize.from_integer(Integer.pow(2, 100))
+    shifted = IntegerSize.shift_left(input, 100)
+    masked = IntegerSize.mask(shifted, 64)
+
+    assert shifted == %IntegerSize{
+             lower: Integer.pow(2, 200),
+             upper: Integer.pow(2, 200),
+             magnitude_bits: 201
+           }
+
+    assert masked == %IntegerSize{lower: 0, upper: Integer.pow(2, 64) - 1, magnitude_bits: 64}
+    assert IntegerSize.contains?(masked, 0)
+    assert shifted.magnitude_bits == 201
+  end
 end

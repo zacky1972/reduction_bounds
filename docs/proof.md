@@ -149,10 +149,73 @@ of its example descriptions and rejects false claims about a missing
 carry bit and unrelated operands. These comparisons test agreement on
 examples; the universal theorems apply to the Lean definitions.
 
-Shifts, bitwise operations, branch refinement, propagation through
+Constant left shifts and low-bit masks are described below. Right
+shifts, general bitwise operations, branch refinement, propagation through
 program bindings and calls, recursive size invariants, and size-dependent
 operation-cost contracts remain subsequent work. No runtime word size,
 small-integer boundary, or ERTS reduction formula is fixed here.
+
+### Constant left shifts and low-bit masks
+
+`shift_left/2` accepts a size description and a fixed nonnegative integer
+shift amount `k`. Each finite endpoint is multiplied by `2^k`; missing
+endpoints remain unbounded. A known magnitude bound `w` becomes `w + k`,
+while an unknown bound stays unknown. Positive scaling preserves the
+order of negative as well as positive endpoints. A known zero input
+remains exact zero. The modeled value is `shiftValue z k = z <<< k`.
+`shiftValueMultiply` relates it to `z * 2^k` using Lean's signed shift
+semantics. `lowerShiftSound`, `upperShiftSound`, and `shiftBitsSound`
+prove the component rules, and `boundsShiftLeftSound` combines them.
+
+`mask/2` retains the low `k` bits, for any signed integer input. Its
+mathematical value is the nonnegative remainder `maskValue z k = z % 2^k`
+with Euclidean division. This defines a low-bit mask without choosing
+a machine word size. In particular, masking `-1` gives `2^k - 1`;
+it does not retain the original magnitude bound of one bit. The general
+result interval is `[0, 2^k - 1]` and its magnitude bound is `k`.
+A known zero input, or a zero mask width, gives exact zero. This first
+rule deliberately drops other range information from the input.
+
+`maskRange` proves the nonnegative range, `maskResidue` proves that the
+remainder preserves the residue modulo `2^k`, and `maskUnique` proves
+uniqueness under those two conditions. `maskMagnitudeBound` gives the
+width bound. `maskInRange` proves that a value already in range is
+unchanged, `maskNegativeOne` handles `-1` for every width, and
+`maskAfterFullShift` proves that shifting by `k` and then retaining only
+`k` low bits gives zero. `boundsMaskSound` proves the size rule for this
+mathematical masking operation.
+
+Both APIs reject negative, fractional, or unknown shift amounts and mask
+widths; their width argument is a constant, not a size description.
+They validate and normalize the input and preserve unreachable states,
+including when the width is zero. The shared `Domain.unary` rule applies
+normalization on input and output. `unarySound` proves that it lifts a
+sound operation on `Bounds` to the domain containing unreachable states.
+`shiftLeftSound` and `maskSound` specialize that rule.
+
+The unit tests compare actual `Bitwise.bsl/2` and `Bitwise.band/2` results
+with the mathematical value operations and check that the propagated
+bounds contain them. Cases include negative values, widths zero and 64,
+values around `2^200`, partial ranges, invalid widths, and empty inputs.
+The proof test also compares those actual values and the Elixir transfer
+results with the Lean definitions, audits the new theorems, and checks
+that Lean rejects dropping shifted bits or retaining a negative masked
+result. These finite comparisons do not constitute a universal proof of
+the Elixir primitives or a translation theorem for an Erlang built-in.
+The universal size theorems cover the stated Lean value models and make
+no cost claim.
+
+Size descriptions are immutable and remain separate at each operation.
+For example, shifting `2^100` by 100 produces `2^200` with width bound
+201. Retaining its low 64 bits then produces a value bounded by 64 bits,
+which is zero for this concrete input. The later mask does not reduce
+the recorded bound for the earlier shifted intermediate.
+
+The two integer-size test files listed above reproduce these checks.
+Variable shift amounts, right shifts, XOR and other general bitwise
+operations, automatic Core Erlang propagation, and size-dependent cost
+contracts remain subsequent work. These rules introduce no immediate
+integer boundary or concrete ERTS reduction charges.
 
 ## Map and struct operations
 
