@@ -30,6 +30,11 @@
     "succ",
     "cerl",
     "propext",
-    "zacky"
+    "zacky",
+    "nondecreasing",
+    "rintro",
+    "rcases",
+    "symm",
+    "elim"
   ]
 }

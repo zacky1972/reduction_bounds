@@ -182,6 +182,89 @@ defmodule ReductionBounds do
   mathematical integer model: the source decoder remains trusted, agreement
   with a Lynx-translated target is not checked, and no runtime cost bound
   is asserted. See `infer_integer_sizes/2` for the supported fragment.
+
+  ## Derive costs from integer sizes
+
+  The following example includes a growing accumulator. Supply a finite range
+  for the initial counter and retain the compiled BEAM binary.
+
+  ```elixir
+  {:module, IntegerCostDemo, cost_beam, _} =
+    defmodule IntegerCostDemo do
+      def sum(counter, accumulator) do
+        if counter > 0,
+          do: sum(counter - 1, accumulator + counter),
+          else: accumulator
+      end
+
+      def triple(x), do: x * 3
+      def caller(x), do: __MODULE__.triple(x) + 1
+    end
+
+  alias ReductionBounds.IntegerSize
+
+  {:ok, sum_bound} =
+    ReductionBounds.infer_integer_cost_bound({IntegerCostDemo, :sum, 2},
+      beam_binaries: [cost_beam],
+      input_sizes: [
+        %IntegerSize{lower: 0, upper: 4, magnitude_bits: 3},
+        IntegerSize.from_integer(0)
+      ]
+    )
+
+  sum_bound.result_size
+  #=> %IntegerSize{lower: 0, upper: 10, magnitude_bits: 7}
+  sum_bound.upper_bound
+  sum_bound.conditions.inferred_recursive_inputs
+
+  input = %IntegerSize{lower: -4, upper: 4, magnitude_bits: 3}
+  {:ok, triple_bound} =
+    ReductionBounds.infer_integer_cost_bound({IntegerCostDemo, :triple, 1},
+      beam_binaries: [cost_beam], input_sizes: [input])
+  {:ok, caller_bound} =
+    ReductionBounds.infer_integer_cost_bound({IntegerCostDemo, :caller, 1},
+      beam_binaries: [cost_beam], input_sizes: [input],
+      call_contracts: %{{IntegerCostDemo, :triple, 1} => triple_bound})
+  caller_bound.conditions.calls
+  ```
+
+  A leaf `{:cost, :addition, [a, b]}` means the symbolic addition cost
+  evaluated at magnitude bounds `a` and `b`. Sequential work uses `:add`,
+  and alternatives use `:max`. All cost functions must be nondecreasing
+  in their size parameters. Shift and mask leaves use the constant amount
+  or width as their second parameter. The result is not an ERTS reduction
+  count or an execution-time guarantee.
+
+  For a modeled external unary call, supply a contract with `input_size`,
+  `result_size`, and `upper_bound` instead of a checked result. These are
+  assumptions about the normally returning external model. For example:
+
+  ```elixir
+  absolute_contract = %{
+    input_size: input,
+    result_size: %IntegerSize{lower: 0, upper: 4, magnitude_bits: 3},
+    upper_bound: {:cost, :absolute, [3, 0]}
+  }
+  # Pass call_contracts: %{{:erlang, :abs, 1} => absolute_contract} to a caller.
+  ```
+
+  For a recursive CRC-style function that masks the accumulator to eight
+  bits after each update, an optional invariant can be supplied as:
+
+  ```elixir
+  recursive_invariant = [
+    %IntegerSize{lower: 0, upper: 4},
+    %IntegerSize{lower: 0, upper: 255, magnitude_bits: 8}
+  ]
+  ```
+
+  Pass it as `recursive_invariant: recursive_invariant` alongside the
+  initial input descriptions. The result distinguishes this supplied
+  condition from the automatically inferred argument descriptions.
+  Lean checks the invariant at every recursive call in the derivation.
+  Exhausting `max_unfolding` or `max_nodes` reports an error; neither
+  setting is an assumption that recursion terminates.
+
   '''
 
   @type target :: {module(), atom(), arity()}
@@ -590,6 +673,54 @@ defmodule ReductionBounds do
     end
   end
 
+  @doc """
+  Derives a size-dependent symbolic cost bound for the supported Core Erlang integer fragment.
+
+  Supply independent `input_sizes` in argument order. Operation costs remain
+  arbitrary natural-valued functions nondecreasing in their size parameters.
+  The result records `result_size`, `upper_bound`, `intermediates`, and `conditions`.
+  This is a symbolic model, with no ERTS reduction or timing claim.
+
+  Static unary calls use `call_contracts`, keyed by module, function, and arity.
+  Each contract has `input_size`, `result_size`, and `upper_bound`. A checked
+  result from this API for a unary function can instead
+  be supplied directly; its derivation is checked again. External call models
+  must return normally and obey the supplied contracts.
+
+  Two-argument self recursion is expanded into a finite derivation under the
+  supplied input ranges. `max_unfolding` (default 32) limits nested self calls;
+  `max_nodes` (default 10_000) limits analysis nodes. Exhaustion is an error,
+  never a termination assumption. An optional two-element `recursive_invariant`
+  is checked at entry and at every reachable self call.
+
+  Lean checks the derivation, intermediate summaries, source lowering certificate,
+  and any supplied invariant. It proves the cost bound for every modeled run
+  and constructs a finite normal run under the call contracts. Source agreement
+  is with the reified supported Core fragment and its stated mathematical
+  primitive semantics. BEAM extraction and reification remain trusted.
+
+      ReductionBounds.infer_integer_cost_bound({MyModule, :sum, 2},
+        input_sizes: [
+          %ReductionBounds.IntegerSize{lower: 0, upper: 4, magnitude_bits: 3},
+          ReductionBounds.IntegerSize.from_integer(0)
+        ]
+      )
+
+  Unknown operand widths, missing or inapplicable contracts, unsupported syntax,
+  failed invariants, and unresolved recursion produce contextual errors.
+  `beam_binaries`, `lean_options`, `timeout`, and `max_concurrency` work as for
+  the other verification APIs.
+  """
+  @spec infer_integer_cost_bound(target(), keyword()) :: {:ok, map()} | {:error, term()}
+  def infer_integer_cost_bound(target, options \\ []) do
+    with :ok <- validate_targets([target]),
+         {:ok, options} <- validate_options(options, :integer_cost),
+         {:ok, candidate, proof} <- ReductionBounds.IntegerCostBound.infer(target, options) do
+      verification = Keyword.take(options, [:max_concurrency, :timeout, :lean_options])
+      verify_bound(target, candidate, proof, verification)
+    end
+  end
+
   defp list_size_measure(nil), do: :list_length
   defp list_size_measure(%Lynx.Lean{}), do: :input_size
 
@@ -620,6 +751,9 @@ defmodule ReductionBounds do
       {:ok, verify_targets(translation, Enum.uniq(targets), options, definition)}
     end
   end
+
+  defp proof_postludes(proof, :integer_cost_fragment),
+    do: ReductionBounds.ProofInput.integer_cost_postludes(proof)
 
   defp proof_postludes(proof, :integer_fragment),
     do: ReductionBounds.ProofInput.integer_postludes(proof)
@@ -668,33 +802,11 @@ defmodule ReductionBounds do
       termination_suffixes: %{}
     ]
 
-    allowed =
-      case source do
-        :inline ->
-          [:postlude | defaults]
-
-        :list_bound ->
-          [:input_contract | defaults]
-
-        :struct_bound ->
-          Keyword.delete(defaults, :termination_suffixes)
-
-        :integer_sizes ->
-          [input_sizes: nil] ++ Keyword.delete(defaults, :termination_suffixes)
-
-        :execution_bound ->
-          [call_contracts: %{}] ++ Keyword.delete(defaults, :termination_suffixes)
-
-        :periodic_bound ->
-          [:periodic_contract | Keyword.delete(defaults, :termination_suffixes)]
-
-        _ ->
-          defaults
-      end
+    allowed = option_defaults(source, defaults)
 
     with true <- Keyword.keyword?(options),
          {:ok, options} <- Keyword.validate(options, allowed),
-         nil <- Enum.find(options, fn option -> not valid_option?(option) end) do
+         nil <- Enum.find(options, fn option -> not valid_option_for?(source, option) end) do
       {:ok, options}
     else
       false -> {:error, :invalid_options}
@@ -702,6 +814,49 @@ defmodule ReductionBounds do
       {key, value} -> {:error, {:invalid_option, key, value}}
     end
   end
+
+  defp option_defaults(:inline, defaults), do: [:postlude | defaults]
+  defp option_defaults(:list_bound, defaults), do: [:input_contract | defaults]
+
+  defp option_defaults(:struct_bound, defaults),
+    do: Keyword.delete(defaults, :termination_suffixes)
+
+  defp option_defaults(:integer_cost, defaults) do
+    [
+      input_sizes: nil,
+      call_contracts: %{},
+      recursive_invariant: nil,
+      max_unfolding: 32,
+      max_nodes: 10_000
+    ] ++
+      Keyword.delete(defaults, :termination_suffixes)
+  end
+
+  defp option_defaults(:integer_sizes, defaults),
+    do: [input_sizes: nil] ++ Keyword.delete(defaults, :termination_suffixes)
+
+  defp option_defaults(:execution_bound, defaults),
+    do: [call_contracts: %{}] ++ Keyword.delete(defaults, :termination_suffixes)
+
+  defp option_defaults(:periodic_bound, defaults),
+    do: [:periodic_contract | Keyword.delete(defaults, :termination_suffixes)]
+
+  defp option_defaults(_scope, defaults), do: defaults
+
+  defp valid_option_for?(:integer_cost, {:call_contracts, value}), do: is_map(value)
+  defp valid_option_for?(:integer_cost, {:recursive_invariant, nil}), do: true
+
+  defp valid_option_for?(:integer_cost, {:recursive_invariant, values}) do
+    is_list(values) and Enum.all?(values, &ReductionBounds.IntegerSize.valid?/1)
+  end
+
+  defp valid_option_for?(:integer_cost, {:max_unfolding, value}),
+    do: is_integer(value) and value in 0..1024
+
+  defp valid_option_for?(:integer_cost, {:max_nodes, value}),
+    do: is_integer(value) and value in 1..1_000_000
+
+  defp valid_option_for?(_scope, option), do: valid_option?(option)
 
   defp valid_option?({:input_sizes, nil}), do: true
 
@@ -836,7 +991,7 @@ defmodule ReductionBounds do
   end
 
   defp assemble_target(translation, _target, fragment)
-       when fragment in [:periodic_fragment, :integer_fragment] do
+       when fragment in [:periodic_fragment, :integer_fragment, :integer_cost_fragment] do
     Lynx.Translation.assemble(translation, cache: false)
   end
 

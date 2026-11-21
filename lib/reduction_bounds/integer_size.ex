@@ -33,8 +33,9 @@ defmodule ReductionBounds.IntegerSize do
   values. They validate and normalize both operands, propagate unreachable
   states, and return conservative descriptions of the results. They are
   reusable domain operations. `ReductionBounds.infer_integer_sizes/2`
-  applies them to a supported Core Erlang fragment; size-dependent cost
-  inference remains subsequent work.
+  applies them to a supported Core Erlang fragment.
+  `ReductionBounds.infer_integer_cost_bound/2` connects these descriptions
+  to symbolic size-dependent costs for its supported fragment.
 
   `shift_left/2`, `shift_right/2`, and `mask/2` handle constant
   nonnegative shift amounts and mask widths. `bit_xor/2` covers signed
@@ -512,7 +513,7 @@ defmodule ReductionBounds.IntegerSize do
   defp product_range(_left, _right), do: {:unbounded, :unbounded}
 
   defp ensure_valid!(size) do
-    unless valid?(size), do: raise(ArgumentError, "invalid integer size information")
+    if !valid?(size), do: raise(ArgumentError, "invalid integer size information")
   end
 
   defp witness(%__MODULE__{lower: :unbounded, upper: :unbounded}), do: 0

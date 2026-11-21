@@ -36,9 +36,9 @@ and Elixir predicates on signed boundary cases and values around
 These finite comparisons check the serialization and examples; they
 are not a universal proof of the Elixir implementation. The generic
 theorems apply to the Lean definitions. Basic arithmetic size propagation
-is described below. Inference from program expressions and operation-cost
-contracts are subsequent work. No immediate-integer threshold or ERTS reduction
-accounting is assumed here.
+is described below, followed by program inference and size-dependent
+operation-cost contracts. No immediate-integer threshold or ERTS
+reduction accounting is assumed here.
 
 ### Unknown information and unreachable states
 
@@ -151,8 +151,8 @@ examples; the universal theorems apply to the Lean definitions.
 
 The following sections cover constant shifts, low-bit masks, XOR,
 branch refinement, and propagation through supported Core Erlang bindings.
-Propagation through calls, recursive size invariants, and size-dependent
-operation-cost contracts remain subsequent work. No runtime word size,
+The separate integer cost entry point below adds static call contracts,
+finite recursion with invariants, and size-dependent cost functions. No runtime word size,
 small-integer boundary, or ERTS reduction formula is fixed here.
 
 ### Constant left shifts and low-bit masks
@@ -329,8 +329,9 @@ or with a Lynx-translated target. The result explicitly reports
 `proof_scope: :reified_integer_fragment`, `value_agreement: :not_checked`,
 `termination: :structural_model`, and `cost_model: :not_analyzed`.
 The result is size information, not a bound on runtime reductions or
-execution time. Arithmetic cost functions, recursive size invariants,
-and contracts for call results remain subsequent work.
+execution time. The separate integer cost entry point below adds size-dependent cost
+functions, bounded recursion, and contracts for call results; those
+features do not change this older entry point's proof scope.
 
 The following commands reproduce the domain tests, Lean comparisons,
 compiled-fixture checks, and rejection of falsified results and traces:
@@ -340,6 +341,183 @@ mix test test/reduction_bounds/integer_size_test.exs \
   test/reduction_bounds/integer_size_proof_test.exs \
   test/reduction_bounds/integer_analysis_test.exs
 ```
+
+## Integer sizes connected to symbolic costs
+
+`ReductionBounds.infer_integer_cost_bound/2` connects integer size
+information to the symbolic cost rules. It is a separate entry point
+from `infer_integer_sizes/2`: the latter retains its original,
+non-recursive interpreter and trusted decoder boundary. The new entry
+point checks a lowering certificate from a reified supported Core
+fragment and a cost derivation, including finite recursive expansions.
+
+### Size-dependent charges and composition
+
+A cost leaf `{:cost, name, [a, b]}` denotes `charge(name, a, b)`.
+The mathematical contract requires a natural-valued cost function
+nondecreasing in both size parameters. The arithmetic and XOR leaves
+use magnitude bounds for their operands. A shift leaf uses the input
+magnitude bound and constant shift amount. A mask leaf uses the input
+magnitude bound and constant mask width. Value evaluation, variable
+lookup, binding, and the local static- and recursive-call charges use parameters
+`[0, 0]`. A comparison charge includes the variable and constant used
+in the branch test; their retrieval is included in that local charge.
+Unary signs are lowered to addition or subtraction from zero, including
+the corresponding zero-literal charge in this conservative cost model.
+
+`Budget` in `IntegerCost.lean` combines leaves by addition for sequential
+work and maximum for alternatives. If an actual operand has magnitude
+`beta(v)` and its inferred bound is `w`, `knownWidth` supplies
+`beta(v) <= w`. `MonotoneCharges` then justifies replacing the actual
+size by `w` in the charge. The proof reuses the existing `IntegerSize`
+arithmetic, shift, mask, refinement, and join theorems.
+
+`Derives` records the derivation for literals, variables, bindings,
+operations, branches, static unary calls, and two-argument self calls.
+Every intermediate summary is explicitly typed in the generated
+certificate, so a changed intermediate size or budget must also pass
+the rules. `derivationSound` proves, for every modeled execution under
+its input conditions and call contracts, both result-size membership
+and the cost inequality. `derivationTerminates` constructs a finite
+normally returning execution from a finite checked derivation. External
+functions denote normally returning mathematical call models; their
+contracts are explicit assumptions about their results and costs.
+
+### Static call contracts and checked callee reuse
+
+Local and remote unary calls use the same contracts. A `call_contracts`
+map is keyed by `{module, function, 1}`. A supplied
+contract contains `input_size`, `result_size`, and `upper_bound`. The
+call argument is analyzed first. `included/2` checks that its domain
+is contained in the required input domain; `inclusionSound` proves the
+semantic inclusion. The result description then propagates into the
+caller, and the callee budget and local static-call charge are added to
+the argument-evaluation budget.
+Unknown result widths remain visible in `unresolved_sizes`; attempting
+to use such a value at a size-dependent operation reports an error.
+
+A unary result returned by `infer_integer_cost_bound/2` can itself be
+supplied as a contract. Its source and cost certificates are regenerated
+and checked in a separate Lean namespace in the caller's verification.
+`costReuseN` checks equality of the reused output description and budget
+with the callee summary. The same symbolic cost-function registry is
+used across the proofs. Nested checked contracts are rechecked recursively.
+The axiom audit includes the reused proofs, not just their names in
+an Elixir result map. A user-supplied contract is recorded as
+`:user_contract`; a rechecked result as `:checked_model_bound`.
+
+Call-model agreement remains an explicit assumption even for a
+rechecked callee bound: a bound proved for a model does not by itself
+identify an arbitrary external function with that model. No contract
+is silently inferred for an unsupported call, BIF, or NIF. This phase
+does not establish native-code behavior, yielding, or ERTS accounting.
+
+### Finite recursion and invariant preservation
+
+For two-argument self recursion, the analyzer propagates the two
+argument domains into another copy of the same body. Every reachable
+branch needs a complete derivation. `max_unfolding` limits nested self
+calls and `max_nodes` limits analysis nodes. If a live recursive path
+still requires expansion at the limit, the result is
+`:unresolved_recursion`, not a successful result conditional on assumed
+termination. These limits control analysis effort. They are not input
+preconditions or execution bounds.
+
+With a finite counter range, this permits a sequence of different
+operand-size bounds. For example, `sum(counter, accumulator)` adds the
+positive counter and calls itself with its predecessor, returning the
+accumulator otherwise. From counter range `[0, 4]` with magnitude bound
+3 and initial accumulator zero, the result interval is `[0, 10]`,
+with a conservative propagated magnitude bound of 7. The budget adds
+size-dependent costs at each expanded level and takes maxima over the
+possible stopping branches. There is no assumption that the initial
+accumulator width bounds all later additions.
+
+An optional two-element `recursive_invariant` supplies independent
+integer domains for the counter and accumulator. The analyzer checks
+inclusion at entry and at every reachable self call. More importantly,
+the `Derives.recur` constructor requires a semantic invariant proof
+for every pair of values admitted by that call's argument summaries.
+`derivationInvariant` proves `RunInvariant` for every modeled run:
+the supplied invariant holds at every recursive call, including those
+inside bindings and branches. `integerCostInvariant` instantiates
+this theorem. `costInvariants` also checks the recorded domain-inclusion
+obligations. Automatically inferred domains and the supplied invariant
+are separately exposed in `conditions`.
+
+The CRC loop fixture uses counter interval `[0, 4]` without a magnitude
+constraint in the invariant, and accumulator interval `[0, 255]` with
+magnitude bound 8. Its initial counter description still supplies a
+magnitude bound for cost inference. Each update shifts and applies XOR
+before masking. The intermediate widths remain in the derivation,
+while the mask reestablishes the eight-bit accumulator invariant.
+An invariant requiring an unchanged zero accumulator for the sum
+fixture is rejected. This domain does not represent relational
+invariants between the counter and accumulator, and this implementation
+does not synthesize closed recurrences with an unbounded symbolic
+counter. It verifies each supplied finite input range by a finite
+derivation.
+
+### Reified Core semantics and transformation checking
+
+`IntegerCostSource.lean` defines an annotation-free Core fragment with
+integer literals, variables, single-variable lets, calls with retained
+module/function atom spellings, two Boolean case clauses in their
+original order, local unary calls, and two-argument local self calls. The Elixir reifier
+rejects unsupported constructors and guards. The supported tests compare
+a variable with an integer constant, on either side. Comparison of two
+arbitrary expressions is outside this entry point's current profile.
+Native arithmetic, shifts, masks, and comparison semantics are
+mathematical integer models, without runtime representation boundaries.
+
+`Translates` is a checked lowering relation. Its premises check the
+actual operation names, constant amounts, low-bit masks, Boolean clause
+order, variable indices, and self-call name. A registered external call
+must have the matching module and function. `UniqueNames` rules out
+ambiguous external registrations. `sourceAgreement` maps every costed
+model execution to a source execution with the same value.
+`sourceComplete` maps every execution of the reified source fragment
+back to a costed model execution. This includes recursive body calls.
+
+For each target, `integerCostValueAgreement` states the resulting
+value equivalence. `integerCostSourceBound` connects every source result
+to a costed run satisfying the result description and budget.
+`integerCostSound` bounds every model run. `integerCostTotal` constructs
+a finite source and model execution under the stated input and call
+conditions. `costCandidate` checks the returned result description and
+budget, and the common verification path audits the dependencies of
+these theorems and any reused proofs. Only `propext`, `Classical.choice`,
+and `Quot.sound` are permitted as axioms.
+
+The remaining trusted boundary is extraction and faithful reification
+of the accepted Core syntax, plus the choice of mathematical primitive
+semantics. This is not a formalization of the entire Erlang language,
+a compiler-correctness theorem, or a proof about arbitrary BEAM bytecode.
+The result reports `proof_scope: :reified_core_integer_cost_fragment`,
+`value_agreement: :checked`, and `runtime_correspondence: :not_checked`.
+Neither this result nor its termination theorem identifies symbolic
+costs with ERTS reductions or elapsed time.
+
+### Reproducing the integer cost cases
+
+The module documentation gives examples of a recursive sum, a checked
+callee reused by its caller, a supplied external call contract, and
+a recursive accumulator invariant. The fixture
+`test/fixtures/integer_cost_programs.ex` supplies compiled arithmetic,
+branching, CRC, caller, and recursion cases. Run:
+
+```sh
+ELAN_TOOLCHAIN="$(cat deps/lynx/lean-toolchain)" mix test \
+  test/reduction_bounds/integer_cost_bound_test.exs
+```
+
+The tests check the reported formulas, size information, conditions,
+and theorem names, compare returned values with the compiled fixtures,
+and exercise missing widths, missing or inapplicable call contracts,
+invalid invariants, endless recursion, and analysis limits. Negative
+Lean tests change a result, budget, source operation, or intermediate
+summary and require rejection. A falsified callee result must also be
+rejected when supplied to a caller.
 
 ## Map and struct operations
 
