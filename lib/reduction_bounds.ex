@@ -265,6 +265,37 @@ defmodule ReductionBounds do
   Exhausting `max_unfolding` or `max_nodes` reports an error; neither
   setting is an assumption that recursion terminates.
 
+  ## Identify an operation cost contract
+
+  Use a `CostContract` to label the cost unit and operation-cost declaration.
+  This is separate from the contracts for calls to other functions.
+
+  ```elixir
+  alias ReductionBounds.CostContract
+
+  {:ok, contract} = CostContract.new(id: :analysis, cost_unit: :symbolic_work)
+
+  {:ok, declared_bound} =
+    ReductionBounds.infer_integer_cost_bound({IntegerCostDemo, :triple, 1},
+      beam_binaries: [cost_beam],
+      input_sizes: [input],
+      cost_contract: contract
+    )
+
+  declared_bound.cost_contract.id
+  #=> :analysis
+  declared_bound.applicability.parameters.mask
+  #=> {:input_magnitude_bits, :mask_width}
+  declared_bound.applicability.contract_instantiation
+  #=> :not_checked
+  ```
+
+  A declaration may also contain natural-valued expressions; see
+  `ReductionBounds.CostContract`. The current Lean proof remains parametric
+  in nondecreasing cost functions. Recording or evaluating a declaration does
+  not check a concrete instantiation or a comparison between contracts.
+  Labels such as `:jit` do not establish correspondence with that runtime.
+
   '''
 
   @type target :: {module(), atom(), arity()}
@@ -681,6 +712,39 @@ defmodule ReductionBounds do
   The result records `result_size`, `upper_bound`, `intermediates`, and `conditions`.
   This is a symbolic model, with no ERTS reduction or timing claim.
 
+  The optional `cost_contract` is a `ReductionBounds.CostContract` declaration
+  identifying operation costs, the cost unit, and the integer semantics profile.
+  Omission records the existing symbolic contract. The result's `cost_contract`
+  and `applicability` fields identify the declaration, parameter meanings,
+  input domains, recursive conditions, and callee assumptions actually used.
+  This operation contract is separate from a callee's `call_contracts` entry.
+
+  Declarative cost functions can be recorded and evaluated in Elixir. The Lean
+  bound remains quantified over arbitrary nondecreasing cost functions;
+  `applicability.contract_instantiation: :not_checked` means a concrete
+  declaration has not been instantiated and checked in Lean. A contract named
+  `:jit` does not establish JIT applicability. Runtime correspondence remains
+  `:not_checked`, and comparisons and bound transfers between contracts are
+  not implemented by this option.
+
+  ```elixir
+  alias ReductionBounds.CostContract
+
+  {:ok, contract} = CostContract.new(id: :analysis, cost_unit: :symbolic_work)
+
+  {:ok, bound} =
+    ReductionBounds.infer_integer_cost_bound({MyModule, :sum, 2},
+      input_sizes: [
+        %ReductionBounds.IntegerSize{lower: 0, upper: 4, magnitude_bits: 3},
+        ReductionBounds.IntegerSize.from_integer(0)
+      ],
+      cost_contract: contract
+    )
+
+  bound.applicability.parameters.shift_left
+  # {:input_magnitude_bits, :shift_amount}
+  ```
+
   Static unary calls use `call_contracts`, keyed by module, function, and arity.
   Each contract has `input_size`, `result_size`, and `upper_bound`. A checked
   result from this API for a unary function can instead
@@ -827,7 +891,8 @@ defmodule ReductionBounds do
       call_contracts: %{},
       recursive_invariant: nil,
       max_unfolding: 32,
-      max_nodes: 10_000
+      max_nodes: 10_000,
+      cost_contract: nil
     ] ++
       Keyword.delete(defaults, :termination_suffixes)
   end
@@ -842,6 +907,11 @@ defmodule ReductionBounds do
     do: [:periodic_contract | Keyword.delete(defaults, :termination_suffixes)]
 
   defp option_defaults(_scope, defaults), do: defaults
+
+  defp valid_option_for?(:integer_cost, {:cost_contract, nil}), do: true
+
+  defp valid_option_for?(:integer_cost, {:cost_contract, value}),
+    do: is_struct(value, ReductionBounds.CostContract)
 
   defp valid_option_for?(:integer_cost, {:call_contracts, value}), do: is_map(value)
   defp valid_option_for?(:integer_cost, {:recursive_invariant, nil}), do: true

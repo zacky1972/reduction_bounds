@@ -1,6 +1,6 @@
 defmodule ReductionBounds.IntegerCostBound do
   @moduledoc false
-  alias ReductionBounds.{IntegerCostSource, IntegerSize, SearchBound}
+  alias ReductionBounds.{CostContract, IntegerCostSource, IntegerSize, SearchBound}
 
   @operations [
     :value,
@@ -50,38 +50,70 @@ defmodule ReductionBounds.IntegerCostBound do
       tree = analyze(lowered.expr, state, context, [])
       rows = rows(tree)
 
-      {:ok,
-       %{
-         target: target,
-         source: :integer_cost_fragment,
-         metric: :symbolic_size_cost,
-         input_sizes: inputs,
-         result_size: tree.size,
-         upper_bound: tree.budget,
-         expression: lowered.expr,
-         core_source: lowered.source,
-         translation_certificate: lowered.proof,
-         derivation: tree,
-         call_contracts: contracts,
-         intermediates: rows,
-         conditions: %{
-           input_sizes: inputs,
-           recursive_invariant: context.invariant,
-           inferred_recursive_inputs:
-             for(row <- rows, row.operation == :recursive_call, do: row.argument_sizes),
-           cost_functions: :nondecreasing_in_operand_sizes,
-           calls: Enum.map(contracts, fn {_key, c} -> Map.drop(c, [:checked_bound]) end)
-         },
-         unresolved_sizes: Enum.filter(rows, &unknown_size?/1),
-         unresolved_contracts: [],
-         proof_scope: :reified_core_integer_cost_fragment,
-         value_agreement: :checked,
-         termination: :finite_derivation_under_call_contracts,
-         runtime_correspondence: :not_checked
-       }}
+      candidate = %{
+        target: target,
+        source: :integer_cost_fragment,
+        metric: :symbolic_size_cost,
+        input_sizes: inputs,
+        result_size: tree.size,
+        upper_bound: tree.budget,
+        expression: lowered.expr,
+        core_source: lowered.source,
+        translation_certificate: lowered.proof,
+        derivation: tree,
+        call_contracts: contracts,
+        intermediates: rows,
+        conditions: %{
+          input_sizes: inputs,
+          recursive_invariant: context.invariant,
+          inferred_recursive_inputs:
+            for(row <- rows, row.operation == :recursive_call, do: row.argument_sizes),
+          cost_functions: :nondecreasing_in_operand_sizes,
+          calls: Enum.map(contracts, fn {_key, c} -> Map.drop(c, [:checked_bound]) end)
+        },
+        unresolved_sizes: Enum.filter(rows, &unknown_size?/1),
+        unresolved_contracts: [],
+        proof_scope: :reified_core_integer_cost_fragment,
+        value_agreement: :checked,
+        termination: :finite_derivation_under_call_contracts,
+        runtime_correspondence: :not_checked
+      }
+
+      attach_cost_contract(candidate, options[:cost_contract])
     end
   catch
     {:integer_cost, reason} -> {:error, {:integer_cost, target, reason}}
+  end
+
+  defp attach_cost_contract(candidate, value) do
+    case CostContract.prepare(value, cost_names(candidate)) do
+      {:ok, contract} ->
+        conditions = Map.put(candidate.conditions, :operation_cost_contract, contract.id)
+
+        applicability = %{
+          cost_unit: contract.cost_unit,
+          semantics: contract.semantics,
+          events: contract.events,
+          parameter_domain: contract.parameter_domain,
+          parameters: CostContract.parameters(contract),
+          input_sizes: candidate.input_sizes,
+          recursive_invariant: conditions.recursive_invariant,
+          inferred_recursive_inputs: conditions.inferred_recursive_inputs,
+          call_contracts: conditions.calls,
+          size_monotonicity: :assumed,
+          contract_instantiation: :not_checked,
+          runtime_correspondence: :not_checked
+        }
+
+        {:ok,
+         candidate
+         |> Map.put(:conditions, conditions)
+         |> Map.put(:cost_contract, contract)
+         |> Map.put(:applicability, applicability)}
+
+      {:error, reason} ->
+        fail({:cost_contract, reason})
+    end
   end
 
   defp inputs(nil, arity), do: List.duplicate(IntegerSize.unknown(), arity)

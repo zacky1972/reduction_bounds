@@ -1,6 +1,6 @@
 defmodule ReductionBounds.IntegerCostBoundTest do
   use ExUnit.Case, async: false
-  alias ReductionBounds.{IntegerCostBound, IntegerSize, ProofInput, SearchBound}
+  alias ReductionBounds.{CostContract, IntegerCostBound, IntegerSize, ProofInput, SearchBound}
   alias ReductionBounds.Fixtures.IntegerCostPrograms, as: Fixture
   @moduletag timeout: 120_000
 
@@ -35,6 +35,42 @@ defmodule ReductionBounds.IntegerCostBoundTest do
         do: assert(IntegerSize.contains?(result.result_size, apply(Fixture, :product, [x])))
 
     assert IntegerCostBound.evaluate(result.upper_bound, charges()) > 0
+  end
+
+  test "records the default operation contract without changing symbolic inference", %{beam: beam} do
+    assert {:ok, result} = infer(:product, [size(-4, 4, 3)], beam)
+    assert result.cost_contract.id == :symbolic_integer
+    assert result.cost_contract.functions == :symbolic
+    assert result.conditions.operation_cost_contract == :symbolic_integer
+    assert result.applicability.input_sizes == result.input_sizes
+    assert result.applicability.cost_unit == :symbolic_work
+    assert result.applicability.parameters.mask == {:input_magnitude_bits, :mask_width}
+    assert result.applicability.contract_instantiation == :not_checked
+    assert result.applicability.runtime_correspondence == :not_checked
+    assert "integerCostSourceBound" in result.checked_theorems
+  end
+
+  test "records a declaration without claiming a checked concrete instance", %{beam: beam} do
+    functions = Map.new(CostContract.operations(), &{&1, {:add, 1, {:max, :left, :right}}})
+    assert {:ok, contract} = CostContract.new(id: :jit, functions: functions)
+    inputs = [size(-4, 4, 3)]
+    assert {:ok, original} = infer(:product, inputs, beam)
+    assert {:ok, declared} = infer(:product, inputs, beam, cost_contract: contract)
+    assert declared.upper_bound == original.upper_bound
+    assert declared.result_size == original.result_size
+    assert declared.cost_contract == contract
+    assert declared.applicability.size_monotonicity == :assumed
+    assert declared.applicability.contract_instantiation == :not_checked
+    assert declared.runtime_correspondence == :not_checked
+    assert "integerCostSourceBound" in declared.checked_theorems
+  end
+
+  test "invalid operation declarations report the target and contract diagnostic", %{beam: beam} do
+    contract = %ReductionBounds.CostContract{semantics: :other}
+    target = {Fixture, :product, 1}
+
+    assert {:error, {:integer_cost, ^target, {:cost_contract, {:unsupported_cost_profile, _}}}} =
+             infer(:product, [size(-4, 4, 3)], beam, cost_contract: contract)
   end
 
   test "retains large CRC intermediates before masking", %{beam: beam} do
@@ -170,6 +206,12 @@ defmodule ReductionBounds.IntegerCostBoundTest do
 
     assert result.result_size == size(0, 4, 3)
     assert result.conditions.calls |> hd() |> Map.fetch!(:origin) == :user_contract
+    assert result.cost_contract.functions == :symbolic
+
+    assert result.applicability.parameters.absolute ==
+             {:callee_parameter_1, :callee_parameter_2}
+
+    assert result.applicability.call_contracts == result.conditions.calls
   end
 
   test "rechecks and reuses a derived callee bound", %{beam: beam} do
@@ -281,6 +323,11 @@ defmodule ReductionBounds.IntegerCostBoundTest do
              )
 
     assert result.conditions.recursive_invariant == invariant
+    assert result.applicability.recursive_invariant == invariant
+
+    assert result.applicability.inferred_recursive_inputs ==
+             result.conditions.inferred_recursive_inputs
+
     assert "costInvariants" in result.checked_theorems
     assert result.result_size == size(0, 255, 8)
 

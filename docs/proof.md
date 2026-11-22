@@ -351,6 +351,83 @@ non-recursive interpreter and trusted decoder boundary. The new entry
 point checks a lowering certificate from a reified supported Core
 fragment and a cost derivation, including finite recursive expansions.
 
+### Operation cost contracts and applicability
+
+`ReductionBounds.CostContract` identifies the operation-cost declaration
+used with the integer fragment. It is distinct from a callee's
+`call_contracts` entry. The default declaration uses symbolic functions,
+cost unit `:symbolic_work`, value semantics `:core_integer_v1`, and
+charge-event profile `:integer_cost_v1`. These profiles currently accept
+all pairs of natural parameters; narrower domains and arbitrary state
+parameters are not supported by this declaration interface.
+
+The parameter registry records magnitude widths for binary arithmetic,
+XOR, and comparisons; input width and constant amount for shifts;
+input width and constant mask width for masks; and two unused zero
+parameters for local fixed charges. Auxiliary names appearing in callee
+budgets are also declared. In the default symbolic contract their
+parameters are labeled `:callee_parameter_1` and `:callee_parameter_2`;
+their interpretation is a callee-contract assumption. A user declaration
+must include the required auxiliary names and their parameter labels.
+
+Functions can be symbolic or supplied as declarative expressions built
+from natural constants, `:left`, `:right`, addition, multiplication, and
+maximum. A concrete function map must cover exactly the declared names.
+Negative constants, executable Elixir functions, unsupported expressions,
+and unsupported profiles are rejected. `CostContract.evaluate/3`
+evaluates a declared expression on natural arguments; it produces a
+number, not a proof certificate.
+
+For example, after compiling a supported module, use:
+
+```elixir
+alias ReductionBounds.{CostContract, IntegerSize}
+
+expr = {:add, 1, {:mul, :left, :right}}
+functions = Map.new(CostContract.operations(), &{&1, expr})
+{:ok, contract} = CostContract.new(id: :example, functions: functions)
+
+{:ok, result} =
+  ReductionBounds.infer_integer_cost_bound({MyModule, :update, 1},
+    input_sizes: [%IntegerSize{lower: -4, upper: 4, magnitude_bits: 3}],
+    cost_contract: contract
+  )
+
+result.cost_contract
+result.applicability
+CostContract.evaluate(contract, :multiplication, [8, 9])
+#=> {:ok, 73}
+```
+
+The result records the declaration in `cost_contract`. Its `applicability`
+field records the cost unit, profiles, parameter meanings, actual input
+descriptions, supplied recursive invariant, inferred recursive argument
+domains, and callee assumptions. Omission preserves the existing symbolic
+inference and records a default contract. This option does not change
+the symbolic `upper_bound` or supply an evaluated numeric bound.
+
+The existing Lean cost theorem remains quantified over arbitrary
+nondecreasing functions. `size_monotonicity: :assumed` records that
+premise. `contract_instantiation: :not_checked` explicitly states that
+the declared concrete functions have not been instantiated and checked
+in Lean. Declarative syntax validation and Elixir evaluation must not
+be reported as that proof. Proving expression monotonicity and checking
+contract instances and comparisons are subsequent stages of Issue #2.
+No comparison or transfer is implemented in this stage.
+
+Contract identifiers and cost-unit labels are declarations. Naming a
+contract `:jit`, or its unit `:reductions`, supplies no implementation
+evidence. Both the result and applicability report
+`runtime_correspondence: :not_checked`. The actual correspondence to
+ERTS charges, execution modes, and timing remains an external obligation.
+
+Run the declaration tests and the existing inference integration tests:
+
+```sh
+mix test test/reduction_bounds/cost_contract_test.exs \
+  test/reduction_bounds/integer_cost_bound_test.exs
+```
+
 ### Size-dependent charges and composition
 
 A cost leaf `{:cost, name, [a, b]}` denotes `charge(name, a, b)`.
