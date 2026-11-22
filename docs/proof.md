@@ -573,6 +573,80 @@ small-integer/bignum transition threshold, measure ERTS reductions, or
 claim conformance with a complete CRC-64 algorithm. Representation
 boundary tests remain a separate implementation-specific validation task.
 
+### Representative variance and table-driven CRC expressions
+
+The acceptance criterion about representative variance and CRC
+expressions is exercised in
+`test/reduction_bounds/integer_cost_cases_test.exs`, using the compiled
+fixture `test/fixtures/integer_cost_cases.ex`. These kernels use the
+existing integer size and cost rules; there is no new recognizer or
+cost rule specific to variance or CRC.
+
+The variance kernels follow the integer expression in the
+[Mobius change motivating Issue #1](https://github.com/mobius-home/mobius/commit/bf00f21638b12bf9a3a683126dc5a1cf87f58983).
+For a count `n`, sum `s`, and sum of squares `q`, the numerator is
+`n * q - s * s`, and the denominator is `n * (n - 1)`. The numerator
+takes three integer arguments; the denominator's test requires
+`2 <= n <= 8`. Division, floating-point conversion, clamping, and square
+root are outside these kernels and have no supplied contracts here.
+The fixture does not analyze the complete Mobius module.
+
+The exact-input tests use closely spaced positive and negative samples
+near `1_788_878_897_448`, samples near `2^200`, and identical samples
+near `2^200`. The compiled numerator returns 6 or 0 while both products
+exceed `2^64`. The tests compare it with the independent identity
+`sum((x_i - x_j)^2, i < j)`, check the exact result interval, and retain
+both product summaries and size-dependent multiplication charges.
+A negative Lean test requires rejection of a zero budget for this work.
+An interval-input test also checks the bound on independently specified
+summary ranges and compares the compiled expression on a finite grid
+of three-sample datasets. Statistical consistency of arbitrary summaries
+is not assumed: independent intervals can include combinations that
+are not summaries of any dataset. Consequently, that interval analysis
+does not establish that every admitted numerator is nonnegative.
+
+The CRC kernels follow the table-driven expressions in
+[the cerlc implementation](https://github.com/mdsebald/cerlc/blob/750d85e56ecef4770583f495faace160398b195d/src/cerlc.erl),
+specialized to a 64-bit state. Let `u` be the current state, `t` a table
+entry, and `b` an input byte. Their arithmetic is:
+
+| Kernel | Integer expression |
+| --- | --- |
+| Normal update | `((u << 8) XOR t) AND (2^64 - 1)` |
+| Reflected update | `((u >> 8) XOR t) AND (2^64 - 1)` |
+| Normal table index | `(((u >> 56) XOR b) AND 255) + 1` |
+| Reflected table index | `((u XOR b) AND 255) + 1` |
+
+The update contracts require both inputs in `[0, 2^64 - 1]`, with
+magnitude bound 64. The normal path records a 72-bit shift bound and
+a conservative 73-bit XOR bound before masking to 64 bits. The reflected
+path retains the conservative 64-bit right-shift bound, then a 65-bit
+XOR bound before masking. The mask's charge uses the intermediate
+width, not the final width. Index inputs require a 64-bit state and
+byte range `[0, 255]`; the resulting one-based index is in `[1, 256]`.
+Tests cover all 256 byte values for selected boundary states.
+
+These are arithmetic expressions, not a full CRC implementation. The
+table entry is an explicit input with a stated size condition. Table
+lookup, table generation, records, byte-list traversal, configuration,
+and final XOR are not analyzed by these cases. No claim is made that
+an arbitrary supplied table implements a particular CRC polynomial.
+
+For every successful case, the test requires checked source agreement,
+the source cost-bound and totality theorem names, no unresolved sizes,
+and no external call contracts. The result remains
+`runtime_correspondence: :not_checked`. The generic Lean theorems cover
+the reified supported kernels under their input and symbolic-cost
+conditions; comparisons with compiled fixtures are finite regression
+checks, not compiler or ERTS correctness proofs.
+
+Run the representative-expression cases with:
+
+```sh
+ELAN_TOOLCHAIN="$(cat deps/lynx/lean-toolchain)" mix test \
+  test/reduction_bounds/integer_cost_cases_test.exs
+```
+
 ## Map and struct operations
 
 The decoder handles fixed atom keys and the supported Boolean guard
