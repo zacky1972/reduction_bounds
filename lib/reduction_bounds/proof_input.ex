@@ -45,6 +45,12 @@ defmodule ReductionBounds.ProofInput do
     packaged_postludes(proof, ["Protocol.lean"])
   end
 
+  @spec protocol_condition_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def protocol_condition_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, ["IntegerSize.lean", "Protocol.lean", "ProtocolConditions.lean"])
+  end
+
   @spec integer_postludes(Lynx.Lean.t()) ::
           {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
   def integer_postludes(%Lynx.Lean{} = proof) do
@@ -199,6 +205,15 @@ defmodule ReductionBounds.ProofInput do
       ReductionBounds.Protocol.ownerExclusive ReductionBounds.Protocol.suppliedCertificate
       ReductionBounds.Protocol.suppliedWellFormed ReductionBounds.Protocol.suppliedTraceSound
       ReductionBounds.Protocol.suppliedInvariant ReductionBounds.Protocol.suppliedEventsValid)
+  end
+
+  defp case_study_theorems(%{source: :protocol_conditions}) do
+    ~w(ReductionBounds.ProtocolConditions.checkRowsCorrect
+      ReductionBounds.ProtocolConditions.checkConditionsSound
+      ReductionBounds.ProtocolConditions.suppliedConditionsCertificate
+      ReductionBounds.ProtocolConditions.suppliedConditionsSound
+      ReductionBounds.ProtocolConditions.suppliedCountKeys
+      ReductionBounds.ProtocolConditions.suppliedCountsMatch)
   end
 
   defp case_study_theorems(%{source: :integer_cost_fragment} = candidate) do

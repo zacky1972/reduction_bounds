@@ -1232,13 +1232,117 @@ waiting prefixes, event ownership and units, malformed declarations, and
 illegal transitions. Altered successor states and event ownership are rejected
 independently in Lean, even if the generated certificate text is modified.
 
-This is the first modeling stage of issues #3 and #4. It supplies no cost
-functions or size and event-count bounds. Retry and receive-inspection cycles
+This shared trace layer alone supplies no cost functions or size and
+event-count bounds. The checks below add explicit conditions to that layer. Retry and receive-inspection cycles
 may occur arbitrarily often. No theorem yet bounds all runs, proves eventual
 response or completion, connects a target Core Erlang function to the protocol,
 or covers a real Port program or driver. Faithful serialization and the chosen
 protocol remain trusted. Port-side and external-computation costs, concrete
 ERTS charging, runtime timing, and scheduler behavior remain unverified.
+
+## Communication size and event-count conditions
+
+`ProtocolSize` describes independent byte and structural upper bounds. Unknown
+fields are `:unknown`, never zero. `ProtocolSize.from_iodata/1` counts one
+structural unit for every binary, byte, empty list, and list cell. Thus
+`[[], []]` has zero bytes and five structural units, whereas a 1000-byte binary
+has 1000 bytes and one structural unit. Binary traversal still needs its byte
+bound. Valid binary tails are supported; scalar top-level bytes, non-byte list
+items, non-binary improper tails, and bitstrings with fractional bytes are
+rejected. This measure does not specify ERTS allocation or reduction charging.
+
+`ProtocolConditions` adds a condition profile to a supplied protocol contract.
+Every allowed state/event context must have an explicit `Rule`, even an empty
+one. Rules name data requirements, integer requirements, and counters. Data
+bounds require both dimensions to be finite. Integer bounds reuse
+`IntegerSize` value ranges and magnitude bounds, with a finite magnitude bound
+and a nonempty domain. Data and count declarations are validated even for
+branches not visited by a supplied trace. No request-to-response size relation
+or integer-to-byte encoding relation is assumed or synthesized.
+
+`PortProtocol.conditions/1` supplies rules for the initial Port model. Its
+independent data fields are `:request`, `:response`, and `:message`; the last
+covers inspections of messages that do not match. Matching response retrieval uses the
+response bound and also increments `:receive_inspections`. The profile requires
+finite caps for `:total_events`, `:submission_attempts`, `:submission_events`,
+`:resumptions`, `:retries`, and `:receive_inspections`. Total events include
+work and environment observations. All other counters count named occurrences
+across the entire trace, including repeated scans and events after arrivals.
+
+The Port model now distinguishes `:submission_resumed` from `:prepared`.
+Starting submission from `:prepared` increments the attempt count. After a
+suspension, a resumed outcome increments the submission-event count without
+starting another attempt. Repeated suspension/resumption still contributes
+work events and is limited independently. This prevents a single suspended
+submission from being counted as multiple new attempts.
+
+```elixir
+alias ReductionBounds.{PortProtocol, Protocol, ProtocolConditions, ProtocolSize}
+{:ok, profile} = PortProtocol.conditions(
+  data_bounds: %{
+    request: %ProtocolSize{bytes: 8, structure: 10},
+    response: %ProtocolSize{bytes: 4, structure: 8},
+    message: %ProtocolSize{bytes: 8, structure: 8}
+  },
+  count_bounds: %{total_events: 10, submission_attempts: 1,
+    submission_events: 1, resumptions: 0, retries: 0, receive_inspections: 1})
+names = [:prepare, :submit_accepted, :response_arrived, :receive_response, :decode]
+events = Enum.map(names, fn name ->
+  {:ok, event} = Protocol.event(profile.contract, name)
+  event
+end)
+{:ok, observation} = ProtocolConditions.observe(%{request: [1], response: <<2>>, message: []})
+observations = events |> Enum.with_index() |> Map.new(fn {_event, i} -> {i, observation} end)
+{:ok, result} = ProtocolConditions.check_trace(profile, events, observations)
+result.counts
+#=> %{total_events: 5, submission_attempts: 1, submission_events: 1,
+#=>   resumptions: 0, retries: 0, receive_inspections: 1}
+```
+
+Optional `integer_events` associates event names with integer-condition names
+in `integer_bounds`. `ProtocolConditions.observe/2` accepts a separate map of
+mathematical integer values. The checker uses `IntegerSize.contains?/2`; a
+large integer cannot be substituted directly for an encoded iodata byte.
+Custom state-specific conditions can be declared through
+`ProtocolConditions.new/2`. Results retain the supplied profile and the
+per-occurrence state, rule, observation, and independently computed counters.
+Missing bounds, missing observations, unknown dimensions, exceeded caps, and
+invalid observation indexes are errors. A zero-length prefix has zero counts
+but does not imply completion.
+
+`ProtocolConditionsProof.build/3` rechecks the trace and emits the profile,
+observations, and reported counts. `ProofInput.protocol_condition_postludes/1`
+loads the integer-size semantics and the shared protocol and condition rules.
+Lean's `checkConditionsSound` connects the accepted certificate to the shared
+`Runs` relation, well-formed declarations, `RowsHold` for every occurrence,
+and `CountsHold` for every declared counter. `RowsHold` requires both data
+inequalities and the existing `IntegerSize.Holds` proposition. `countFrom`
+recomputes counts from the Lean events, states, and rules rather than trusting
+an Elixir total. Generated theorems additionally check that reported count
+names and values match that computation. Selected dependencies are audited.
+
+Reproduce the new cases with:
+
+```sh
+mix test --only protocol_conditions
+```
+
+Tests cover independent response and structure bounds, nested empty lists,
+wide integers, resumed submission accounting, scans across arrivals, matching
+inspections, missing conditions, and invalid iodata. Lean independently rejects
+altered size summaries, count caps, reported counts, unknown magnitude bounds,
+and unfinished condition certificates. The `protocol_model` tests continue to
+exercise the underlying trace layer.
+
+These are checks of supplied model traces under explicit conditions, not an
+inference of bounds for all possible runs. The Elixir validator returns
+`lean_status: :not_checked`; generating proof text also does not execute Lean.
+The integration tests perform that separate check through Lynx. Association
+of size summaries and integer values with actual target data, Elixir iodata
+measurement, and faithful serialization remain trusted. No concrete encoding,
+source-code correspondence, cost bound, progress guarantee, or ERTS accounting
+is established at this stage. Later all-trace cost proofs must state these
+size and count conditions as premises, rather than infer them from one sample.
 
 ## Map and struct operations
 
