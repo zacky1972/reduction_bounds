@@ -56,6 +56,17 @@ defmodule ReductionBounds.ProofInput do
     ])
   end
 
+  @spec contract_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def contract_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, [
+      "IntegerSize.lean",
+      "IntegerAnalysis.lean",
+      "IntegerCost.lean",
+      "CostContract.lean"
+    ])
+  end
+
   defp packaged_postludes(proof, sources) do
     case :code.priv_dir(:reduction_bounds) do
       {:error, reason} -> {:error, {:priv_dir, reason}}
@@ -113,6 +124,18 @@ defmodule ReductionBounds.ProofInput do
       ReductionBounds.IntegerCostSource.sourceAgreement ReductionBounds.IntegerCostSource.sourceComplete)
 
     global ++ integer_cost_theorems(candidate, "")
+  end
+
+  defp case_study_theorems(%{source: :cost_contract_comparison} = candidate) do
+    theorems =
+      ~w(ReductionBounds.CostContract.Expr.monotone ReductionBounds.CostContract.ExprLe.sound
+      ReductionBounds.CostContract.functionsMonotone ReductionBounds.CostContract.FunctionsLe.sound
+      ReductionBounds.CostContract.budgetMonotone smallerMonotone largerMonotone
+      functionCertificate operationOrdering allBudgetOrdering)
+
+    if is_nil(candidate.budget),
+      do: theorems,
+      else: theorems ++ ~w(suppliedBudgetValues suppliedBudgetOrdering)
   end
 
   defp case_study_theorems(%{source: :integer_fragment}),

@@ -295,6 +295,38 @@ defmodule ReductionBounds do
   in nondecreasing cost functions. Recording or evaluating a declaration does
   not check a concrete instantiation or a comparison between contracts.
   Labels such as `:jit` do not establish correspondence with that runtime.
+  To check declarative function and budget ordering separately, use
+  `compare_cost_contracts/3`. That check does not transfer the target's bound.
+
+  ## Compare operation cost contracts
+
+  Compare two declarative contracts in the smaller-to-larger direction.
+  This example needs no target module or BEAM binary.
+
+  ```elixir
+  alias ReductionBounds.CostContract
+
+  functions_a = Map.new(CostContract.operations(), &{&1, {:add, 1, :left}})
+  functions_b = Map.new(CostContract.operations(), &{&1, {:add, 2, :left}})
+  {:ok, a} = CostContract.new(id: :a, functions: functions_a)
+  {:ok, b} = CostContract.new(id: :b, functions: functions_b)
+
+  {:ok, comparison} =
+    ReductionBounds.compare_cost_contracts(a, b,
+      budget: {:add, {:cost, :addition, [8, 9]}, {:cost, :binding, [0, 0]}}
+    )
+
+  comparison.budget_values
+  #=> %{smaller: 10, larger: 12}
+  comparison.checked_theorems
+  comparison.bound_transfer
+  #=> :not_checked
+  ```
+
+  Lean checks the ordering for all natural parameters and every composed
+  budget. The optional budget's evaluations are also checked. An unresolved
+  structural comparison is not a proof that the inequality is false.
+  Execution comparison and transfer of function bounds remain separate work.
 
   '''
 
@@ -785,6 +817,59 @@ defmodule ReductionBounds do
     end
   end
 
+  @doc """
+  Checks pointwise ordering of two declarative operation cost contracts in Lean.
+
+  Arguments are ordered from smaller to larger. The contracts must share the
+  cost unit, semantics, event profile, and parameter meanings. Both must have
+  declarative functions. The comparison is universal over natural parameters,
+  using a conservative structural certificate; an unresolved comparison is
+  not a proof that the inequality is false.
+
+  Lean checks expression monotonicity, each operation's ordering, and ordering
+  of every existing symbolic budget under the two function assignments.
+  Optionally pass `budget: bound.upper_bound` to check its two evaluations.
+  Auxiliary callee cost names must be declared on both sides.
+
+  The result records checked theorems and `proof_scope: :cost_functions_and_budgets`.
+  This does not compare program executions, transfer a function bound, check
+  callee value agreement, or establish applicability to an ERTS implementation.
+  Existing integer inference's concrete contract instantiation remains unchecked.
+
+  ```elixir
+  alias ReductionBounds.CostContract
+
+  smaller_functions = Map.new(CostContract.operations(), &{&1, {:add, 1, :left}})
+  larger_functions = Map.new(CostContract.operations(), &{&1, {:add, 2, :left}})
+  {:ok, smaller} = CostContract.new(id: :smaller, functions: smaller_functions)
+  {:ok, larger} = CostContract.new(id: :larger, functions: larger_functions)
+
+  {:ok, comparison} =
+    ReductionBounds.compare_cost_contracts(smaller, larger,
+      budget: {:add, {:cost, :addition, [8, 9]}, {:cost, :binding, [0, 0]}}
+    )
+
+  comparison.budget_values
+  #=> %{smaller: 10, larger: 12}
+  ```
+
+  `timeout`, `max_concurrency`, and `lean_options` work as for verification.
+  """
+  @spec compare_cost_contracts(
+          ReductionBounds.CostContract.t(),
+          ReductionBounds.CostContract.t(),
+          keyword()
+        ) ::
+          {:ok, map()} | {:error, term()}
+  def compare_cost_contracts(smaller, larger, options \\ []) do
+    with {:ok, options} <- validate_options(options, :cost_comparison),
+         {:ok, candidate, proof} <-
+           ReductionBounds.ContractComparison.infer(smaller, larger, options[:budget]) do
+      verification = Keyword.take(options, [:max_concurrency, :timeout, :lean_options])
+      verify_bound({__MODULE__, :compare_cost_contracts, 3}, candidate, proof, verification)
+    end
+  end
+
   defp list_size_measure(nil), do: :list_length
   defp list_size_measure(%Lynx.Lean{}), do: :input_size
 
@@ -815,6 +900,9 @@ defmodule ReductionBounds do
       {:ok, verify_targets(translation, Enum.uniq(targets), options, definition)}
     end
   end
+
+  defp proof_postludes(proof, :cost_contract_comparison),
+    do: ReductionBounds.ProofInput.contract_postludes(proof)
 
   defp proof_postludes(proof, :integer_cost_fragment),
     do: ReductionBounds.ProofInput.integer_cost_postludes(proof)
@@ -897,6 +985,9 @@ defmodule ReductionBounds do
       Keyword.delete(defaults, :termination_suffixes)
   end
 
+  defp option_defaults(:cost_comparison, defaults),
+    do: [budget: nil] ++ Keyword.delete(defaults, :termination_suffixes)
+
   defp option_defaults(:integer_sizes, defaults),
     do: [input_sizes: nil] ++ Keyword.delete(defaults, :termination_suffixes)
 
@@ -907,6 +998,8 @@ defmodule ReductionBounds do
     do: [:periodic_contract | Keyword.delete(defaults, :termination_suffixes)]
 
   defp option_defaults(_scope, defaults), do: defaults
+
+  defp valid_option_for?(:cost_comparison, {:budget, _value}), do: true
 
   defp valid_option_for?(:integer_cost, {:cost_contract, nil}), do: true
 
@@ -1061,7 +1154,12 @@ defmodule ReductionBounds do
   end
 
   defp assemble_target(translation, _target, fragment)
-       when fragment in [:periodic_fragment, :integer_fragment, :integer_cost_fragment] do
+       when fragment in [
+              :periodic_fragment,
+              :integer_fragment,
+              :integer_cost_fragment,
+              :cost_contract_comparison
+            ] do
     Lynx.Translation.assemble(translation, cache: false)
   end
 

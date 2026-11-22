@@ -411,9 +411,10 @@ nondecreasing functions. `size_monotonicity: :assumed` records that
 premise. `contract_instantiation: :not_checked` explicitly states that
 the declared concrete functions have not been instantiated and checked
 in Lean. Declarative syntax validation and Elixir evaluation must not
-be reported as that proof. Proving expression monotonicity and checking
-contract instances and comparisons are subsequent stages of Issue #2.
-No comparison or transfer is implemented in this stage.
+be reported as that proof. A separate comparison API now checks
+expression monotonicity and function and budget ordering, as described
+below. Applying concrete functions to an integer execution proof and
+transferring function bounds remain subsequent stages of Issue #2.
 
 Contract identifiers and cost-unit labels are declarations. Naming a
 contract `:jit`, or its unit `:reductions`, supplies no implementation
@@ -427,6 +428,103 @@ Run the declaration tests and the existing inference integration tests:
 mix test test/reduction_bounds/cost_contract_test.exs \
   test/reduction_bounds/integer_cost_bound_test.exs
 ```
+
+### Lean checks of cost-function and budget ordering
+
+`ReductionBounds.compare_cost_contracts(smaller, larger, options)`
+checks a pointwise ordering between two declarative contracts. The
+argument direction is smaller to larger. Both declarations are validated
+and must have the same cost unit, semantics, charge events, parameter
+domain, operation names, and parameter meanings. These compatibility
+checks are performed by Elixir and reported as such; they are not
+runtime-correspondence proofs. Symbolic functions must first be replaced
+by declarative definitions. Restricted domains are not supported.
+
+`CostContract.lean` defines the shared natural-valued expression
+semantics. `Expr.monotone` proves that every expression in the supported
+grammar is nondecreasing in both natural parameters. This property is
+distinct from the ordering of two different expressions.
+
+The Elixir checker builds an `ExprLe` certificate for each operation.
+Its rules cover reflexivity, zero, constant inequalities, componentwise
+addition, multiplication and maximum, extension by nonnegative summands
+or maximum alternatives, and elimination of a maximum when both sides
+are bounded. `ExprLe.sound` proves every such derivation valid for all
+natural parameters. The search is deliberately incomplete: it can
+report `unresolved_cost_order` even for a true inequality, such as a
+commuted sum. It does not declare unresolved inequalities false, and
+never uses finite samples as a universal ordering proof.
+
+The generated `functionCertificate` aligns the functions in one explicit,
+shared operation registry. `FunctionsLe.sound` proves pointwise ordering
+of the resulting charge assignments. Operations beyond that registry
+have zero cost in both assignments. `functionsMonotone` establishes the
+existing `IntegerCost.MonotoneCharges` property for each assignment.
+
+`budgetMonotone` reuses `IntegerCost.Budget`: leaves respect the charge
+ordering, sequential addition preserves it, and maximum preserves it
+at alternatives. The generated `allBudgetOrdering` theorem applies to
+every budget in that datatype, not only a supplied example. An optional
+`budget` uses the existing integer formula syntax: zero, cost leaves
+with two natural arguments, addition, and maximum. Unknown operation
+names, negative arguments, symbolic variables, and unsupported forms
+are rejected. `suppliedBudgetValues` checks both Elixir-computed values
+against Lean evaluation, and `suppliedBudgetOrdering` specializes the
+generic inequality to that budget.
+
+```elixir
+alias ReductionBounds.CostContract
+
+functions_a = Map.new(CostContract.operations(), &{&1, {:add, 1, :left}})
+functions_b = Map.new(CostContract.operations(), &{&1, {:add, 2, :left}})
+{:ok, a} = CostContract.new(id: :a, functions: functions_a)
+{:ok, b} = CostContract.new(id: :b, functions: functions_b)
+
+{:ok, comparison} =
+  ReductionBounds.compare_cost_contracts(a, b,
+    budget: {:add, {:cost, :addition, [8, 9]}, {:cost, :binding, [0, 0]}}
+  )
+
+comparison.budget_values
+#=> %{smaller: 10, larger: 12}
+comparison.checked_theorems
+```
+
+The returned `size_monotonicity`, `cost_function_order`, and `budget_order`
+are `:checked` after successful Lean verification. The proof scope is
+`:cost_functions_and_budgets`. The common verification path audits the
+generic theorems and generated certificates; only `propext`,
+`Classical.choice`, and `Quot.sound` are permitted as axioms. Existing
+integer inference still reports `contract_instantiation: :not_checked`:
+this separate comparison does not instantiate or transfer that program's
+bound, or establish correspondence between two program executions.
+
+Auxiliary callee cost names can be included when their parameter
+registries match. This checks their mathematical cost items, not the
+values or actual costs of external callees. Execution comparison must
+later supply the corresponding callee assumptions. A name such as
+`:jit` still supplies no implementation evidence. The comparison result
+reports `execution_cost_order`, `bound_transfer`, and
+`runtime_correspondence` as `:not_checked`.
+
+The Lean theorems apply to the serialized expression and budget syntax.
+Elixir declaration validation, metadata compatibility checks, and faithful
+serialization remain trusted. The checked budget examples do not prove
+universal correctness of the Elixir evaluator or a runtime implementation.
+
+Run the tests with:
+
+```sh
+mix test test/reduction_bounds/cost_contract_test.exs \
+  test/reduction_bounds/contract_comparison_test.exs
+```
+
+Positive cases cover all certificate rules, multiplication, auxiliary
+costs, and sequential and alternative budgets. Rejection cases cover
+reverse ordering, sampled-but-not-universal inequalities, unsupported
+true comparisons, incompatible metadata, symbolic functions, and invalid
+budgets. Negative Lean tests alter functions, certificates, and computed
+budget values and require rejection.
 
 ### Size-dependent charges and composition
 

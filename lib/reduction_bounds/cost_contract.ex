@@ -15,9 +15,11 @@ defmodule ReductionBounds.CostContract do
   are supplied. Auxiliary cost names in callee budgets need their own parameter
   declarations. Elixir functions and arbitrary Lean source are not expressions.
 
-  This module validates declarations and evaluates expressions. It does not
-  prove a concrete contract's monotonicity, compare contracts, or establish
-  runtime applicability. Integer inference continues to check a bound quantified
+  This module validates declarations and evaluates expressions. Use
+  `ReductionBounds.compare_cost_contracts/3` for separate Lean checks of
+  declarative function monotonicity, pointwise ordering, and budget ordering.
+  These checks do not establish runtime applicability or compare executions.
+  Integer inference continues to check a bound quantified
   over arbitrary nondecreasing cost functions. A supplied declaration is reported
   separately with `contract_instantiation: :not_checked`; evaluating an expression
   in Elixir is not a Lean certificate for that instance.
