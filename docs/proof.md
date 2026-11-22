@@ -519,6 +519,60 @@ Lean tests change a result, budget, source operation, or intermediate
 summary and require rejection. A falsified callee result must also be
 rejected when supplied to a caller.
 
+### Signed boundaries, cancellation, and wide intermediates
+
+The Issue #1 boundary regressions use mathematical magnitude boundaries,
+not a fixed small-integer/bignum representation threshold. For widths
+1, 8, 32, 64, and 200, the domain tests cover both signs immediately
+below, at, and above `2^width`. They check exact constant descriptions,
+the strict magnitude condition, and carry and negative subtraction
+results. The Lean comparison test checks the same signed boundary
+family against `Holds` and `contains`.
+
+The compiled cost fixtures exercise addition and subtraction around
+signed boundaries at widths 1, 32, 64, and 200. Their tests require the
+source-bound theorem and retain the operand widths in the cost leaves.
+They also compare the compiled functions' endpoint results with the
+inferred result descriptions.
+
+`cancel_products/2` squares two independently supplied signed inputs
+and subtracts the products. For inputs `-(2^200 + 1)` and `2^200 + 1`,
+the final result is zero. The trace must nevertheless retain both
+products with magnitude bound 402, both multiplication charges with
+operand bounds `[201, 201]`, and the subtraction charge with operand
+bounds `[402, 402]`. This prevents a small final result from hiding
+large intermediate work. A negative Lean test changes the returned
+budget to charge those multiplications at zero operand width and
+requires rejection.
+
+`crc64_step/1` is a CRC-style expression with a fixed polynomial and
+a 64-bit mask, not a complete CRC implementation. On input interval
+`[-2^64, 2^64]` with magnitude bound 65, shifting left by eight gives
+bound 73 and signed XOR gives conservative bound 74. The mask returns
+range `[0, 2^64 - 1]` with magnitude bound 64. The test requires the
+shift, XOR, and mask cost leaves to use their respective intermediate
+operand sizes, including the 74-bit input to the mask. It checks
+compiled results on negative, zero, and positive boundary inputs.
+
+Reproduce these regressions with the existing integer test files:
+
+```sh
+ELAN_TOOLCHAIN="$(cat deps/lynx/lean-toolchain)" mix test \
+  test/reduction_bounds/integer_size_test.exs \
+  test/reduction_bounds/integer_size_proof_test.exs \
+  test/reduction_bounds/integer_cost_bound_test.exs
+```
+
+These cases cover the VM-independent portion of acceptance criterion 2:
+signed size boundaries, negative values, cancellation, and integers much
+wider than a machine word. The finite comparisons supplement the generic
+Lean theorems; they do not prove correctness of the Elixir compiler or
+runtime arithmetic. The tests keep `runtime_correspondence: :not_checked`.
+They do not detect native integer representations, establish a
+small-integer/bignum transition threshold, measure ERTS reductions, or
+claim conformance with a complete CRC-64 algorithm. Representation
+boundary tests remain a separate implementation-specific validation task.
+
 ## Map and struct operations
 
 The decoder handles fixed atom keys and the supported Boolean guard

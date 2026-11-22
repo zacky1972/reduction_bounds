@@ -5,6 +5,44 @@ defmodule ReductionBounds.IntegerSizeTest do
 
   doctest IntegerSize
 
+  test "signed power-of-two boundaries have exact magnitude widths" do
+    # Mathematical boundaries; no runtime representation threshold is assumed.
+    for width <- [1, 8, 32, 64, 200] do
+      limit = Integer.pow(2, width)
+      below = %IntegerSize{magnitude_bits: width}
+      cases = [{limit - 1, width}, {limit, width + 1}, {limit + 1, width + 1}]
+
+      for sign <- [-1, 1], {magnitude, expected} <- cases do
+        value = sign * magnitude
+        exact = IntegerSize.from_integer(value)
+
+        assert exact == %IntegerSize{lower: value, upper: value, magnitude_bits: expected}
+        assert IntegerSize.contains?(below, value) == magnitude < limit
+      end
+    end
+  end
+
+  test "arithmetic retains carry and negative boundary results at large widths" do
+    one = IntegerSize.from_integer(1)
+
+    for width <- [1, 8, 32, 64, 200] do
+      limit = Integer.pow(2, width)
+      positive = IntegerSize.from_integer(limit - 1)
+      negative = IntegerSize.from_integer(-limit + 1)
+      carried = IntegerSize.add(positive, one)
+      borrowed = IntegerSize.subtract(negative, one)
+
+      assert carried.lower == limit
+      assert carried.upper == limit
+      assert carried.magnitude_bits == width + 1
+      assert IntegerSize.contains?(carried, limit)
+      assert borrowed.lower == -limit
+      assert borrowed.upper == -limit
+      assert borrowed.magnitude_bits == width + 1
+      assert IntegerSize.contains?(borrowed, -limit)
+    end
+  end
+
   test "defaults to an unbounded range and unknown magnitude bit length" do
     assert %IntegerSize{} == %IntegerSize{
              lower: :unbounded,

@@ -3,6 +3,29 @@ defmodule ReductionBounds.IntegerSizeProofTest do
 
   alias ReductionBounds.IntegerSize
 
+  test "Lean and Elixir agree at signed power-of-two boundaries" do
+    checks =
+      for width <- [1, 8, 32, 64, 200],
+          sign <- [-1, 1],
+          offset <- [-1, 0, 1],
+          into: "" do
+        limit = Integer.pow(2, width)
+        value = sign * (limit + offset)
+        exact = IntegerSize.from_integer(value)
+        width_only = %IntegerSize{magnitude_bits: width}
+        expected = offset < 0
+
+        assert IntegerSize.contains?(width_only, value) == expected
+
+        """
+        example : Holds #{bounds(exact)} (#{value}) := by decide
+        example : contains #{bounds(width_only)} (#{value}) = #{expected} := by decide
+        """
+      end
+
+    assert [%{module: "Erlang.postlude", status: :ok}] = verify(checks)
+  end
+
   test "Lean checks the semantics and agrees with Elixir on boundary cases" do
     checks =
       for size <- examples(),

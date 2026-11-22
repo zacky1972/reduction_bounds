@@ -55,6 +55,100 @@ defmodule ReductionBounds.IntegerCostBoundTest do
         do: assert(IntegerSize.contains?(result.result_size, apply(Fixture, :crc_step, [x])))
   end
 
+  test "checks compiled arithmetic around signed power-of-two boundaries", %{beam: beam} do
+    for width <- [1, 32, 64, 200] do
+      limit = Integer.pow(2, width)
+
+      for {name, operation, lower, upper} <- [
+            {:increment, :addition, limit - 1, limit},
+            {:decrement, :subtraction, -limit, -limit + 1}
+          ] do
+        assert {:ok, result} = infer(name, [size(lower, upper, width + 1)], beam)
+        assert "integerCostSourceBound" in result.checked_theorems
+        assert result.value_agreement == :checked
+        assert result.runtime_correspondence == :not_checked
+        assert result.unresolved_sizes == []
+        assert {:cost, operation, [width + 1, 1]} in cost_items(result.upper_bound)
+
+        for value <- [lower, upper] do
+          actual = apply(Fixture, name, [value])
+          assert IntegerSize.contains?(result.result_size, actual)
+        end
+      end
+    end
+  end
+
+  test "cancellation preserves the sizes and costs of large signed products", %{beam: beam} do
+    value = Integer.pow(2, 200) + 1
+    inputs = [IntegerSize.from_integer(-value), IntegerSize.from_integer(value)]
+
+    assert {:ok, result} = infer(:cancel_products, inputs, beam)
+    assert result.result_size.lower == 0
+    assert result.result_size.upper == 0
+    assert apply(Fixture, :cancel_products, [-value, value]) == 0
+    assert "integerCostSourceBound" in result.checked_theorems
+    assert result.runtime_correspondence == :not_checked
+
+    products = Enum.filter(result.intermediates, &(&1.operation == :multiply))
+    assert length(products) == 2
+
+    for product <- products do
+      assert product.size.lower == value * value
+      assert product.size.upper == value * value
+      assert product.size.magnitude_bits == 402
+    end
+
+    items = cost_items(result.upper_bound)
+    assert Enum.count(items, &(&1 == {:cost, :multiplication, [201, 201]})) == 2
+    assert {:cost, :subtraction, [402, 402]} in items
+
+    multiplication = Map.fetch!(charges(), :multiplication)
+    budget = IntegerCostBound.evaluate(result.upper_bound, charges())
+    assert budget >= 2 * multiplication.(201, 201)
+  end
+
+  test "a 64-bit mask preserves wider signed intermediates and their cost items", %{beam: beam} do
+    limit = Integer.pow(2, 64)
+
+    assert {:ok, result} = infer(:crc64_step, [size(-limit, limit, 65)], beam)
+    assert result.result_size == size(0, limit - 1, 64)
+    assert "integerCostSourceBound" in result.checked_theorems
+    assert result.runtime_correspondence == :not_checked
+    assert result.unresolved_sizes == []
+
+    assert Enum.any?(
+             result.intermediates,
+             &(&1.operation == :shift_left and &1.size.magnitude_bits == 73)
+           )
+
+    assert Enum.any?(
+             result.intermediates,
+             &(&1.operation == :bit_xor and &1.size.magnitude_bits == 74)
+           )
+
+    items = cost_items(result.upper_bound)
+    assert {:cost, :shift_left, [65, 8]} in items
+    assert {:cost, :xor, [73, 63]} in items
+    assert {:cost, :mask, [74, 64]} in items
+
+    for value <- [-limit, -limit + 1, -1, 0, 1, limit - 1, limit] do
+      actual = apply(Fixture, :crc64_step, [value])
+      assert IntegerSize.contains?(result.result_size, actual)
+    end
+  end
+
+  test "Lean rejects charging a large product as if its operands had zero width", %{beam: beam} do
+    target = {Fixture, :cancel_products, 2}
+    value = Integer.pow(2, 200) + 1
+    inputs = [IntegerSize.from_integer(-value), IntegerSize.from_integer(value)]
+    assert {:ok, core} = SearchBound.core_function(target, [beam])
+    assert {:ok, candidate} = IntegerCostBound.infer_core(core, target, input_sizes: inputs)
+
+    wrong_budget = erase_product_widths(candidate.upper_bound)
+    assert wrong_budget != candidate.upper_bound
+    assert Enum.any?(verify(%{candidate | upper_bound: wrong_budget}), &(&1.status == :error))
+  end
+
   test "checks both Boolean branch orders and unary negation", %{beam: beam} do
     assert {:ok, result} = infer(:guarded, [size(-4, 4, 3)], beam)
 
@@ -301,6 +395,20 @@ defmodule ReductionBounds.IntegerCostBoundTest do
 
   defp size(lower, upper, bits),
     do: %IntegerSize{lower: lower, upper: upper, magnitude_bits: bits}
+
+  defp cost_items(0), do: []
+  defp cost_items({:cost, _, _} = item), do: [item]
+
+  defp cost_items({kind, left, right}) when kind in [:add, :max],
+    do: cost_items(left) ++ cost_items(right)
+
+  defp erase_product_widths({:cost, :multiplication, _}),
+    do: {:cost, :multiplication, [0, 0]}
+
+  defp erase_product_widths({kind, left, right}) when kind in [:add, :max],
+    do: {kind, erase_product_widths(left), erase_product_widths(right)}
+
+  defp erase_product_widths(other), do: other
 
   defp charges() do
     names = [

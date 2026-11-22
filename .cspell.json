@@ -35,6 +35,7 @@
     "rintro",
     "rcases",
     "symm",
-    "elim"
+    "elim",
+    "bignum"
   ]
 }

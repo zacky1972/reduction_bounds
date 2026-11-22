@@ -8,6 +8,23 @@ defmodule ReductionBounds.Fixtures.IntegerCostPrograms do
   end
 
   def crc_step(x), do: Bitwise.band(Bitwise.bxor(Bitwise.bsl(x, 8), 7), 255)
+
+  def increment(x), do: x + 1
+  def decrement(x), do: x - 1
+
+  def cancel_products(x, y) do
+    left = x * x
+    right = y * y
+    left - right
+  end
+
+  # A width-sensitive expression, not a complete CRC implementation.
+  def crc64_step(x) do
+    shifted = Bitwise.bsl(x, 8)
+    mixed = Bitwise.bxor(shifted, 0x42F0E1EBA9EA3693)
+    Bitwise.band(mixed, 0xFFFFFFFFFFFFFFFF)
+  end
+
   def helper(x), do: x * 3
   def local_caller(x), do: helper(x) + 1
   def caller(x), do: __MODULE__.helper(x) + 1
