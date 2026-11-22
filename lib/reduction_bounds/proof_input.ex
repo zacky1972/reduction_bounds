@@ -131,6 +131,62 @@ defmodule ReductionBounds.ProofInput do
     end
   end
 
+  @spec scope_evidence(map()) :: map()
+  def scope_evidence(%{source: :cost_contract_comparison} = candidate) do
+    %{
+      verification_scope: %{
+        kind: candidate.proof_scope,
+        contracts: %{smaller: candidate.smaller.id, larger: candidate.larger.id},
+        checked: [
+          :size_monotonicity,
+          :operation_order,
+          :budget_order,
+          :conditional_execution_order
+        ],
+        assumptions: %{execution_conditions: candidate.execution_conditions},
+        trusted: [:metadata_validation, :expression_serialization],
+        unverified: [
+          :target_applicability,
+          :bound_transfer,
+          :runtime_correspondence,
+          :wall_clock_time
+        ]
+      }
+    }
+  end
+
+  def scope_evidence(%{source: :integer_bound_transfer} = candidate) do
+    %{
+      verification_scope: %{
+        kind: candidate.proof_scope,
+        contracts: %{from: candidate.source_contract.id, to: candidate.destination_contract.id},
+        checked: [
+          :source_bound_replay,
+          :operation_order,
+          :input_coverage,
+          :core_value_agreement,
+          :bound_transfer,
+          :termination_under_source_call_contracts
+        ],
+        assumptions: %{
+          input_sizes: candidate.input_sizes,
+          recursive_invariant: candidate.original_bound.conditions.recursive_invariant,
+          source_call_contracts: candidate.original_bound.conditions.calls,
+          callee_models: candidate.conditions.callee_models
+        },
+        trusted: [
+          :debug_information_extraction,
+          :core_reification,
+          :expression_serialization,
+          :metadata_validation
+        ],
+        unverified: [:runtime_correspondence, :wall_clock_time]
+      }
+    }
+  end
+
+  def scope_evidence(_candidate), do: %{}
+
   defp case_study_theorems(%{source: :integer_cost_fragment} = candidate) do
     global =
       ~w(ReductionBounds.IntegerCost.inclusionSound ReductionBounds.IntegerCost.derivationSound

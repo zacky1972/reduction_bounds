@@ -18,7 +18,11 @@ defmodule ReductionBounds.CostContract do
   This module validates declarations and evaluates expressions. Use
   `ReductionBounds.compare_cost_contracts/3` for separate Lean checks of
   declarative function monotonicity, pointwise ordering, and budget ordering.
-  These checks do not establish runtime applicability or compare executions.
+  The comparison also checks a conditional execution-cost theorem under
+  explicit callee assumptions. It does not select a target or transfer a bound.
+  Use `ReductionBounds.transfer_integer_bound/3` to recheck a target and its
+  original bound, instantiate concrete contracts, and apply the ordering.
+  Neither API establishes applicability to a concrete VM implementation.
   Integer inference continues to check a bound quantified
   over arbitrary nondecreasing cost functions. A supplied declaration is reported
   separately with `contract_instantiation: :not_checked`; evaluating an expression

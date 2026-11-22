@@ -758,6 +758,115 @@ inputs, missing callee correspondence, changed BEAM code, altered bound
 evidence, false callee proofs, forged comparison certificates, false
 numeric results, and asserted additional axioms.
 
+### Public API integration and evaluation
+
+Successful `compare_cost_contracts/3` and `transfer_integer_bound/3` calls
+now include `verification_scope`. The public verification path adds this
+summary only after Lean verification succeeds. It does not replace the
+proof or accept a caller's status flags as evidence.
+
+| Field | Meaning |
+| --- | --- |
+| `kind` | The modeled proof scope, matching `proof_scope` |
+| `contracts` | `smaller`/`larger` for comparison, or `from`/`to` for transfer |
+| `checked` | Completed workflow checks under the stated conditions |
+| `assumptions` | Required input and external-call conditions |
+| `trusted` | Processing outside the Lean theorem, including metadata checks and serialization |
+| `unverified` | Claims outside this proof, including runtime correspondence and wall-clock timing |
+
+Comparison's execution theorem still requires the same program, inputs,
+charge events, call-domain coverage, and callee agreement. It selects no
+target. Transfer records its actual input domains, recursive invariant,
+source callee contracts, and shared or proved external relation. Replaying
+source evidence includes Elixir checks followed by Lean proof checking;
+it is not a theorem proving the Elixir implementation correct. The trusted
+extraction and reification boundary remains explicit. `checked_theorems`
+contains the exact audited declarations rather than a list of intended checks.
+
+The APIs preserve their existing error tuples for failed comparisons,
+insufficient conditions, and failed Lean proofs. Unknown options in these
+two APIs now identify the rejected keys. Comparison accepts only `budget`,
+`max_concurrency`, `timeout`, and `lean_options`; `beam_binaries` is a transfer
+and source-analysis option, not an input to target-free comparison.
+
+| Diagnostic | Interpretation |
+| --- | --- |
+| `unknown_options` | One or more option names are not accepted by this API |
+| `invalid_option` | An accepted option has an invalid value |
+| `invalid_cost_contract` | The indicated declaration or profile is unsupported |
+| `incompatible_cost_contracts` | Units or parameter meanings do not match |
+| `unresolved_cost_functions` | A required concrete function remains symbolic |
+| `unresolved_cost_order` | The structural search did not prove the required direction |
+| `missing_call_contract` | A static callee lacks a contract; reported within `integer_cost_source` |
+| `call_precondition` | Inferred arguments do not establish a callee's input conditions; reported within `integer_cost` |
+| `insufficient_transfer_inputs` | Destination input conditions do not establish the source precondition |
+| `unresolved_callee_correspondence` | The transfer needs an explicit shared model or a Lean correspondence proof |
+| `original_bound_mismatch` | Replayed source evidence differs from the supplied bound |
+| `verification_failed` | Lean rejected the generated proof or its axiom dependencies |
+
+In comparison diagnostics, `smaller` denotes A and `larger` denotes B.
+In transfer, A is the destination and B is the source. Units and semantic
+labels alone never authorize a comparison or transfer. An unresolved true
+inequality is reported conservatively, not classified as false.
+
+`ContractWorkflowTest` exercises the public APIs using the existing integer
+fixtures under distinct nondecreasing polynomial charge functions. Each
+positive case derives a source bound, checks contract ordering, transfers
+the bound, and checks the returned scope and source-budget value.
+
+| Evaluation | Existing fixture | Reused checks |
+| --- | --- | --- |
+| Arithmetic and bindings | `product/1` | Integer size derivation and source correspondence |
+| Branch selection | `guarded/1` | Branch refinement and maximum budget |
+| Finite recursion | `sum/2` | Finite derivation and conditional termination |
+| Variance arithmetic | `variance_numerator/3` | Multiple input sizes, products, and subtraction |
+| CRC update | `crc64_update/2` | Intermediate widths, shift, XOR, and masking |
+| Reflected CRC index | `crc64_reflected_index/2` | Wide inputs, masking, and addition |
+| Contracted call | `caller/1` and `helper/1` | Rechecked callee bound and explicit shared external model |
+
+Rejection checks in this evaluation cover public option validation,
+unsupported profiles and registries, incompatible units, reverse ordering,
+symbolic functions, missing callee contracts, insufficient call inputs,
+and missing external correspondence. The earlier comparison, execution,
+and transfer test modules additionally cover sampled-but-not-universal
+inequalities, forged evidence and axioms, wider transfer inputs, changed
+BEAM code, and false callee value or actual-cost correspondence.
+
+From the project root with its pinned Lean toolchain installed, run:
+
+```sh
+mix test --only cost_contract_workflow --trace
+```
+
+To print each case's formula, source-contract numeric bound, input conditions,
+verification scope, and audited theorem names:
+
+```sh
+REDUCTION_BOUNDS_REPORT=1 mix test --only cost_contract_workflow --trace
+```
+
+The proposed Issue #2 criteria can be checked against the following evidence:
+
+| Acceptance criterion | Reproduction evidence |
+| --- | --- |
+| Identify cost contracts and their applicability conditions | `cost_contract_test.exs`, integer analysis results, and `verification_scope.assumptions` |
+| Check an ordering between contracts in Lean | `contract_comparison_test.exs`, `execution_comparison_test.exs`, and audited comparison theorems |
+| Transfer a verified bound between contracts | `bound_transfer_test.exs` and `transferredCostChain` |
+| Report unsupported comparisons and unresolved obligations | Public workflow rejection cases, existing transfer rejection cases, and `verification_scope.unverified` |
+| Provide reproducible positive and rejection tests | The tagged public workflow and the full comparison and transfer test modules |
+| Keep concrete execution-mode correspondence explicit | `runtime_correspondence: :not_checked` and the reported runtime and timing exclusions |
+
+The report is generated from successful results at test execution time.
+No fixed test count or precomputed numeric outcome is treated as evidence.
+This is a symbolic verification evaluation, not a measurement of ERTS
+reductions or processor time. For full project validation, run:
+
+```sh
+mix check
+mix test
+mix docs
+```
+
 ### Size-dependent charges and composition
 
 A cost leaf `{:cost, name, [a, b]}` denotes `charge(name, a, b)`.

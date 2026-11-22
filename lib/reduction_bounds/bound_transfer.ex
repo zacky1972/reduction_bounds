@@ -165,7 +165,9 @@ defmodule ReductionBounds.BoundTransfer do
 
   defp callee_relation(calls, nil),
     do:
-      {:error, {:unresolved_callee_correspondence, Enum.map(calls, fn {_key, c} -> c.target end)}}
+      {:error,
+       {:unresolved_callee_correspondence,
+        calls |> Enum.map(fn {_key, c} -> c.target end) |> Enum.sort()}}
 
   defp relation_kind(:shared), do: :shared_external_model
   defp relation_kind(%Lynx.Lean{}), do: :proved_external_agreement

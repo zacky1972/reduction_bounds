@@ -352,6 +352,36 @@ defmodule ReductionBounds do
   model, or a Lean proof of the two external models' value and actual-cost
   correspondence. Source call contracts remain explicit assumptions.
 
+
+  ## Verification scope and diagnostics
+
+  Successful contract comparison and integer bound transfer include
+  `verification_scope`. Its `checked` field lists completed checks;
+  `assumptions` records conditions required by the theorem; `trusted` names
+  processing outside the Lean proof; and `unverified` identifies remaining
+  claims, including concrete runtime correspondence and wall-clock timing.
+  `checked_theorems` remains the list of audited Lean declarations.
+
+  Comparison reports the contracts as `smaller` and `larger`. Transfer
+  reports `from` (the source contract B) and `to` (the destination A).
+  Input conditions and callee assumptions must hold before applying the
+  mathematical guarantee. A checked result does not certify an ERTS build.
+
+  These two APIs report unknown options as `{:error, {:unknown_options, keys}}`.
+  Invalid values retain `{:error, {:invalid_option, name, value}}`. Comparison
+  accepts `budget`, `timeout`, `max_concurrency`, and `lean_options`; it does
+  not accept `beam_binaries` because it selects no target. Transfer accepts
+  `beam_binaries` to repeat source extraction. Other diagnostics, such as
+  `unresolved_cost_order`, `insufficient_transfer_inputs`, and
+  `unresolved_callee_correspondence`, remain errors rather than successful
+  transfers. Lean proof or axiom-audit failures report `verification_failed`.
+
+  Reproduce the public workflow examples and rejection checks with:
+
+  ```sh
+  REDUCTION_BOUNDS_REPORT=1 mix test --only cost_contract_workflow --trace
+  ```
+
   '''
 
   @type target :: {module(), atom(), arity()}
@@ -894,7 +924,10 @@ defmodule ReductionBounds do
   #=> %{smaller: 10, larger: 12}
   ```
 
+  `verification_scope` separates the conditional theorem from its assumptions,
+  trusted metadata and serialization, and unverified target or runtime applicability.
   `timeout`, `max_concurrency`, and `lean_options` work as for verification.
+  Unknown options, including `beam_binaries`, report `unknown_options`.
   """
   @spec compare_cost_contracts(
           ReductionBounds.CostContract.t(),
@@ -974,7 +1007,9 @@ defmodule ReductionBounds do
   The generated theorem bounds every destination execution covered by the
   preconditions. Its termination theorem retains the finite derivation and
   normally returning source callee assumptions. Concrete runtime correspondence
-  remains `:not_checked`.
+  remains `:not_checked`. The returned `verification_scope` records these
+  assumptions, the checked steps, and the trusted extraction and serialization.
+  Unknown option names report `unknown_options`.
   """
   @spec transfer_integer_bound(map(), ReductionBounds.CostContract.t(), keyword()) ::
           {:ok, map()} | {:error, term()}
@@ -996,7 +1031,12 @@ defmodule ReductionBounds do
 
     case verify_source(:inline, [target], [postlude: proof] ++ options, source) do
       {:ok, [{^target, {:ok, reports}}]} ->
-        {:ok, candidate |> Map.merge(evidence) |> Map.put(:reports, reports)}
+        scope = ReductionBounds.ProofInput.scope_evidence(candidate)
+
+        result =
+          candidate |> Map.merge(evidence) |> Map.merge(scope) |> Map.put(:reports, reports)
+
+        {:ok, result}
 
       {:ok, [{^target, {:error, reason}}]} ->
         {:error, reason}
@@ -1082,10 +1122,15 @@ defmodule ReductionBounds do
       {:ok, options}
     else
       false -> {:error, :invalid_options}
-      {:error, _keys} -> {:error, :invalid_options}
+      {:error, keys} -> invalid_option_keys(source, keys)
       {key, value} -> {:error, {:invalid_option, key, value}}
     end
   end
+
+  defp invalid_option_keys(source, keys) when source in [:cost_comparison, :bound_transfer],
+    do: {:error, {:unknown_options, Enum.sort(keys)}}
+
+  defp invalid_option_keys(_source, _keys), do: {:error, :invalid_options}
 
   defp option_defaults(:inline, defaults), do: [:postlude | defaults]
   defp option_defaults(:list_bound, defaults), do: [:input_contract | defaults]
@@ -1111,7 +1156,7 @@ defmodule ReductionBounds do
   end
 
   defp option_defaults(:cost_comparison, defaults),
-    do: [budget: nil] ++ Keyword.delete(defaults, :termination_suffixes)
+    do: [budget: nil] ++ Keyword.drop(defaults, [:termination_suffixes, :beam_binaries])
 
   defp option_defaults(:integer_sizes, defaults),
     do: [input_sizes: nil] ++ Keyword.delete(defaults, :termination_suffixes)
