@@ -265,6 +265,123 @@ defmodule ReductionBounds do
   Exhausting `max_unfolding` or `max_nodes` reports an error; neither
   setting is an assumption that recursion terminates.
 
+  ## Identify an operation cost contract
+
+  Use a `CostContract` to label the cost unit and operation-cost declaration.
+  This is separate from the contracts for calls to other functions.
+
+  ```elixir
+  alias ReductionBounds.CostContract
+
+  {:ok, contract} = CostContract.new(id: :analysis, cost_unit: :symbolic_work)
+
+  {:ok, declared_bound} =
+    ReductionBounds.infer_integer_cost_bound({IntegerCostDemo, :triple, 1},
+      beam_binaries: [cost_beam],
+      input_sizes: [input],
+      cost_contract: contract
+    )
+
+  declared_bound.cost_contract.id
+  #=> :analysis
+  declared_bound.applicability.parameters.mask
+  #=> {:input_magnitude_bits, :mask_width}
+  declared_bound.applicability.contract_instantiation
+  #=> :not_checked
+  ```
+
+  A declaration may also contain natural-valued expressions; see
+  `ReductionBounds.CostContract`. The current Lean proof remains parametric
+  in nondecreasing cost functions. Recording or evaluating a declaration does
+  not check a concrete instantiation or a comparison between contracts.
+  Labels such as `:jit` do not establish correspondence with that runtime.
+  To check declarative function and budget ordering separately, use
+  `compare_cost_contracts/3`. That check does not transfer the target's bound.
+
+  ## Compare operation cost contracts
+
+  Compare two declarative contracts in the smaller-to-larger direction.
+  This example needs no target module or BEAM binary.
+
+  ```elixir
+  alias ReductionBounds.CostContract
+
+  functions_a = Map.new(CostContract.operations(), &{&1, {:add, 1, :left}})
+  functions_b = Map.new(CostContract.operations(), &{&1, {:add, 2, :left}})
+  {:ok, a} = CostContract.new(id: :a, functions: functions_a)
+  {:ok, b} = CostContract.new(id: :b, functions: functions_b)
+
+  {:ok, comparison} =
+    ReductionBounds.compare_cost_contracts(a, b,
+      budget: {:add, {:cost, :addition, [8, 9]}, {:cost, :binding, [0, 0]}}
+    )
+
+  comparison.budget_values
+  #=> %{smaller: 10, larger: 12}
+  comparison.checked_theorems
+  comparison.bound_transfer
+  #=> :not_checked
+  ```
+
+  Lean checks the ordering for all natural parameters and every composed
+  budget. The optional budget's evaluations are also checked. An unresolved
+  structural comparison is not a proof that the inequality is false.
+  A conditional theorem also compares finite executions of the same integer
+  program, preserving the returned value. Its assumptions require every static
+  call to have an admitted argument, matching returned values, and ordered actual
+  costs. These assumptions are recorded in `execution_conditions`; they are not
+  discharged for a target by this API. Use `transfer_integer_bound/3` to
+  recheck a target bound and apply the comparison under explicit call conditions.
+
+  ## Transfer an integer bound
+
+  Pass an integer bound carrying a concrete source `cost_contract`, together
+  with a smaller destination contract:
+
+  ```elixir
+  {:ok, transferred} = ReductionBounds.transfer_integer_bound(bound, destination)
+  transferred.upper_bound_contract
+  transferred.upper_bound_value
+  transferred.checked_theorems
+  ```
+
+  The target and any reused callee bounds are analyzed again and both proofs
+  are rechecked. The numeric bound is evaluated under the source contract.
+  `input_sizes` may narrow the original input domains. For contracted calls,
+  supply `callee_correspondence: :shared` for a common mathematical external
+  model, or a Lean proof of the two external models' value and actual-cost
+  correspondence. Source call contracts remain explicit assumptions.
+
+
+  ## Verification scope and diagnostics
+
+  Successful contract comparison and integer bound transfer include
+  `verification_scope`. Its `checked` field lists completed checks;
+  `assumptions` records conditions required by the theorem; `trusted` names
+  processing outside the Lean proof; and `unverified` identifies remaining
+  claims, including concrete runtime correspondence and wall-clock timing.
+  `checked_theorems` remains the list of audited Lean declarations.
+
+  Comparison reports the contracts as `smaller` and `larger`. Transfer
+  reports `from` (the source contract B) and `to` (the destination A).
+  Input conditions and callee assumptions must hold before applying the
+  mathematical guarantee. A checked result does not certify an ERTS build.
+
+  These two APIs report unknown options as `{:error, {:unknown_options, keys}}`.
+  Invalid values retain `{:error, {:invalid_option, name, value}}`. Comparison
+  accepts `budget`, `timeout`, `max_concurrency`, and `lean_options`; it does
+  not accept `beam_binaries` because it selects no target. Transfer accepts
+  `beam_binaries` to repeat source extraction. Other diagnostics, such as
+  `unresolved_cost_order`, `insufficient_transfer_inputs`, and
+  `unresolved_callee_correspondence`, remain errors rather than successful
+  transfers. Lean proof or axiom-audit failures report `verification_failed`.
+
+  Reproduce the public workflow examples and rejection checks with:
+
+  ```sh
+  REDUCTION_BOUNDS_REPORT=1 mix test --only cost_contract_workflow --trace
+  ```
+
   '''
 
   @type target :: {module(), atom(), arity()}
@@ -681,6 +798,39 @@ defmodule ReductionBounds do
   The result records `result_size`, `upper_bound`, `intermediates`, and `conditions`.
   This is a symbolic model, with no ERTS reduction or timing claim.
 
+  The optional `cost_contract` is a `ReductionBounds.CostContract` declaration
+  identifying operation costs, the cost unit, and the integer semantics profile.
+  Omission records the existing symbolic contract. The result's `cost_contract`
+  and `applicability` fields identify the declaration, parameter meanings,
+  input domains, recursive conditions, and callee assumptions actually used.
+  This operation contract is separate from a callee's `call_contracts` entry.
+
+  Declarative cost functions can be recorded and evaluated in Elixir. The Lean
+  bound remains quantified over arbitrary nondecreasing cost functions;
+  `applicability.contract_instantiation: :not_checked` means a concrete
+  declaration has not been instantiated and checked in Lean. A contract named
+  `:jit` does not establish JIT applicability. Runtime correspondence remains
+  `:not_checked`, and comparisons and bound transfers between contracts are
+  not implemented by this option.
+
+  ```elixir
+  alias ReductionBounds.CostContract
+
+  {:ok, contract} = CostContract.new(id: :analysis, cost_unit: :symbolic_work)
+
+  {:ok, bound} =
+    ReductionBounds.infer_integer_cost_bound({MyModule, :sum, 2},
+      input_sizes: [
+        %ReductionBounds.IntegerSize{lower: 0, upper: 4, magnitude_bits: 3},
+        ReductionBounds.IntegerSize.from_integer(0)
+      ],
+      cost_contract: contract
+    )
+
+  bound.applicability.parameters.shift_left
+  # {:input_magnitude_bits, :shift_amount}
+  ```
+
   Static unary calls use `call_contracts`, keyed by module, function, and arity.
   Each contract has `input_size`, `result_size`, and `upper_bound`. A checked
   result from this API for a unary function can instead
@@ -721,6 +871,157 @@ defmodule ReductionBounds do
     end
   end
 
+  @doc """
+  Checks pointwise ordering of two declarative operation cost contracts in Lean.
+
+  Arguments are ordered from smaller to larger. The contracts must share the
+  cost unit, semantics, event profile, and parameter meanings. Both must have
+  declarative functions. The comparison is universal over natural parameters,
+  using a conservative structural certificate; an unresolved comparison is
+  not a proof that the inequality is false.
+
+  Lean checks expression monotonicity, each operation's ordering, and ordering
+  of every existing symbolic budget under the two function assignments.
+  Optionally pass `budget: bound.upper_bound` to check its two evaluations.
+  Auxiliary callee cost names must be declared on both sides.
+
+  Lean also checks a generic execution comparison for the existing integer
+  semantics: for the same program and input, every admitted finite execution
+  under the smaller assignment has a same-value execution under the larger
+  assignment with at least its cost. This covers bindings, arithmetic, branches,
+  static calls, and finite recursion. It needs neither a VM model nor a new
+  definition of program execution.
+
+  Static calls require explicit value agreement and actual-cost ordering on
+  their admitted input domains. Ordered callee budgets alone are insufficient.
+  The existing size derivation can establish that each call's argument meets
+  its input contract; the theorem retains the assumptions needed by that derivation.
+
+  The result records `proof_scope: :cost_functions_budgets_and_executions`,
+  `execution_cost_order: :checked`, and the required `execution_conditions`.
+  This checks the conditional generic theorem without selecting a target or
+  proving that its callees meet those conditions. Accordingly,
+  `execution_applicability` is `:not_checked` and `callee_correspondence` is
+  `:assumed`. No caller-supplied label counts as evidence for these assumptions.
+  This comparison alone leaves bound transfer and concrete integer contract
+  instantiation unchecked; `transfer_integer_bound/3` performs those checks
+  separately. Correspondence with an ERTS implementation remains unchecked.
+
+  ```elixir
+  alias ReductionBounds.CostContract
+
+  smaller_functions = Map.new(CostContract.operations(), &{&1, {:add, 1, :left}})
+  larger_functions = Map.new(CostContract.operations(), &{&1, {:add, 2, :left}})
+  {:ok, smaller} = CostContract.new(id: :smaller, functions: smaller_functions)
+  {:ok, larger} = CostContract.new(id: :larger, functions: larger_functions)
+
+  {:ok, comparison} =
+    ReductionBounds.compare_cost_contracts(smaller, larger,
+      budget: {:add, {:cost, :addition, [8, 9]}, {:cost, :binding, [0, 0]}}
+    )
+
+  comparison.budget_values
+  #=> %{smaller: 10, larger: 12}
+  ```
+
+  `verification_scope` separates the conditional theorem from its assumptions,
+  trusted metadata and serialization, and unverified target or runtime applicability.
+  `timeout`, `max_concurrency`, and `lean_options` work as for verification.
+  Unknown options, including `beam_binaries`, report `unknown_options`.
+  """
+  @spec compare_cost_contracts(
+          ReductionBounds.CostContract.t(),
+          ReductionBounds.CostContract.t(),
+          keyword()
+        ) ::
+          {:ok, map()} | {:error, term()}
+  def compare_cost_contracts(smaller, larger, options \\ []) do
+    with {:ok, options} <- validate_options(options, :cost_comparison),
+         {:ok, candidate, proof} <-
+           ReductionBounds.ContractComparison.infer(smaller, larger, options[:budget]) do
+      verification = Keyword.take(options, [:max_concurrency, :timeout, :lean_options])
+      verify_bound({__MODULE__, :compare_cost_contracts, 3}, candidate, proof, verification)
+    end
+  end
+
+  @doc """
+  Rechecks an integer bound and transfers it to a smaller operation-cost contract.
+
+  Pass a result of `infer_integer_cost_bound/2` whose `cost_contract` contains
+  concrete declarative functions. The source contract belongs to `bound`;
+  `destination` is the smaller contract. The target and any reused callees are
+  extracted again from BEAM. Stored derivations, formulas, and translation
+  certificates must match fresh analysis, and both proofs are checked again in Lean.
+  Result flags such as `checked_theorems` are not accepted as proof evidence.
+
+  The reused formula is evaluated under the source contract. The result's
+  `upper_bound_contract` identifies that contract and `upper_bound_value` is
+  the checked numeric bound. Do not evaluate the formula under the destination
+  contract and assume that smaller value is also a bound.
+
+  `input_sizes` may retain or narrow the original input domains. Lean checks
+  coverage of the original precondition. Recursive invariants and call contracts
+  remain those of the original derivation. `max_unfolding`, `max_nodes`,
+  `beam_binaries`, and the standard verification options are supported.
+
+  When call contracts are present, supply `callee_correspondence: :shared` to
+  state that both mathematical executions use the same external value-and-cost
+  model. Without this choice or a Lean proof, transfer reports an unresolved
+  callee correspondence. This is not a claim about two concrete runtime modes.
+
+  Alternatively, pass a `Lynx.Lean` block as `callee_correspondence`. It must
+  define `transferExternalA`, `transferExternalB`, and prove
+  `transferCalleeAgreement`, with type:
+
+  ```lean
+  ReductionBounds.BoundTransfer.ExternalAgreement
+    (fun key argument => (SourceBound.costContracts key).input.Holds argument)
+    transferExternalA transferExternalB
+  ```
+
+  A denotes the destination and B the source. The proof must establish equal
+  values and ordered actual callee costs on the source input contracts.
+  Source callee output and cost contracts remain explicit assumptions of the
+  generated theorem. Their smaller-contract budgets are not assumed to hold.
+
+  ```elixir
+  alias ReductionBounds.{CostContract, IntegerSize}
+
+  functions = Map.new(CostContract.operations(), &{&1, {:add, 2, :left}})
+  {:ok, source} = CostContract.new(id: :source, functions: functions)
+  functions = Map.new(CostContract.operations(), &{&1, {:add, 1, :left}})
+  {:ok, destination} = CostContract.new(id: :destination, functions: functions)
+
+  {:ok, bound} =
+    ReductionBounds.infer_integer_cost_bound({MyModule, :square, 1},
+      input_sizes: [%IntegerSize{lower: -4, upper: 4, magnitude_bits: 3}],
+      cost_contract: source
+    )
+
+  {:ok, transferred} = ReductionBounds.transfer_integer_bound(bound, destination)
+  transferred.upper_bound_value
+  transferred.upper_bound_contract
+  #=> :source
+  ```
+
+  The generated theorem bounds every destination execution covered by the
+  preconditions. Its termination theorem retains the finite derivation and
+  normally returning source callee assumptions. Concrete runtime correspondence
+  remains `:not_checked`. The returned `verification_scope` records these
+  assumptions, the checked steps, and the trusted extraction and serialization.
+  Unknown option names report `unknown_options`.
+  """
+  @spec transfer_integer_bound(map(), ReductionBounds.CostContract.t(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def transfer_integer_bound(bound, destination, options \\ []) do
+    with {:ok, options} <- validate_options(options, :bound_transfer),
+         {:ok, candidate, proof} <-
+           ReductionBounds.BoundTransfer.infer(bound, destination, options) do
+      verification = Keyword.take(options, [:max_concurrency, :timeout, :lean_options])
+      verify_bound(candidate.target, candidate, proof, verification)
+    end
+  end
+
   defp list_size_measure(nil), do: :list_length
   defp list_size_measure(%Lynx.Lean{}), do: :input_size
 
@@ -730,7 +1031,12 @@ defmodule ReductionBounds do
 
     case verify_source(:inline, [target], [postlude: proof] ++ options, source) do
       {:ok, [{^target, {:ok, reports}}]} ->
-        {:ok, candidate |> Map.merge(evidence) |> Map.put(:reports, reports)}
+        scope = ReductionBounds.ProofInput.scope_evidence(candidate)
+
+        result =
+          candidate |> Map.merge(evidence) |> Map.merge(scope) |> Map.put(:reports, reports)
+
+        {:ok, result}
 
       {:ok, [{^target, {:error, reason}}]} ->
         {:error, reason}
@@ -751,6 +1057,12 @@ defmodule ReductionBounds do
       {:ok, verify_targets(translation, Enum.uniq(targets), options, definition)}
     end
   end
+
+  defp proof_postludes(proof, :integer_bound_transfer),
+    do: ReductionBounds.ProofInput.transfer_postludes(proof)
+
+  defp proof_postludes(proof, :cost_contract_comparison),
+    do: ReductionBounds.ProofInput.contract_postludes(proof)
 
   defp proof_postludes(proof, :integer_cost_fragment),
     do: ReductionBounds.ProofInput.integer_cost_postludes(proof)
@@ -810,10 +1122,15 @@ defmodule ReductionBounds do
       {:ok, options}
     else
       false -> {:error, :invalid_options}
-      {:error, _keys} -> {:error, :invalid_options}
+      {:error, keys} -> invalid_option_keys(source, keys)
       {key, value} -> {:error, {:invalid_option, key, value}}
     end
   end
+
+  defp invalid_option_keys(source, keys) when source in [:cost_comparison, :bound_transfer],
+    do: {:error, {:unknown_options, Enum.sort(keys)}}
+
+  defp invalid_option_keys(_source, _keys), do: {:error, :invalid_options}
 
   defp option_defaults(:inline, defaults), do: [:postlude | defaults]
   defp option_defaults(:list_bound, defaults), do: [:input_contract | defaults]
@@ -827,10 +1144,19 @@ defmodule ReductionBounds do
       call_contracts: %{},
       recursive_invariant: nil,
       max_unfolding: 32,
-      max_nodes: 10_000
+      max_nodes: 10_000,
+      cost_contract: nil
     ] ++
       Keyword.delete(defaults, :termination_suffixes)
   end
+
+  defp option_defaults(:bound_transfer, defaults) do
+    [input_sizes: nil, callee_correspondence: nil, max_unfolding: 32, max_nodes: 10_000] ++
+      Keyword.delete(defaults, :termination_suffixes)
+  end
+
+  defp option_defaults(:cost_comparison, defaults),
+    do: [budget: nil] ++ Keyword.drop(defaults, [:termination_suffixes, :beam_binaries])
 
   defp option_defaults(:integer_sizes, defaults),
     do: [input_sizes: nil] ++ Keyword.delete(defaults, :termination_suffixes)
@@ -842,6 +1168,23 @@ defmodule ReductionBounds do
     do: [:periodic_contract | Keyword.delete(defaults, :termination_suffixes)]
 
   defp option_defaults(_scope, defaults), do: defaults
+
+  defp valid_option_for?(:bound_transfer, {:callee_correspondence, %Lynx.Lean{source: source}}),
+    do: is_binary(source)
+
+  defp valid_option_for?(:bound_transfer, {:callee_correspondence, value}),
+    do: value in [nil, :shared]
+
+  defp valid_option_for?(:bound_transfer, {name, value})
+       when name in [:max_unfolding, :max_nodes],
+       do: valid_option_for?(:integer_cost, {name, value})
+
+  defp valid_option_for?(:cost_comparison, {:budget, _value}), do: true
+
+  defp valid_option_for?(:integer_cost, {:cost_contract, nil}), do: true
+
+  defp valid_option_for?(:integer_cost, {:cost_contract, value}),
+    do: is_struct(value, ReductionBounds.CostContract)
 
   defp valid_option_for?(:integer_cost, {:call_contracts, value}), do: is_map(value)
   defp valid_option_for?(:integer_cost, {:recursive_invariant, nil}), do: true
@@ -991,7 +1334,13 @@ defmodule ReductionBounds do
   end
 
   defp assemble_target(translation, _target, fragment)
-       when fragment in [:periodic_fragment, :integer_fragment, :integer_cost_fragment] do
+       when fragment in [
+              :periodic_fragment,
+              :integer_fragment,
+              :integer_cost_fragment,
+              :integer_bound_transfer,
+              :cost_contract_comparison
+            ] do
     Lynx.Translation.assemble(translation, cache: false)
   end
 

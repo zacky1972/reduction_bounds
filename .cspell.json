@@ -36,6 +36,8 @@
     "rcases",
     "symm",
     "elim",
-    "bignum"
+    "bignum",
+    "componentwise",
+    "simpa"
   ]
 }

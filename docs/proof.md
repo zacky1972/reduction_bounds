@@ -351,6 +351,522 @@ non-recursive interpreter and trusted decoder boundary. The new entry
 point checks a lowering certificate from a reified supported Core
 fragment and a cost derivation, including finite recursive expansions.
 
+### Operation cost contracts and applicability
+
+`ReductionBounds.CostContract` identifies the operation-cost declaration
+used with the integer fragment. It is distinct from a callee's
+`call_contracts` entry. The default declaration uses symbolic functions,
+cost unit `:symbolic_work`, value semantics `:core_integer_v1`, and
+charge-event profile `:integer_cost_v1`. These profiles currently accept
+all pairs of natural parameters; narrower domains and arbitrary state
+parameters are not supported by this declaration interface.
+
+The parameter registry records magnitude widths for binary arithmetic,
+XOR, and comparisons; input width and constant amount for shifts;
+input width and constant mask width for masks; and two unused zero
+parameters for local fixed charges. Auxiliary names appearing in callee
+budgets are also declared. In the default symbolic contract their
+parameters are labeled `:callee_parameter_1` and `:callee_parameter_2`;
+their interpretation is a callee-contract assumption. A user declaration
+must include the required auxiliary names and their parameter labels.
+
+Functions can be symbolic or supplied as declarative expressions built
+from natural constants, `:left`, `:right`, addition, multiplication, and
+maximum. A concrete function map must cover exactly the declared names.
+Negative constants, executable Elixir functions, unsupported expressions,
+and unsupported profiles are rejected. `CostContract.evaluate/3`
+evaluates a declared expression on natural arguments; it produces a
+number, not a proof certificate.
+
+For example, after compiling a supported module, use:
+
+```elixir
+alias ReductionBounds.{CostContract, IntegerSize}
+
+expr = {:add, 1, {:mul, :left, :right}}
+functions = Map.new(CostContract.operations(), &{&1, expr})
+{:ok, contract} = CostContract.new(id: :example, functions: functions)
+
+{:ok, result} =
+  ReductionBounds.infer_integer_cost_bound({MyModule, :update, 1},
+    input_sizes: [%IntegerSize{lower: -4, upper: 4, magnitude_bits: 3}],
+    cost_contract: contract
+  )
+
+result.cost_contract
+result.applicability
+CostContract.evaluate(contract, :multiplication, [8, 9])
+#=> {:ok, 73}
+```
+
+The result records the declaration in `cost_contract`. Its `applicability`
+field records the cost unit, profiles, parameter meanings, actual input
+descriptions, supplied recursive invariant, inferred recursive argument
+domains, and callee assumptions. Omission preserves the existing symbolic
+inference and records a default contract. This option does not change
+the symbolic `upper_bound` or supply an evaluated numeric bound.
+
+The existing Lean cost theorem remains quantified over arbitrary
+nondecreasing functions. `size_monotonicity: :assumed` records that
+premise. `contract_instantiation: :not_checked` explicitly states that
+the declared concrete functions have not been instantiated and checked
+in Lean. Declarative syntax validation and Elixir evaluation must not
+be reported as that proof. A separate comparison API now checks
+expression monotonicity and function and budget ordering, as described
+below. The bound-transfer API below additionally instantiates and rechecks
+concrete contracts for the supported integer fragment.
+
+Contract identifiers and cost-unit labels are declarations. Naming a
+contract `:jit`, or its unit `:reductions`, supplies no implementation
+evidence. Both the result and applicability report
+`runtime_correspondence: :not_checked`. The actual correspondence to
+ERTS charges, execution modes, and timing remains an external obligation.
+
+Run the declaration tests and the existing inference integration tests:
+
+```sh
+mix test test/reduction_bounds/cost_contract_test.exs \
+  test/reduction_bounds/integer_cost_bound_test.exs
+```
+
+### Lean checks of cost-function and budget ordering
+
+`ReductionBounds.compare_cost_contracts(smaller, larger, options)`
+checks a pointwise ordering between two declarative contracts. The
+argument direction is smaller to larger. Both declarations are validated
+and must have the same cost unit, semantics, charge events, parameter
+domain, operation names, and parameter meanings. These compatibility
+checks are performed by Elixir and reported as such; they are not
+runtime-correspondence proofs. Symbolic functions must first be replaced
+by declarative definitions. Restricted domains are not supported.
+
+`CostContract.lean` defines the shared natural-valued expression
+semantics. `Expr.monotone` proves that every expression in the supported
+grammar is nondecreasing in both natural parameters. This property is
+distinct from the ordering of two different expressions.
+
+The Elixir checker builds an `ExprLe` certificate for each operation.
+Its rules cover reflexivity, zero, constant inequalities, componentwise
+addition, multiplication and maximum, extension by nonnegative summands
+or maximum alternatives, and elimination of a maximum when both sides
+are bounded. `ExprLe.sound` proves every such derivation valid for all
+natural parameters. The search is deliberately incomplete: it can
+report `unresolved_cost_order` even for a true inequality, such as a
+commuted sum. It does not declare unresolved inequalities false, and
+never uses finite samples as a universal ordering proof.
+
+The generated `functionCertificate` aligns the functions in one explicit,
+shared operation registry. The first 13 entries now follow the numeric
+operation order used by `IntegerCost.Runs`; auxiliary names follow in sorted
+order. The integer bound generator uses the same core registry.
+`FunctionsLe.sound` proves pointwise ordering
+of the resulting charge assignments. Operations beyond that registry
+have zero cost in both assignments. `functionsMonotone` establishes the
+existing `IntegerCost.MonotoneCharges` property for each assignment.
+
+`budgetMonotone` reuses `IntegerCost.Budget`: leaves respect the charge
+ordering, sequential addition preserves it, and maximum preserves it
+at alternatives. The generated `allBudgetOrdering` theorem applies to
+every budget in that datatype, not only a supplied example. An optional
+`budget` uses the existing integer formula syntax: zero, cost leaves
+with two natural arguments, addition, and maximum. Unknown operation
+names, negative arguments, symbolic variables, and unsupported forms
+are rejected. `suppliedBudgetValues` checks both Elixir-computed values
+against Lean evaluation, and `suppliedBudgetOrdering` specializes the
+generic inequality to that budget.
+
+```elixir
+alias ReductionBounds.CostContract
+
+functions_a = Map.new(CostContract.operations(), &{&1, {:add, 1, :left}})
+functions_b = Map.new(CostContract.operations(), &{&1, {:add, 2, :left}})
+{:ok, a} = CostContract.new(id: :a, functions: functions_a)
+{:ok, b} = CostContract.new(id: :b, functions: functions_b)
+
+{:ok, comparison} =
+  ReductionBounds.compare_cost_contracts(a, b,
+    budget: {:add, {:cost, :addition, [8, 9]}, {:cost, :binding, [0, 0]}}
+  )
+
+comparison.budget_values
+#=> %{smaller: 10, larger: 12}
+comparison.checked_theorems
+```
+
+The returned `size_monotonicity`, `cost_function_order`, and `budget_order`
+are `:checked` after successful Lean verification. The proof scope is
+`:cost_functions_budgets_and_executions`. The common verification path audits the
+generic theorems and generated certificates; only `propext`,
+`Classical.choice`, and `Quot.sound` are permitted as axioms. Existing
+integer inference still reports `contract_instantiation: :not_checked`:
+this separate comparison does not instantiate or transfer that program's
+bound. The conditional execution theorem below is checked separately from
+establishing its applicability to a particular target and its callees;
+the separate transfer API supplies that connection under explicit conditions.
+
+Auxiliary callee cost names can be included when their parameter
+registries match. This checks their mathematical cost items, not the
+values or actual costs of external callees. Execution comparison requires
+the explicit callee assumptions described below. A name such as `:jit`
+still supplies no implementation evidence. The comparison result reports
+`execution_cost_order: :checked` for the conditional generic theorem,
+`execution_applicability: :not_checked`, `callee_correspondence: :assumed`,
+and both `bound_transfer` and `runtime_correspondence` as `:not_checked`.
+
+The Lean theorems apply to the serialized expression and budget syntax.
+Elixir declaration validation, metadata compatibility checks, and faithful
+serialization remain trusted. The checked budget examples do not prove
+universal correctness of the Elixir evaluator or a runtime implementation.
+
+Run the tests with:
+
+```sh
+mix test test/reduction_bounds/cost_contract_test.exs \
+  test/reduction_bounds/contract_comparison_test.exs
+```
+
+Positive cases cover all certificate rules, multiplication, auxiliary
+costs, and sequential and alternative budgets. Rejection cases cover
+reverse ordering, sampled-but-not-universal inequalities, unsupported
+true comparisons, incompatible metadata, symbolic functions, and invalid
+budgets. Negative Lean tests alter functions, certificates, and computed
+budget values and require rejection.
+
+### Execution-cost comparison under two contracts
+
+`BoundTransfer.lean` reuses `IntegerCost.Runs`; it introduces no new
+execution semantics. `compareExecution` takes a finite execution under
+charges A and constructs an execution of the same expression, program,
+and input environment under charges B. The constructed execution has
+the same returned integer, selects the same branches, and has cost at
+least the original cost. The operation charges must satisfy
+`ChargesLe A B` at every pair of natural parameters. This is separate
+from size monotonicity within one charge assignment.
+
+For external calls, `ExternalAgreement admitted externalA externalB`
+requires two properties at every admitted key and actual argument:
+
+- The returned values are equal.
+- The actual cost under A is at most the actual cost under B.
+
+These are conditional mathematical assumptions about the external models.
+They do not follow from an ordering of their upper budgets. For example,
+actual costs 9 and 1 can satisfy budgets 10 and 20 while violating the
+required actual-cost ordering. Auxiliary cost-expression names also do
+not establish value agreement of the corresponding functions.
+
+`CallsWithin admitted run` requires the actual argument of every call
+in that execution to satisfy `admitted`. It includes calls inside
+argument expressions, bindings, the selected branch, and recursive
+bodies. For a call-free execution, the predicate can be false for every
+key and argument. No assumption about unused calls is needed.
+
+Induction on this coverage evidence handles every `Runs` constructor:
+literals and variables use charge ordering; bindings and arithmetic add
+the component inequalities; branches preserve the Boolean test and add
+its charge; calls use both external assumptions; recursion combines the
+counter, accumulator, and finite body execution. The proof does not
+require a uniform charge or restrict integer magnitudes.
+
+`runsDeterministic` proves value and cost uniqueness for a fixed charge
+assignment and external model. `executionCostLe` combines this with the
+constructed execution, showing that any supplied larger-contract execution
+of the same expression and environment returns the same value and has
+at least the smaller-contract cost.
+
+`derivationCallsWithin` connects coverage to the existing `Derives`
+relation. Under its input coverage, size monotonicity, and
+`ContractsHold` assumptions, `derivationSound` supplies the intermediate
+value bounds needed to establish each callee's input precondition.
+`compareUnderContracts` uses that evidence, including inside finite
+recursion, with external agreement restricted to those input contracts.
+It does not assume that an initial input condition covers every call
+without proving the intermediate conditions.
+
+The comparison API now generates and audits `executionCostOrdering` and
+`executionOrderingUnderContracts` for its two concrete mathematical
+charge assignments, as well as the five generic comparison theorems.
+The result records the following conditions in `execution_conditions`:
+
+- `same_program_and_input`
+- `corresponding_charge_events`
+- `admitted_call_arguments`
+- `callee_value_agreement`
+- `callee_actual_cost_order`
+- `finite_execution`
+
+`execution_cost_order: :checked` describes this conditional theorem.
+The API takes no target program and no callee-correspondence evidence;
+therefore `execution_applicability: :not_checked` and
+`callee_correspondence: :assumed` remain explicit. It does not report a
+successful transfer of a target's bound. The transfer API below rechecks a selected target and requires an explicit
+choice of callee correspondence.
+
+The construction transports an already finite normally returning
+execution. It supplies no independent claim that an arbitrary recursive
+program terminates. The existing finite-derivation termination theorem
+and its callee assumptions are retained by the bound-transfer API below.
+Exceptions, divergence, concurrency, VM execution modes, and runtime
+reduction accounting are outside this comparison semantics.
+
+Reproduce the checks with:
+
+```sh
+mix test test/reduction_bounds/contract_comparison_test.exs \
+  test/reduction_bounds/execution_comparison_test.exs
+```
+
+Positive examples cover bindings, arithmetic, shifts, both Boolean paths,
+static calls with different costs, finite recursion, and coverage from a
+checked size derivation. A test with distinct charges checks all 13
+numeric operation indexes. Rejection examples cover changed returned
+values, reversed actual callee costs despite ordered budgets, and a call
+outside its admitted argument domain. All generic and generated theorems
+are included in the existing axiom audit.
+
+### Transferring a checked integer upper bound
+
+`ReductionBounds.transfer_integer_bound(bound, destination, options)` transfers
+an integer bound from its recorded source operation-cost contract B to a
+smaller contract A. Both contracts need concrete declarative functions and
+the same cost unit, modeled semantics, event profile, parameter meanings,
+and all-natural parameter domain. The comparison direction is A ≤ B;
+the reused budget is evaluated under B.
+
+The API extracts the target's Core Erlang again from the supplied BEAM or
+code path. It reconstructs the input conditions, recursive invariant, and
+callee contracts, and repeats bound inference. The stored program, Core
+representation, translation certificate, derivation, formula, result size,
+and conditions must match the fresh result. Reused callee bounds undergo
+the same check recursively. A changed target, altered certificate or formula,
+or invalid call contract produces an error. Fields such as `reports` and
+`checked_theorems` are not trusted evidence and are not required for replay.
+The analysis limits and BEAM binaries can be supplied again for this run.
+
+Lean then checks the original derivation and source correspondence inside
+`SourceBound`, and the contract-ordering certificate inside `Comparison`.
+Both generators use the same operation registry, including auxiliary cost
+names. `sourceContractBound` instantiates the original symbolic theorem
+with the concrete B charges. `transferBudgetIdentity` checks that its
+budget is the same budget evaluated by the comparison proof. The source
+proof and comparison proof are rechecked in the same verification run.
+
+The generic `compareFromLarger` theorem constructs a same-value execution
+under A from an execution under B whose calls are covered. Coverage for B
+comes from `derivationCallsWithin`, using the source derivation, input
+coverage, and source callee contracts. `transferDerivedBound` first
+constructs a normally returning B execution with `derivationTerminates`,
+then constructs its A counterpart. Determinism identifies that counterpart
+with any supplied A execution. Finally, `derivationSound` bounds the B
+execution. The theorem and its target specialization `transferredCostChain`
+exhibit the source execution and prove
+
+```text
+value_A = value_B
+C_A ≤ C_B ≤ budget_B
+```
+
+Only the B callee budgets are assumed. In particular, a smaller auxiliary
+budget need not cover the actual A callee cost. `transferBudget` projects
+the result size and upper-bound inequality. `transferredExecutionBound`
+specializes it to the rechecked target; `transferredNumericBound` checks
+the numeric budget evaluated under B. `transferredSourceBound` connects
+the result to the extracted Core evaluation through
+`SourceBound.integerCostValueAgreement`.
+
+By default, transfer retains the original input domains. The optional
+`input_sizes` can narrow them. An Elixir inclusion check rejects insufficient
+input conditions, and `transferInputCoverage` rechecks the inclusion in
+Lean. The source recursive invariant and callee contracts are retained.
+The contract comparison is universal over natural sizes, so it needs no
+additional restricted-domain coverage argument.
+
+For a call-free target, the API can use any shared external model without
+additional call conditions. When callee contracts are present, callers must
+choose one of the following explicitly:
+
+- `callee_correspondence: :shared` uses the same mathematical external
+  value-and-cost model for A and B. Value agreement and actual-cost ordering
+  are reflexive, and the B callee contracts remain theorem assumptions.
+- A `Lynx.Lean` block defines `transferExternalA`, `transferExternalB`, and
+  proves `transferCalleeAgreement`. The agreement predicate is restricted
+  to the input domains of `SourceBound.costContracts`. The block must prove
+  equal returned values and ordered actual costs; budget ordering alone
+  cannot replace this evidence. The generated `transferCallees` theorem
+  checks its type and includes its dependencies in the axiom audit.
+
+Missing correspondence is reported as `unresolved_callee_correspondence`.
+False proofs and additional axioms are rejected by Lean and the existing
+audit. A custom external model is mathematical evidence, not a validation
+of an ERTS execution mode or of an actual native callee implementation.
+Source callee output and budget assumptions remain explicit even when the
+external agreement is proved.
+
+```elixir
+alias ReductionBounds.{CostContract, IntegerSize}
+functions_b = Map.new(CostContract.operations(), &{&1, {:add, 2, :left}})
+functions_a = Map.new(CostContract.operations(), &{&1, {:add, 1, :left}})
+{:ok, b} = CostContract.new(id: :source, functions: functions_b)
+{:ok, a} = CostContract.new(id: :destination, functions: functions_a)
+
+{:ok, bound} =
+  ReductionBounds.infer_integer_cost_bound({MyModule, :square, 1},
+    input_sizes: [%IntegerSize{lower: -4, upper: 4, magnitude_bits: 3}],
+    cost_contract: b
+  )
+
+{:ok, transferred} = ReductionBounds.transfer_integer_bound(bound, a)
+transferred.upper_bound_contract
+#=> :source
+transferred.upper_bound_value
+transferred.checked_theorems
+```
+
+`upper_bound` retains the symbolic formula; `upper_bound_contract` identifies
+B and `upper_bound_value` records its checked numeric evaluation under B.
+Evaluating that formula under A can give a smaller number, but this API
+does not claim that number as the transferred bound. The result records
+`bound_transfer: :checked`, `source_bound_rechecked: true`,
+`comparison_rechecked: true`, and `contract_instantiation: :checked` only
+after verification succeeds. The nested original integer result continues
+to describe its original parametric proof; these new statuses describe
+the transfer proof. Source call assumptions appear in `conditions`, and
+`runtime_correspondence` remains `:not_checked` and an unresolved obligation.
+
+`transferTerminates` and `transferredTotal` also construct a normally
+returning destination execution. They use the finite source derivation,
+input coverage, normally returning source external models under their
+contracts, and the callee correspondence. They supply no unconditional
+termination guarantee for unsupported recursion or arbitrary callees.
+The guarantee is still about the mathematical Core fragment, with the
+existing trusted extraction and serialization boundary.
+
+Run the transfer and earlier comparison tests with:
+
+```sh
+mix test test/reduction_bounds/contract_comparison_test.exs \
+  test/reduction_bounds/execution_comparison_test.exs \
+  test/reduction_bounds/bound_transfer_test.exs
+```
+
+The transfer tests use arithmetic, branch selection, CRC expressions,
+finite sums, a recursive CRC with an invariant, and contracted calls from
+the existing integer fixtures. They cover narrower inputs, shared and
+proved external correspondences, and reused callee bounds. Rejection cases
+cover reverse ordering, incompatible units, symbolic functions, wider
+inputs, missing callee correspondence, changed BEAM code, altered bound
+evidence, false callee proofs, forged comparison certificates, false
+numeric results, and asserted additional axioms.
+
+### Public API integration and evaluation
+
+Successful `compare_cost_contracts/3` and `transfer_integer_bound/3` calls
+now include `verification_scope`. The public verification path adds this
+summary only after Lean verification succeeds. It does not replace the
+proof or accept a caller's status flags as evidence.
+
+| Field | Meaning |
+| --- | --- |
+| `kind` | The modeled proof scope, matching `proof_scope` |
+| `contracts` | `smaller`/`larger` for comparison, or `from`/`to` for transfer |
+| `checked` | Completed workflow checks under the stated conditions |
+| `assumptions` | Required input and external-call conditions |
+| `trusted` | Processing outside the Lean theorem, including metadata checks and serialization |
+| `unverified` | Claims outside this proof, including runtime correspondence and wall-clock timing |
+
+Comparison's execution theorem still requires the same program, inputs,
+charge events, call-domain coverage, and callee agreement. It selects no
+target. Transfer records its actual input domains, recursive invariant,
+source callee contracts, and shared or proved external relation. Replaying
+source evidence includes Elixir checks followed by Lean proof checking;
+it is not a theorem proving the Elixir implementation correct. The trusted
+extraction and reification boundary remains explicit. `checked_theorems`
+contains the exact audited declarations rather than a list of intended checks.
+
+The APIs preserve their existing error tuples for failed comparisons,
+insufficient conditions, and failed Lean proofs. Unknown options in these
+two APIs now identify the rejected keys. Comparison accepts only `budget`,
+`max_concurrency`, `timeout`, and `lean_options`; `beam_binaries` is a transfer
+and source-analysis option, not an input to target-free comparison.
+
+| Diagnostic | Interpretation |
+| --- | --- |
+| `unknown_options` | One or more option names are not accepted by this API |
+| `invalid_option` | An accepted option has an invalid value |
+| `invalid_cost_contract` | The indicated declaration or profile is unsupported |
+| `incompatible_cost_contracts` | Units or parameter meanings do not match |
+| `unresolved_cost_functions` | A required concrete function remains symbolic |
+| `unresolved_cost_order` | The structural search did not prove the required direction |
+| `missing_call_contract` | A static callee lacks a contract; reported within `integer_cost_source` |
+| `call_precondition` | Inferred arguments do not establish a callee's input conditions; reported within `integer_cost` |
+| `insufficient_transfer_inputs` | Destination input conditions do not establish the source precondition |
+| `unresolved_callee_correspondence` | The transfer needs an explicit shared model or a Lean correspondence proof |
+| `original_bound_mismatch` | Replayed source evidence differs from the supplied bound |
+| `verification_failed` | Lean rejected the generated proof or its axiom dependencies |
+
+In comparison diagnostics, `smaller` denotes A and `larger` denotes B.
+In transfer, A is the destination and B is the source. Units and semantic
+labels alone never authorize a comparison or transfer. An unresolved true
+inequality is reported conservatively, not classified as false.
+
+`ContractWorkflowTest` exercises the public APIs using the existing integer
+fixtures under distinct nondecreasing polynomial charge functions. Each
+positive case derives a source bound, checks contract ordering, transfers
+the bound, and checks the returned scope and source-budget value.
+
+| Evaluation | Existing fixture | Reused checks |
+| --- | --- | --- |
+| Arithmetic and bindings | `product/1` | Integer size derivation and source correspondence |
+| Branch selection | `guarded/1` | Branch refinement and maximum budget |
+| Finite recursion | `sum/2` | Finite derivation and conditional termination |
+| Variance arithmetic | `variance_numerator/3` | Multiple input sizes, products, and subtraction |
+| CRC update | `crc64_update/2` | Intermediate widths, shift, XOR, and masking |
+| Reflected CRC index | `crc64_reflected_index/2` | Wide inputs, masking, and addition |
+| Contracted call | `caller/1` and `helper/1` | Rechecked callee bound and explicit shared external model |
+
+Rejection checks in this evaluation cover public option validation,
+unsupported profiles and registries, incompatible units, reverse ordering,
+symbolic functions, missing callee contracts, insufficient call inputs,
+and missing external correspondence. The earlier comparison, execution,
+and transfer test modules additionally cover sampled-but-not-universal
+inequalities, forged evidence and axioms, wider transfer inputs, changed
+BEAM code, and false callee value or actual-cost correspondence.
+
+From the project root with its pinned Lean toolchain installed, run:
+
+```sh
+mix test --only cost_contract_workflow --trace
+```
+
+To print each case's formula, source-contract numeric bound, input conditions,
+verification scope, and audited theorem names:
+
+```sh
+REDUCTION_BOUNDS_REPORT=1 mix test --only cost_contract_workflow --trace
+```
+
+The proposed Issue #2 criteria can be checked against the following evidence:
+
+| Acceptance criterion | Reproduction evidence |
+| --- | --- |
+| Identify cost contracts and their applicability conditions | `cost_contract_test.exs`, integer analysis results, and `verification_scope.assumptions` |
+| Check an ordering between contracts in Lean | `contract_comparison_test.exs`, `execution_comparison_test.exs`, and audited comparison theorems |
+| Transfer a verified bound between contracts | `bound_transfer_test.exs` and `transferredCostChain` |
+| Report unsupported comparisons and unresolved obligations | Public workflow rejection cases, existing transfer rejection cases, and `verification_scope.unverified` |
+| Provide reproducible positive and rejection tests | The tagged public workflow and the full comparison and transfer test modules |
+| Keep concrete execution-mode correspondence explicit | `runtime_correspondence: :not_checked` and the reported runtime and timing exclusions |
+
+The report is generated from successful results at test execution time.
+No fixed test count or precomputed numeric outcome is treated as evidence.
+This is a symbolic verification evaluation, not a measurement of ERTS
+reductions or processor time. For full project validation, run:
+
+```sh
+mix check
+mix test
+mix docs
+```
+
 ### Size-dependent charges and composition
 
 A cost leaf `{:cost, name, [a, b]}` denotes `charge(name, a, b)`.

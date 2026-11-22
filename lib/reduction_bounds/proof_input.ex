@@ -56,6 +56,31 @@ defmodule ReductionBounds.ProofInput do
     ])
   end
 
+  @spec contract_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def contract_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, [
+      "IntegerSize.lean",
+      "IntegerAnalysis.lean",
+      "IntegerCost.lean",
+      "CostContract.lean",
+      "BoundTransfer.lean"
+    ])
+  end
+
+  @spec transfer_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def transfer_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, [
+      "IntegerSize.lean",
+      "IntegerAnalysis.lean",
+      "IntegerCost.lean",
+      "IntegerCostSource.lean",
+      "CostContract.lean",
+      "BoundTransfer.lean"
+    ])
+  end
+
   defp packaged_postludes(proof, sources) do
     case :code.priv_dir(:reduction_bounds) do
       {:error, reason} -> {:error, {:priv_dir, reason}}
@@ -106,6 +131,62 @@ defmodule ReductionBounds.ProofInput do
     end
   end
 
+  @spec scope_evidence(map()) :: map()
+  def scope_evidence(%{source: :cost_contract_comparison} = candidate) do
+    %{
+      verification_scope: %{
+        kind: candidate.proof_scope,
+        contracts: %{smaller: candidate.smaller.id, larger: candidate.larger.id},
+        checked: [
+          :size_monotonicity,
+          :operation_order,
+          :budget_order,
+          :conditional_execution_order
+        ],
+        assumptions: %{execution_conditions: candidate.execution_conditions},
+        trusted: [:metadata_validation, :expression_serialization],
+        unverified: [
+          :target_applicability,
+          :bound_transfer,
+          :runtime_correspondence,
+          :wall_clock_time
+        ]
+      }
+    }
+  end
+
+  def scope_evidence(%{source: :integer_bound_transfer} = candidate) do
+    %{
+      verification_scope: %{
+        kind: candidate.proof_scope,
+        contracts: %{from: candidate.source_contract.id, to: candidate.destination_contract.id},
+        checked: [
+          :source_bound_replay,
+          :operation_order,
+          :input_coverage,
+          :core_value_agreement,
+          :bound_transfer,
+          :termination_under_source_call_contracts
+        ],
+        assumptions: %{
+          input_sizes: candidate.input_sizes,
+          recursive_invariant: candidate.original_bound.conditions.recursive_invariant,
+          source_call_contracts: candidate.original_bound.conditions.calls,
+          callee_models: candidate.conditions.callee_models
+        },
+        trusted: [
+          :debug_information_extraction,
+          :core_reification,
+          :expression_serialization,
+          :metadata_validation
+        ],
+        unverified: [:runtime_correspondence, :wall_clock_time]
+      }
+    }
+  end
+
+  def scope_evidence(_candidate), do: %{}
+
   defp case_study_theorems(%{source: :integer_cost_fragment} = candidate) do
     global =
       ~w(ReductionBounds.IntegerCost.inclusionSound ReductionBounds.IntegerCost.derivationSound
@@ -113,6 +194,44 @@ defmodule ReductionBounds.ProofInput do
       ReductionBounds.IntegerCostSource.sourceAgreement ReductionBounds.IntegerCostSource.sourceComplete)
 
     global ++ integer_cost_theorems(candidate, "")
+  end
+
+  defp case_study_theorems(%{source: :cost_contract_comparison} = candidate) do
+    theorems =
+      ~w(ReductionBounds.CostContract.Expr.monotone ReductionBounds.CostContract.ExprLe.sound
+      ReductionBounds.CostContract.functionsMonotone ReductionBounds.CostContract.FunctionsLe.sound
+      ReductionBounds.CostContract.budgetMonotone smallerMonotone largerMonotone
+      functionCertificate operationOrdering allBudgetOrdering
+      ReductionBounds.BoundTransfer.compareExecution ReductionBounds.BoundTransfer.runsDeterministic
+      ReductionBounds.BoundTransfer.executionCostLe ReductionBounds.BoundTransfer.derivationCallsWithin
+      ReductionBounds.BoundTransfer.compareUnderContracts
+      executionCostOrdering executionOrderingUnderContracts)
+
+    if is_nil(candidate.budget),
+      do: theorems,
+      else: theorems ++ ~w(suppliedBudgetValues suppliedBudgetOrdering)
+  end
+
+  defp case_study_theorems(%{source: :integer_bound_transfer} = candidate) do
+    generic =
+      ~w(ReductionBounds.IntegerCost.derivationSound ReductionBounds.IntegerCost.derivationTerminates
+      ReductionBounds.IntegerCostSource.sourceAgreement ReductionBounds.IntegerCostSource.sourceComplete
+      ReductionBounds.BoundTransfer.compareFromLarger ReductionBounds.BoundTransfer.transferDerivedBound
+      ReductionBounds.BoundTransfer.transferBudget ReductionBounds.BoundTransfer.transferTerminates)
+
+    {globals, local} =
+      candidate.comparison
+      |> case_study_theorems()
+      |> Enum.split_with(&String.starts_with?(&1, "ReductionBounds."))
+
+    comparison = Enum.map(local, &("Comparison." <> &1))
+
+    generic ++
+      globals ++
+      comparison ++
+      integer_cost_theorems(candidate.original_bound, "SourceBound.") ++
+      ~w(transferInputCoverage transferBudgetIdentity transferCallees sourceContractBound
+      transferredCostChain transferredExecutionBound transferredNumericBound transferredSourceBound transferredTotal)
   end
 
   defp case_study_theorems(%{source: :integer_fragment}),
