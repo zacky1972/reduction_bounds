@@ -1163,6 +1163,83 @@ ELAN_TOOLCHAIN="$(cat deps/lynx/lean-toolchain)" mix test \
   test/reduction_bounds/integer_cost_cases_test.exs
 ```
 
+## Shared communication events, traces, and contracts
+
+`ReductionBounds.Protocol` defines finite protocol contracts shared by the
+Port and request/response work. Contracts declare participants and their cost
+units, states, an initial state, terminal states, event ownership, and allowed
+transitions. A work event belongs to exactly one participant and carries that
+participant's unit. An environment observation has neither an owner nor a
+cost unit. In particular, observing an arrival does not bound external work.
+Different participants may use different units; this layer does not sum them.
+
+`Protocol.new/1` validates declarations. It rejects unknown states or events,
+ambiguous transitions for the same state and event name, transitions leaving
+terminal states, and inconsistent ownership or units. `Protocol.check_trace/2`
+checks supplied event occurrences and records all visited states. Empty traces
+and unfinished prefixes are accepted when admissible. Invalid occurrences
+report a zero-based index, the event, and the reason. `terminal?` classifies
+the end of this supplied trace, not a guarantee that all interactions finish.
+`Protocol.events_for/2` selects occurrences owned by a participant.
+
+The initial `ReductionBounds.PortProtocol` model assumes that the caller is
+the Port owner and at most one request is in progress. Preparation is followed
+by acceptance, rejection, or submission suspension. Rejection can be returned
+or retried. Suspension handling and resumption are explicit work events;
+waiting itself is a state. After acceptance, an environment response-arrival
+event precedes caller-side retrieval and decoding. Closure is another
+environment observation; a distinct caller-owned event handles the closure
+before reaching the closed terminal state. A second submission after acceptance, duplicate
+arrival, or response retrieval before arrival is rejected by the model.
+
+```elixir
+alias ReductionBounds.{PortProtocol, Protocol}
+{:ok, contract} = PortProtocol.new()
+names = [:prepare, :submit_accepted, :response_arrived, :receive_response, :decode]
+events = Enum.map(names, fn name ->
+  {:ok, event} = Protocol.event(contract, name)
+  event
+end)
+{:ok, trace} = Protocol.check_trace(contract, events)
+{trace.final, trace.terminal?}
+#=> {:complete, true}
+Enum.map(Protocol.events_for(trace, :caller), & &1.name)
+#=> [:prepare, :submit_accepted, :receive_response, :decode]
+```
+
+`ProtocolProof.build/2` rechecks the supplied model trace and generates Lean
+contract, event, and successor-state declarations. `ProofInput.protocol_postludes/1`
+loads `priv/lean/reduction_bounds/Protocol.lean`. Its `checkTraceSound` theorem
+proves that an accepted certificate describes a `Runs` derivation of allowed
+transitions under a well-formed contract. The successor-state list is checked
+by Lean rather than trusted. `Runs.eventsValid` establishes registration and
+accounting metadata for every occurrence. `ownerExclusive` prevents one
+occurrence from having two different owners. `Runs.preserves` transports an
+arbitrary state invariant from the initial to final state when each allowed
+step preserves it; such step obligations remain explicit. The generated
+`suppliedInvariant` specializes this rule to the supplied trace. Selected
+shared and generated theorem dependencies are audited against the existing
+axiom allowlist, including rejection of unfinished proof replacements.
+
+Reproduce both the Elixir validation and Lynx/Lean checks with:
+
+```sh
+mix test --only protocol_model
+```
+
+Tests cover success, rejection, retry, closure, suspension and resumption,
+waiting prefixes, event ownership and units, malformed declarations, and
+illegal transitions. Altered successor states and event ownership are rejected
+independently in Lean, even if the generated certificate text is modified.
+
+This is the first modeling stage of issues #3 and #4. It supplies no cost
+functions or size and event-count bounds. Retry and receive-inspection cycles
+may occur arbitrarily often. No theorem yet bounds all runs, proves eventual
+response or completion, connects a target Core Erlang function to the protocol,
+or covers a real Port program or driver. Faithful serialization and the chosen
+protocol remain trusted. Port-side and external-computation costs, concrete
+ERTS charging, runtime timing, and scheduler behavior remain unverified.
+
 ## Map and struct operations
 
 The decoder handles fixed atom keys and the supported Boolean guard

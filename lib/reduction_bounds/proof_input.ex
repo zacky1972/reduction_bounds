@@ -39,6 +39,12 @@ defmodule ReductionBounds.ProofInput do
     packaged_postludes(proof, @sources ++ ["ExecutionBound.lean"])
   end
 
+  @spec protocol_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def protocol_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, ["Protocol.lean"])
+  end
+
   @spec integer_postludes(Lynx.Lean.t()) ::
           {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
   def integer_postludes(%Lynx.Lean{} = proof) do
@@ -186,6 +192,14 @@ defmodule ReductionBounds.ProofInput do
   end
 
   def scope_evidence(_candidate), do: %{}
+
+  defp case_study_theorems(%{source: :protocol_trace}) do
+    ~w(ReductionBounds.Protocol.checkFromSound ReductionBounds.Protocol.checkTraceSound
+      ReductionBounds.Protocol.Runs.preserves ReductionBounds.Protocol.Runs.eventsValid
+      ReductionBounds.Protocol.ownerExclusive ReductionBounds.Protocol.suppliedCertificate
+      ReductionBounds.Protocol.suppliedWellFormed ReductionBounds.Protocol.suppliedTraceSound
+      ReductionBounds.Protocol.suppliedInvariant ReductionBounds.Protocol.suppliedEventsValid)
+  end
 
   defp case_study_theorems(%{source: :integer_cost_fragment} = candidate) do
     global =
