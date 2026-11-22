@@ -330,8 +330,27 @@ defmodule ReductionBounds do
   program, preserving the returned value. Its assumptions require every static
   call to have an admitted argument, matching returned values, and ordered actual
   costs. These assumptions are recorded in `execution_conditions`; they are not
-  discharged for a target by this API. Transfer of function bounds remains
-  separate work.
+  discharged for a target by this API. Use `transfer_integer_bound/3` to
+  recheck a target bound and apply the comparison under explicit call conditions.
+
+  ## Transfer an integer bound
+
+  Pass an integer bound carrying a concrete source `cost_contract`, together
+  with a smaller destination contract:
+
+  ```elixir
+  {:ok, transferred} = ReductionBounds.transfer_integer_bound(bound, destination)
+  transferred.upper_bound_contract
+  transferred.upper_bound_value
+  transferred.checked_theorems
+  ```
+
+  The target and any reused callee bounds are analyzed again and both proofs
+  are rechecked. The numeric bound is evaluated under the source contract.
+  `input_sizes` may narrow the original input domains. For contracted calls,
+  supply `callee_correspondence: :shared` for a common mathematical external
+  model, or a Lean proof of the two external models' value and actual-cost
+  correspondence. Source call contracts remain explicit assumptions.
 
   '''
 
@@ -854,8 +873,9 @@ defmodule ReductionBounds do
   proving that its callees meet those conditions. Accordingly,
   `execution_applicability` is `:not_checked` and `callee_correspondence` is
   `:assumed`. No caller-supplied label counts as evidence for these assumptions.
-  Bound transfer, concrete integer contract instantiation, and correspondence
-  with an ERTS implementation remain unchecked.
+  This comparison alone leaves bound transfer and concrete integer contract
+  instantiation unchecked; `transfer_integer_bound/3` performs those checks
+  separately. Correspondence with an ERTS implementation remains unchecked.
 
   ```elixir
   alias ReductionBounds.CostContract
@@ -891,6 +911,82 @@ defmodule ReductionBounds do
     end
   end
 
+  @doc """
+  Rechecks an integer bound and transfers it to a smaller operation-cost contract.
+
+  Pass a result of `infer_integer_cost_bound/2` whose `cost_contract` contains
+  concrete declarative functions. The source contract belongs to `bound`;
+  `destination` is the smaller contract. The target and any reused callees are
+  extracted again from BEAM. Stored derivations, formulas, and translation
+  certificates must match fresh analysis, and both proofs are checked again in Lean.
+  Result flags such as `checked_theorems` are not accepted as proof evidence.
+
+  The reused formula is evaluated under the source contract. The result's
+  `upper_bound_contract` identifies that contract and `upper_bound_value` is
+  the checked numeric bound. Do not evaluate the formula under the destination
+  contract and assume that smaller value is also a bound.
+
+  `input_sizes` may retain or narrow the original input domains. Lean checks
+  coverage of the original precondition. Recursive invariants and call contracts
+  remain those of the original derivation. `max_unfolding`, `max_nodes`,
+  `beam_binaries`, and the standard verification options are supported.
+
+  When call contracts are present, supply `callee_correspondence: :shared` to
+  state that both mathematical executions use the same external value-and-cost
+  model. Without this choice or a Lean proof, transfer reports an unresolved
+  callee correspondence. This is not a claim about two concrete runtime modes.
+
+  Alternatively, pass a `Lynx.Lean` block as `callee_correspondence`. It must
+  define `transferExternalA`, `transferExternalB`, and prove
+  `transferCalleeAgreement`, with type:
+
+  ```lean
+  ReductionBounds.BoundTransfer.ExternalAgreement
+    (fun key argument => (SourceBound.costContracts key).input.Holds argument)
+    transferExternalA transferExternalB
+  ```
+
+  A denotes the destination and B the source. The proof must establish equal
+  values and ordered actual callee costs on the source input contracts.
+  Source callee output and cost contracts remain explicit assumptions of the
+  generated theorem. Their smaller-contract budgets are not assumed to hold.
+
+  ```elixir
+  alias ReductionBounds.{CostContract, IntegerSize}
+
+  functions = Map.new(CostContract.operations(), &{&1, {:add, 2, :left}})
+  {:ok, source} = CostContract.new(id: :source, functions: functions)
+  functions = Map.new(CostContract.operations(), &{&1, {:add, 1, :left}})
+  {:ok, destination} = CostContract.new(id: :destination, functions: functions)
+
+  {:ok, bound} =
+    ReductionBounds.infer_integer_cost_bound({MyModule, :square, 1},
+      input_sizes: [%IntegerSize{lower: -4, upper: 4, magnitude_bits: 3}],
+      cost_contract: source
+    )
+
+  {:ok, transferred} = ReductionBounds.transfer_integer_bound(bound, destination)
+  transferred.upper_bound_value
+  transferred.upper_bound_contract
+  #=> :source
+  ```
+
+  The generated theorem bounds every destination execution covered by the
+  preconditions. Its termination theorem retains the finite derivation and
+  normally returning source callee assumptions. Concrete runtime correspondence
+  remains `:not_checked`.
+  """
+  @spec transfer_integer_bound(map(), ReductionBounds.CostContract.t(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def transfer_integer_bound(bound, destination, options \\ []) do
+    with {:ok, options} <- validate_options(options, :bound_transfer),
+         {:ok, candidate, proof} <-
+           ReductionBounds.BoundTransfer.infer(bound, destination, options) do
+      verification = Keyword.take(options, [:max_concurrency, :timeout, :lean_options])
+      verify_bound(candidate.target, candidate, proof, verification)
+    end
+  end
+
   defp list_size_measure(nil), do: :list_length
   defp list_size_measure(%Lynx.Lean{}), do: :input_size
 
@@ -921,6 +1017,9 @@ defmodule ReductionBounds do
       {:ok, verify_targets(translation, Enum.uniq(targets), options, definition)}
     end
   end
+
+  defp proof_postludes(proof, :integer_bound_transfer),
+    do: ReductionBounds.ProofInput.transfer_postludes(proof)
 
   defp proof_postludes(proof, :cost_contract_comparison),
     do: ReductionBounds.ProofInput.contract_postludes(proof)
@@ -1006,6 +1105,11 @@ defmodule ReductionBounds do
       Keyword.delete(defaults, :termination_suffixes)
   end
 
+  defp option_defaults(:bound_transfer, defaults) do
+    [input_sizes: nil, callee_correspondence: nil, max_unfolding: 32, max_nodes: 10_000] ++
+      Keyword.delete(defaults, :termination_suffixes)
+  end
+
   defp option_defaults(:cost_comparison, defaults),
     do: [budget: nil] ++ Keyword.delete(defaults, :termination_suffixes)
 
@@ -1019,6 +1123,16 @@ defmodule ReductionBounds do
     do: [:periodic_contract | Keyword.delete(defaults, :termination_suffixes)]
 
   defp option_defaults(_scope, defaults), do: defaults
+
+  defp valid_option_for?(:bound_transfer, {:callee_correspondence, %Lynx.Lean{source: source}}),
+    do: is_binary(source)
+
+  defp valid_option_for?(:bound_transfer, {:callee_correspondence, value}),
+    do: value in [nil, :shared]
+
+  defp valid_option_for?(:bound_transfer, {name, value})
+       when name in [:max_unfolding, :max_nodes],
+       do: valid_option_for?(:integer_cost, {name, value})
 
   defp valid_option_for?(:cost_comparison, {:budget, _value}), do: true
 
@@ -1179,6 +1293,7 @@ defmodule ReductionBounds do
               :periodic_fragment,
               :integer_fragment,
               :integer_cost_fragment,
+              :integer_bound_transfer,
               :cost_contract_comparison
             ] do
     Lynx.Translation.assemble(translation, cache: false)

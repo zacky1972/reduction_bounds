@@ -68,6 +68,19 @@ defmodule ReductionBounds.ProofInput do
     ])
   end
 
+  @spec transfer_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def transfer_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, [
+      "IntegerSize.lean",
+      "IntegerAnalysis.lean",
+      "IntegerCost.lean",
+      "IntegerCostSource.lean",
+      "CostContract.lean",
+      "BoundTransfer.lean"
+    ])
+  end
+
   defp packaged_postludes(proof, sources) do
     case :code.priv_dir(:reduction_bounds) do
       {:error, reason} -> {:error, {:priv_dir, reason}}
@@ -141,6 +154,28 @@ defmodule ReductionBounds.ProofInput do
     if is_nil(candidate.budget),
       do: theorems,
       else: theorems ++ ~w(suppliedBudgetValues suppliedBudgetOrdering)
+  end
+
+  defp case_study_theorems(%{source: :integer_bound_transfer} = candidate) do
+    generic =
+      ~w(ReductionBounds.IntegerCost.derivationSound ReductionBounds.IntegerCost.derivationTerminates
+      ReductionBounds.IntegerCostSource.sourceAgreement ReductionBounds.IntegerCostSource.sourceComplete
+      ReductionBounds.BoundTransfer.compareFromLarger ReductionBounds.BoundTransfer.transferDerivedBound
+      ReductionBounds.BoundTransfer.transferBudget ReductionBounds.BoundTransfer.transferTerminates)
+
+    {globals, local} =
+      candidate.comparison
+      |> case_study_theorems()
+      |> Enum.split_with(&String.starts_with?(&1, "ReductionBounds."))
+
+    comparison = Enum.map(local, &("Comparison." <> &1))
+
+    generic ++
+      globals ++
+      comparison ++
+      integer_cost_theorems(candidate.original_bound, "SourceBound.") ++
+      ~w(transferInputCoverage transferBudgetIdentity transferCallees sourceContractBound
+      transferredCostChain transferredExecutionBound transferredNumericBound transferredSourceBound transferredTotal)
   end
 
   defp case_study_theorems(%{source: :integer_fragment}),

@@ -413,8 +413,8 @@ the declared concrete functions have not been instantiated and checked
 in Lean. Declarative syntax validation and Elixir evaluation must not
 be reported as that proof. A separate comparison API now checks
 expression monotonicity and function and budget ordering, as described
-below. Applying concrete functions to an integer execution proof and
-transferring function bounds remain subsequent stages of Issue #2.
+below. The bound-transfer API below additionally instantiates and rechecks
+concrete contracts for the supported integer fragment.
 
 Contract identifiers and cost-unit labels are declarations. Naming a
 contract `:jit`, or its unit `:reductions`, supplies no implementation
@@ -501,7 +501,8 @@ generic theorems and generated certificates; only `propext`,
 integer inference still reports `contract_instantiation: :not_checked`:
 this separate comparison does not instantiate or transfer that program's
 bound. The conditional execution theorem below is checked separately from
-establishing its applicability to a particular target and its callees.
+establishing its applicability to a particular target and its callees;
+the separate transfer API supplies that connection under explicit conditions.
 
 Auxiliary callee cost names can be included when their parameter
 registries match. This checks their mathematical cost items, not the
@@ -598,13 +599,13 @@ The result records the following conditions in `execution_conditions`:
 The API takes no target program and no callee-correspondence evidence;
 therefore `execution_applicability: :not_checked` and
 `callee_correspondence: :assumed` remain explicit. It does not report a
-successful transfer of a target's bound. Proving or discharging these
-assumptions for a selected target belongs to the following stage.
+successful transfer of a target's bound. The transfer API below rechecks a selected target and requires an explicit
+choice of callee correspondence.
 
 The construction transports an already finite normally returning
 execution. It supplies no independent claim that an arbitrary recursive
 program terminates. The existing finite-derivation termination theorem
-and its callee assumptions remain available for the bound-transfer stage.
+and its callee assumptions are retained by the bound-transfer API below.
 Exceptions, divergence, concurrency, VM execution modes, and runtime
 reduction accounting are outside this comparison semantics.
 
@@ -622,6 +623,140 @@ numeric operation indexes. Rejection examples cover changed returned
 values, reversed actual callee costs despite ordered budgets, and a call
 outside its admitted argument domain. All generic and generated theorems
 are included in the existing axiom audit.
+
+### Transferring a checked integer upper bound
+
+`ReductionBounds.transfer_integer_bound(bound, destination, options)` transfers
+an integer bound from its recorded source operation-cost contract B to a
+smaller contract A. Both contracts need concrete declarative functions and
+the same cost unit, modeled semantics, event profile, parameter meanings,
+and all-natural parameter domain. The comparison direction is A ≤ B;
+the reused budget is evaluated under B.
+
+The API extracts the target's Core Erlang again from the supplied BEAM or
+code path. It reconstructs the input conditions, recursive invariant, and
+callee contracts, and repeats bound inference. The stored program, Core
+representation, translation certificate, derivation, formula, result size,
+and conditions must match the fresh result. Reused callee bounds undergo
+the same check recursively. A changed target, altered certificate or formula,
+or invalid call contract produces an error. Fields such as `reports` and
+`checked_theorems` are not trusted evidence and are not required for replay.
+The analysis limits and BEAM binaries can be supplied again for this run.
+
+Lean then checks the original derivation and source correspondence inside
+`SourceBound`, and the contract-ordering certificate inside `Comparison`.
+Both generators use the same operation registry, including auxiliary cost
+names. `sourceContractBound` instantiates the original symbolic theorem
+with the concrete B charges. `transferBudgetIdentity` checks that its
+budget is the same budget evaluated by the comparison proof. The source
+proof and comparison proof are rechecked in the same verification run.
+
+The generic `compareFromLarger` theorem constructs a same-value execution
+under A from an execution under B whose calls are covered. Coverage for B
+comes from `derivationCallsWithin`, using the source derivation, input
+coverage, and source callee contracts. `transferDerivedBound` first
+constructs a normally returning B execution with `derivationTerminates`,
+then constructs its A counterpart. Determinism identifies that counterpart
+with any supplied A execution. Finally, `derivationSound` bounds the B
+execution. The theorem and its target specialization `transferredCostChain`
+exhibit the source execution and prove
+
+```text
+value_A = value_B
+C_A ≤ C_B ≤ budget_B
+```
+
+Only the B callee budgets are assumed. In particular, a smaller auxiliary
+budget need not cover the actual A callee cost. `transferBudget` projects
+the result size and upper-bound inequality. `transferredExecutionBound`
+specializes it to the rechecked target; `transferredNumericBound` checks
+the numeric budget evaluated under B. `transferredSourceBound` connects
+the result to the extracted Core evaluation through
+`SourceBound.integerCostValueAgreement`.
+
+By default, transfer retains the original input domains. The optional
+`input_sizes` can narrow them. An Elixir inclusion check rejects insufficient
+input conditions, and `transferInputCoverage` rechecks the inclusion in
+Lean. The source recursive invariant and callee contracts are retained.
+The contract comparison is universal over natural sizes, so it needs no
+additional restricted-domain coverage argument.
+
+For a call-free target, the API can use any shared external model without
+additional call conditions. When callee contracts are present, callers must
+choose one of the following explicitly:
+
+- `callee_correspondence: :shared` uses the same mathematical external
+  value-and-cost model for A and B. Value agreement and actual-cost ordering
+  are reflexive, and the B callee contracts remain theorem assumptions.
+- A `Lynx.Lean` block defines `transferExternalA`, `transferExternalB`, and
+  proves `transferCalleeAgreement`. The agreement predicate is restricted
+  to the input domains of `SourceBound.costContracts`. The block must prove
+  equal returned values and ordered actual costs; budget ordering alone
+  cannot replace this evidence. The generated `transferCallees` theorem
+  checks its type and includes its dependencies in the axiom audit.
+
+Missing correspondence is reported as `unresolved_callee_correspondence`.
+False proofs and additional axioms are rejected by Lean and the existing
+audit. A custom external model is mathematical evidence, not a validation
+of an ERTS execution mode or of an actual native callee implementation.
+Source callee output and budget assumptions remain explicit even when the
+external agreement is proved.
+
+```elixir
+alias ReductionBounds.{CostContract, IntegerSize}
+functions_b = Map.new(CostContract.operations(), &{&1, {:add, 2, :left}})
+functions_a = Map.new(CostContract.operations(), &{&1, {:add, 1, :left}})
+{:ok, b} = CostContract.new(id: :source, functions: functions_b)
+{:ok, a} = CostContract.new(id: :destination, functions: functions_a)
+
+{:ok, bound} =
+  ReductionBounds.infer_integer_cost_bound({MyModule, :square, 1},
+    input_sizes: [%IntegerSize{lower: -4, upper: 4, magnitude_bits: 3}],
+    cost_contract: b
+  )
+
+{:ok, transferred} = ReductionBounds.transfer_integer_bound(bound, a)
+transferred.upper_bound_contract
+#=> :source
+transferred.upper_bound_value
+transferred.checked_theorems
+```
+
+`upper_bound` retains the symbolic formula; `upper_bound_contract` identifies
+B and `upper_bound_value` records its checked numeric evaluation under B.
+Evaluating that formula under A can give a smaller number, but this API
+does not claim that number as the transferred bound. The result records
+`bound_transfer: :checked`, `source_bound_rechecked: true`,
+`comparison_rechecked: true`, and `contract_instantiation: :checked` only
+after verification succeeds. The nested original integer result continues
+to describe its original parametric proof; these new statuses describe
+the transfer proof. Source call assumptions appear in `conditions`, and
+`runtime_correspondence` remains `:not_checked` and an unresolved obligation.
+
+`transferTerminates` and `transferredTotal` also construct a normally
+returning destination execution. They use the finite source derivation,
+input coverage, normally returning source external models under their
+contracts, and the callee correspondence. They supply no unconditional
+termination guarantee for unsupported recursion or arbitrary callees.
+The guarantee is still about the mathematical Core fragment, with the
+existing trusted extraction and serialization boundary.
+
+Run the transfer and earlier comparison tests with:
+
+```sh
+mix test test/reduction_bounds/contract_comparison_test.exs \
+  test/reduction_bounds/execution_comparison_test.exs \
+  test/reduction_bounds/bound_transfer_test.exs
+```
+
+The transfer tests use arithmetic, branch selection, CRC expressions,
+finite sums, a recursive CRC with an invariant, and contracted calls from
+the existing integer fixtures. They cover narrower inputs, shared and
+proved external correspondences, and reused callee bounds. Rejection cases
+cover reverse ordering, incompatible units, symbolic functions, wider
+inputs, missing callee correspondence, changed BEAM code, altered bound
+evidence, false callee proofs, forged comparison certificates, false
+numeric results, and asserted additional axioms.
 
 ### Size-dependent charges and composition
 

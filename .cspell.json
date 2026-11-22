@@ -37,6 +37,7 @@
     "symm",
     "elim",
     "bignum",
-    "componentwise"
+    "componentwise",
+    "simpa"
   ]
 }

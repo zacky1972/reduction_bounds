@@ -354,8 +354,11 @@ defmodule ReductionBounds.IntegerCostBound do
     do: Enum.flat_map(tree.children, &rows/1) ++ [Map.drop(tree, [:children, :expr])]
 
   @spec proof(map()) :: Lynx.Lean.t()
-  def proof(candidate) do
-    registry = candidate |> cost_names() |> Enum.with_index() |> Map.new()
+  def proof(candidate), do: proof(candidate, cost_names(candidate))
+
+  @spec proof(map(), [atom()]) :: Lynx.Lean.t()
+  def proof(candidate, names) do
+    registry = names |> Enum.with_index() |> Map.new()
 
     %Lynx.Lean{
       file: "generated_integer_cost.lean",
