@@ -326,7 +326,12 @@ defmodule ReductionBounds do
   Lean checks the ordering for all natural parameters and every composed
   budget. The optional budget's evaluations are also checked. An unresolved
   structural comparison is not a proof that the inequality is false.
-  Execution comparison and transfer of function bounds remain separate work.
+  A conditional theorem also compares finite executions of the same integer
+  program, preserving the returned value. Its assumptions require every static
+  call to have an admitted argument, matching returned values, and ordered actual
+  costs. These assumptions are recorded in `execution_conditions`; they are not
+  discharged for a target by this API. Transfer of function bounds remains
+  separate work.
 
   '''
 
@@ -831,10 +836,26 @@ defmodule ReductionBounds do
   Optionally pass `budget: bound.upper_bound` to check its two evaluations.
   Auxiliary callee cost names must be declared on both sides.
 
-  The result records checked theorems and `proof_scope: :cost_functions_and_budgets`.
-  This does not compare program executions, transfer a function bound, check
-  callee value agreement, or establish applicability to an ERTS implementation.
-  Existing integer inference's concrete contract instantiation remains unchecked.
+  Lean also checks a generic execution comparison for the existing integer
+  semantics: for the same program and input, every admitted finite execution
+  under the smaller assignment has a same-value execution under the larger
+  assignment with at least its cost. This covers bindings, arithmetic, branches,
+  static calls, and finite recursion. It needs neither a VM model nor a new
+  definition of program execution.
+
+  Static calls require explicit value agreement and actual-cost ordering on
+  their admitted input domains. Ordered callee budgets alone are insufficient.
+  The existing size derivation can establish that each call's argument meets
+  its input contract; the theorem retains the assumptions needed by that derivation.
+
+  The result records `proof_scope: :cost_functions_budgets_and_executions`,
+  `execution_cost_order: :checked`, and the required `execution_conditions`.
+  This checks the conditional generic theorem without selecting a target or
+  proving that its callees meet those conditions. Accordingly,
+  `execution_applicability` is `:not_checked` and `callee_correspondence` is
+  `:assumed`. No caller-supplied label counts as evidence for these assumptions.
+  Bound transfer, concrete integer contract instantiation, and correspondence
+  with an ERTS implementation remain unchecked.
 
   ```elixir
   alias ReductionBounds.CostContract

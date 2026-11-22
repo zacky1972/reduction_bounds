@@ -456,7 +456,10 @@ commuted sum. It does not declare unresolved inequalities false, and
 never uses finite samples as a universal ordering proof.
 
 The generated `functionCertificate` aligns the functions in one explicit,
-shared operation registry. `FunctionsLe.sound` proves pointwise ordering
+shared operation registry. The first 13 entries now follow the numeric
+operation order used by `IntegerCost.Runs`; auxiliary names follow in sorted
+order. The integer bound generator uses the same core registry.
+`FunctionsLe.sound` proves pointwise ordering
 of the resulting charge assignments. Operations beyond that registry
 have zero cost in both assignments. `functionsMonotone` establishes the
 existing `IntegerCost.MonotoneCharges` property for each assignment.
@@ -492,20 +495,22 @@ comparison.checked_theorems
 
 The returned `size_monotonicity`, `cost_function_order`, and `budget_order`
 are `:checked` after successful Lean verification. The proof scope is
-`:cost_functions_and_budgets`. The common verification path audits the
+`:cost_functions_budgets_and_executions`. The common verification path audits the
 generic theorems and generated certificates; only `propext`,
 `Classical.choice`, and `Quot.sound` are permitted as axioms. Existing
 integer inference still reports `contract_instantiation: :not_checked`:
 this separate comparison does not instantiate or transfer that program's
-bound, or establish correspondence between two program executions.
+bound. The conditional execution theorem below is checked separately from
+establishing its applicability to a particular target and its callees.
 
 Auxiliary callee cost names can be included when their parameter
 registries match. This checks their mathematical cost items, not the
-values or actual costs of external callees. Execution comparison must
-later supply the corresponding callee assumptions. A name such as
-`:jit` still supplies no implementation evidence. The comparison result
-reports `execution_cost_order`, `bound_transfer`, and
-`runtime_correspondence` as `:not_checked`.
+values or actual costs of external callees. Execution comparison requires
+the explicit callee assumptions described below. A name such as `:jit`
+still supplies no implementation evidence. The comparison result reports
+`execution_cost_order: :checked` for the conditional generic theorem,
+`execution_applicability: :not_checked`, `callee_correspondence: :assumed`,
+and both `bound_transfer` and `runtime_correspondence` as `:not_checked`.
 
 The Lean theorems apply to the serialized expression and budget syntax.
 Elixir declaration validation, metadata compatibility checks, and faithful
@@ -525,6 +530,98 @@ reverse ordering, sampled-but-not-universal inequalities, unsupported
 true comparisons, incompatible metadata, symbolic functions, and invalid
 budgets. Negative Lean tests alter functions, certificates, and computed
 budget values and require rejection.
+
+### Execution-cost comparison under two contracts
+
+`BoundTransfer.lean` reuses `IntegerCost.Runs`; it introduces no new
+execution semantics. `compareExecution` takes a finite execution under
+charges A and constructs an execution of the same expression, program,
+and input environment under charges B. The constructed execution has
+the same returned integer, selects the same branches, and has cost at
+least the original cost. The operation charges must satisfy
+`ChargesLe A B` at every pair of natural parameters. This is separate
+from size monotonicity within one charge assignment.
+
+For external calls, `ExternalAgreement admitted externalA externalB`
+requires two properties at every admitted key and actual argument:
+
+- The returned values are equal.
+- The actual cost under A is at most the actual cost under B.
+
+These are conditional mathematical assumptions about the external models.
+They do not follow from an ordering of their upper budgets. For example,
+actual costs 9 and 1 can satisfy budgets 10 and 20 while violating the
+required actual-cost ordering. Auxiliary cost-expression names also do
+not establish value agreement of the corresponding functions.
+
+`CallsWithin admitted run` requires the actual argument of every call
+in that execution to satisfy `admitted`. It includes calls inside
+argument expressions, bindings, the selected branch, and recursive
+bodies. For a call-free execution, the predicate can be false for every
+key and argument. No assumption about unused calls is needed.
+
+Induction on this coverage evidence handles every `Runs` constructor:
+literals and variables use charge ordering; bindings and arithmetic add
+the component inequalities; branches preserve the Boolean test and add
+its charge; calls use both external assumptions; recursion combines the
+counter, accumulator, and finite body execution. The proof does not
+require a uniform charge or restrict integer magnitudes.
+
+`runsDeterministic` proves value and cost uniqueness for a fixed charge
+assignment and external model. `executionCostLe` combines this with the
+constructed execution, showing that any supplied larger-contract execution
+of the same expression and environment returns the same value and has
+at least the smaller-contract cost.
+
+`derivationCallsWithin` connects coverage to the existing `Derives`
+relation. Under its input coverage, size monotonicity, and
+`ContractsHold` assumptions, `derivationSound` supplies the intermediate
+value bounds needed to establish each callee's input precondition.
+`compareUnderContracts` uses that evidence, including inside finite
+recursion, with external agreement restricted to those input contracts.
+It does not assume that an initial input condition covers every call
+without proving the intermediate conditions.
+
+The comparison API now generates and audits `executionCostOrdering` and
+`executionOrderingUnderContracts` for its two concrete mathematical
+charge assignments, as well as the five generic comparison theorems.
+The result records the following conditions in `execution_conditions`:
+
+- `same_program_and_input`
+- `corresponding_charge_events`
+- `admitted_call_arguments`
+- `callee_value_agreement`
+- `callee_actual_cost_order`
+- `finite_execution`
+
+`execution_cost_order: :checked` describes this conditional theorem.
+The API takes no target program and no callee-correspondence evidence;
+therefore `execution_applicability: :not_checked` and
+`callee_correspondence: :assumed` remain explicit. It does not report a
+successful transfer of a target's bound. Proving or discharging these
+assumptions for a selected target belongs to the following stage.
+
+The construction transports an already finite normally returning
+execution. It supplies no independent claim that an arbitrary recursive
+program terminates. The existing finite-derivation termination theorem
+and its callee assumptions remain available for the bound-transfer stage.
+Exceptions, divergence, concurrency, VM execution modes, and runtime
+reduction accounting are outside this comparison semantics.
+
+Reproduce the checks with:
+
+```sh
+mix test test/reduction_bounds/contract_comparison_test.exs \
+  test/reduction_bounds/execution_comparison_test.exs
+```
+
+Positive examples cover bindings, arithmetic, shifts, both Boolean paths,
+static calls with different costs, finite recursion, and coverage from a
+checked size derivation. A test with distinct charges checks all 13
+numeric operation indexes. Rejection examples cover changed returned
+values, reversed actual callee costs despite ordered budgets, and a call
+outside its admitted argument domain. All generic and generated theorems
+are included in the existing axiom audit.
 
 ### Size-dependent charges and composition
 

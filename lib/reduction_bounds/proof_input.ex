@@ -63,7 +63,8 @@ defmodule ReductionBounds.ProofInput do
       "IntegerSize.lean",
       "IntegerAnalysis.lean",
       "IntegerCost.lean",
-      "CostContract.lean"
+      "CostContract.lean",
+      "BoundTransfer.lean"
     ])
   end
 
@@ -131,7 +132,11 @@ defmodule ReductionBounds.ProofInput do
       ~w(ReductionBounds.CostContract.Expr.monotone ReductionBounds.CostContract.ExprLe.sound
       ReductionBounds.CostContract.functionsMonotone ReductionBounds.CostContract.FunctionsLe.sound
       ReductionBounds.CostContract.budgetMonotone smallerMonotone largerMonotone
-      functionCertificate operationOrdering allBudgetOrdering)
+      functionCertificate operationOrdering allBudgetOrdering
+      ReductionBounds.BoundTransfer.compareExecution ReductionBounds.BoundTransfer.runsDeterministic
+      ReductionBounds.BoundTransfer.executionCostLe ReductionBounds.BoundTransfer.derivationCallsWithin
+      ReductionBounds.BoundTransfer.compareUnderContracts
+      executionCostOrdering executionOrderingUnderContracts)
 
     if is_nil(candidate.budget),
       do: theorems,

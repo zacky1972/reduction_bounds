@@ -2,21 +2,7 @@ defmodule ReductionBounds.IntegerCostBound do
   @moduledoc false
   alias ReductionBounds.{CostContract, IntegerCostSource, IntegerSize, SearchBound}
 
-  @operations [
-    :value,
-    :variable,
-    :binding,
-    :comparison,
-    :recursive_call,
-    :addition,
-    :subtraction,
-    :multiplication,
-    :xor,
-    :shift_left,
-    :shift_right,
-    :mask,
-    :static_call
-  ]
+  @operations CostContract.execution_operations()
   @binary %{add: :addition, subtract: :subtraction, multiply: :multiplication, bit_xor: :xor}
 
   @spec infer(ReductionBounds.target(), keyword()) ::

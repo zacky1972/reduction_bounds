@@ -15,9 +15,14 @@ defmodule ReductionBounds.ContractComparisonTest do
 
     assert {:ok, result} = ReductionBounds.compare_cost_contracts(smaller, larger, budget: budget)
     assert result.budget_values == %{smaller: 111, larger: 113}
-    assert result.proof_scope == :cost_functions_and_budgets
+    assert result.proof_scope == :cost_functions_budgets_and_executions
     assert result.parameter_domain == :all_natural_pairs
-    assert result.execution_cost_order == :not_checked
+    assert result.execution_cost_order == :checked
+    assert result.execution_applicability == :not_checked
+    assert result.callee_correspondence == :assumed
+    assert :callee_actual_cost_order in result.execution_conditions
+    assert "executionCostOrdering" in result.checked_theorems
+    assert "executionOrderingUnderContracts" in result.checked_theorems
     assert result.bound_transfer == :not_checked
     assert result.runtime_correspondence == :not_checked
     assert "operationOrdering" in result.checked_theorems

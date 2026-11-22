@@ -10,7 +10,9 @@ defmodule ReductionBounds.ContractComparison do
          :ok <- compatible(smaller, larger),
          {:ok, derivations} <- derivations(smaller.functions, larger.functions),
          :ok <- validate_budget(budget, smaller) do
-      operations = smaller |> CostContract.parameters() |> Map.keys() |> Enum.sort()
+      core = CostContract.execution_operations()
+      auxiliary = smaller |> CostContract.parameters() |> Map.keys() |> Enum.reject(&(&1 in core))
+      operations = core ++ Enum.sort(auxiliary)
 
       candidate = %{
         source: :cost_contract_comparison,
@@ -23,12 +25,22 @@ defmodule ReductionBounds.ContractComparison do
         parameters: CostContract.parameters(smaller),
         budget: budget,
         budget_values: budget_values(budget, smaller, larger),
-        proof_scope: :cost_functions_and_budgets,
+        proof_scope: :cost_functions_budgets_and_executions,
         compatibility_check: :elixir_validation,
         size_monotonicity: :checked,
         cost_function_order: :checked,
         budget_order: :checked,
-        execution_cost_order: :not_checked,
+        execution_cost_order: :checked,
+        execution_applicability: :not_checked,
+        callee_correspondence: :assumed,
+        execution_conditions: [
+          :same_program_and_input,
+          :corresponding_charge_events,
+          :admitted_call_arguments,
+          :callee_value_agreement,
+          :callee_actual_cost_order,
+          :finite_execution
+        ],
         bound_transfer: :not_checked,
         runtime_correspondence: :not_checked
       }
@@ -181,8 +193,42 @@ defmodule ReductionBounds.ContractComparison do
       file: "generated_cost_contract_comparison.lean",
       span: {1, 1},
       indentation: 0,
-      source: source <> budget_proof(candidate, registry)
+      source: source <> execution_proof() <> budget_proof(candidate, registry)
     }
+  end
+
+  defp execution_proof() do
+    """
+    theorem executionCostOrdering
+        {program expr : ReductionBounds.IntegerCost.Expr}
+        {externalA externalB : ReductionBounds.IntegerCost.External}
+        {admitted : Nat → Int → Prop} {env : ReductionBounds.IntegerAnalysis.Env}
+        {valueA valueB : Int} {costA costB : Nat}
+        (callees : ReductionBounds.BoundTransfer.ExternalAgreement admitted externalA externalB)
+        (runA : ReductionBounds.IntegerCost.Runs program smallerCharges externalA expr env valueA costA)
+        (covered : ReductionBounds.BoundTransfer.CallsWithin admitted runA)
+        (runB : ReductionBounds.IntegerCost.Runs program largerCharges externalB expr env valueB costB) :
+        valueA = valueB ∧ costA ≤ costB :=
+      ReductionBounds.BoundTransfer.executionCostLe operationOrdering callees runA covered runB
+
+    theorem executionOrderingUnderContracts
+        {program expr : ReductionBounds.IntegerCost.Expr}
+        {externalA externalB : ReductionBounds.IntegerCost.External}
+        {contracts : ReductionBounds.IntegerCost.Contracts}
+        {invariant : Int → Int → Prop} {state : ReductionBounds.IntegerAnalysis.State}
+        {summary : ReductionBounds.IntegerCost.Summary}
+        {env : ReductionBounds.IntegerAnalysis.Env} {value : Int} {cost : Nat}
+        (calls : ReductionBounds.IntegerCost.ContractsHold smallerCharges contracts externalA)
+        (callees : ReductionBounds.BoundTransfer.ExternalAgreement
+          (fun key argument => (contracts key).input.Holds argument) externalA externalB)
+        (derivation : ReductionBounds.IntegerCost.Derives program contracts invariant state expr summary)
+        (covered : ReductionBounds.IntegerAnalysis.Covers state env)
+        (run : ReductionBounds.IntegerCost.Runs program smallerCharges externalA expr env value cost) :
+        ∃ largerCost, ReductionBounds.IntegerCost.Runs program largerCharges externalB expr env value largerCost ∧
+          cost ≤ largerCost :=
+      ReductionBounds.BoundTransfer.compareUnderContracts operationOrdering smallerMonotone
+        calls callees derivation covered run
+    """
   end
 
   defp expression(value) when is_integer(value), do: "(.constant #{value})"

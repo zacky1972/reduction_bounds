@@ -44,6 +44,22 @@ defmodule ReductionBounds.CostContract do
   that a VM implementation satisfies it, or that its unit is ERTS reductions.
   """
 
+  @execution_operations [
+    :value,
+    :variable,
+    :binding,
+    :comparison,
+    :recursive_call,
+    :addition,
+    :subtraction,
+    :multiplication,
+    :xor,
+    :shift_left,
+    :shift_right,
+    :mask,
+    :static_call
+  ]
+
   @local {:unused, :unused}
   @widths {:left_magnitude_bits, :right_magnitude_bits}
   @parameters %{
@@ -106,6 +122,10 @@ defmodule ReductionBounds.CostContract do
       _ -> {:error, :invalid_contract_options}
     end
   end
+
+  @doc "Operation names in the numeric order used by the integer execution semantics."
+  @spec execution_operations() :: [atom()]
+  def execution_operations(), do: @execution_operations
 
   @doc "Returns the names of the built-in cost events."
   @spec operations() :: [atom()]
