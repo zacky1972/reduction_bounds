@@ -39,6 +39,23 @@ defmodule ReductionBounds.ProofInput do
     packaged_postludes(proof, @sources ++ ["ExecutionBound.lean"])
   end
 
+  @spec integer_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def integer_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, ["IntegerSize.lean", "IntegerAnalysis.lean"])
+  end
+
+  @spec integer_cost_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def integer_cost_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, [
+      "IntegerSize.lean",
+      "IntegerAnalysis.lean",
+      "IntegerCost.lean",
+      "IntegerCostSource.lean"
+    ])
+  end
+
   defp packaged_postludes(proof, sources) do
     case :code.priv_dir(:reduction_bounds) do
       {:error, reason} -> {:error, {:priv_dir, reason}}
@@ -89,6 +106,19 @@ defmodule ReductionBounds.ProofInput do
     end
   end
 
+  defp case_study_theorems(%{source: :integer_cost_fragment} = candidate) do
+    global =
+      ~w(ReductionBounds.IntegerCost.inclusionSound ReductionBounds.IntegerCost.derivationSound
+      ReductionBounds.IntegerCost.derivationTerminates ReductionBounds.IntegerCost.derivationInvariant
+      ReductionBounds.IntegerCostSource.sourceAgreement ReductionBounds.IntegerCostSource.sourceComplete)
+
+    global ++ integer_cost_theorems(candidate, "")
+  end
+
+  defp case_study_theorems(%{source: :integer_fragment}),
+    do:
+      ~w(ReductionBounds.IntegerAnalysis.inferSound targetIntegerSizeCorrect targetIntegerTraceCorrect targetIntegerSizeBound)
+
   defp case_study_theorems(%{source: :lynx_builtin, value_model: :membership}),
     do: ~w(listRulesSound listPathBounds searchCostDerivation listValueAndBound)
 
@@ -115,6 +145,29 @@ defmodule ReductionBounds.ProofInput do
   end
 
   defp case_study_theorems(_candidate), do: []
+
+  defp integer_cost_theorems(candidate, prefix) do
+    local =
+      ~w(costUniqueNames costTranslation costDerivation costCandidate integerCostValueAgreement
+      integerCostSound integerCostInvariant integerCostSourceBound integerCostTotal)
+
+    invariant = if candidate.conditions.recursive_invariant, do: ["costInvariants"], else: []
+    own = Enum.map(local ++ invariant, &(prefix <> &1))
+
+    reused =
+      Enum.flat_map(candidate.call_contracts, fn
+        {key, %{origin: :checked_model_bound, checked_bound: checked}} ->
+          [
+            prefix <> "costReuse#{key}"
+            | integer_cost_theorems(checked, prefix <> "Callee#{key}.")
+          ]
+
+        _ ->
+          []
+      end)
+
+    own ++ reused
+  end
 
   @spec certificate_source([Normalize.certificate()]) :: String.t()
   def certificate_source(certificates) do

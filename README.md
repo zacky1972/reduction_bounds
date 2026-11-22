@@ -17,8 +17,21 @@ with a compatible Erlang/OTP version.
 ### Lean prerequisites
 
 Install [Elan](https://github.com/leanprover/elan), Lean's toolchain manager,
-and ensure that its `lake` executable is on `PATH`. Lynx uses Lake to
-build its Lean components and run proof checks.
+and ensure that its `lean` and `lake` executables are on `PATH`. Lynx uses Lake
+to build its Lean components and run proof checks. Use the exact toolchain
+specified by the fetched Lynx checkout's `lean-toolchain` file, as shown
+below. Updating Elan itself and installing a Lean toolchain are separate
+steps.
+
+If Elan was installed with its official installer, update it with:
+
+```sh
+elan self update
+elan --version
+```
+
+If Elan is managed by a package manager, update it through that package
+manager instead. See the [Elan toolchain management documentation](https://lean-lang.org/doc/reference/latest/Build-Tools-and-Distribution/Managing-Toolchains-with-Elan/).
 
 ### Install from GitHub
 
@@ -37,14 +50,36 @@ specifies the required Lean toolchain.
 mix deps.get
 export ELAN_TOOLCHAIN="$(cat deps/lynx/lean-toolchain)"
 elan toolchain install "$ELAN_TOOLCHAIN"
+lean --version
 lake --version
 mix compile
 ```
 
 Set `ELAN_TOOLCHAIN` from the same file in each shell where you build the
-project or run Lynx-based verification. The [Lynx revision recorded in
-this repository's lockfile](https://github.com/josevalim/lynx/blob/d74890ac7a446d57b762d0e4fcd3c848146b2ff6/lean-toolchain)
-uses Lean 4.35.0 (`leanprover/lean4:v4.35.0`).
+project or run Lynx-based verification. The commands above must run from
+your project's root so that the path to `deps/lynx/lean-toolchain` resolves
+correctly. Use the toolchain from your fetched dependency rather than
+assuming that the latest Lean release is compatible.
+
+### Updating Lynx and its Lean toolchain
+
+When you choose to update Lynx, run the following commands from your
+project's root. Re-read `lean-toolchain` after updating the dependency,
+because the required Lean version may have changed.
+
+```sh
+mix deps.update lynx
+export ELAN_TOOLCHAIN="$(cat deps/lynx/lean-toolchain)"
+elan toolchain install "$ELAN_TOOLCHAIN"
+lean --version
+lake --version
+mix compile
+mix test
+```
+
+Review and commit the resulting `mix.lock` changes after checking
+compatibility with your project. Installing a newer Lean toolchain alone
+does not update Lynx or verify compatibility with ReductionBounds.
 
 ## Verify Lean declarations
 

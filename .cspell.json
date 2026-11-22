@@ -29,6 +29,13 @@
     "callees",
     "succ",
     "cerl",
-    "propext"
+    "propext",
+    "zacky",
+    "nondecreasing",
+    "rintro",
+    "rcases",
+    "symm",
+    "elim",
+    "bignum"
   ]
 }

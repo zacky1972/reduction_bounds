@@ -1,5 +1,652 @@
 # Proofs of symbolic cost bounds
 
+## Integer value ranges and magnitude sizes
+
+`IntegerSize` describes a set of mathematical integers. Its three
+components constrain the same value: a finite lower endpoint requires
+`lower <= value`, a finite upper endpoint requires `value <= upper`,
+and a known magnitude bound requires `abs(value) < 2^bits`.
+The endpoints are inclusive and the magnitude limit is strict.
+An unbounded endpoint or unknown magnitude adds no constraint.
+All components are conjoined. Contradictory constraints denote the
+empty set; they do not cause a constraint to be discarded.
+`valid?/1` checks field types, while `contains?/2` implements membership
+and rejects malformed representations and non-integer inputs.
+
+In `priv/lean/reduction_bounds/IntegerSize.lean`, `Bounds` represents
+missing components with `Option.none`, and `Holds` defines the
+represented set over Lean's `Int`. The magnitude predicate uses
+`value.natAbs < 2 ^ width`, without a sign bit or a machine-word limit.
+`containsCorrect` proves that the Lean Boolean membership test equals
+this predicate. The component projection theorems recover each stated
+constraint. `unconstrained` admits every integer, `zeroMagnitude`
+admits exactly zero, and `reversedRange` admits no integer when the
+upper endpoint is below the lower endpoint.
+
+Run the tests with:
+
+```sh
+mix test test/reduction_bounds/integer_size_test.exs test/reduction_bounds/integer_size_proof_test.exs
+```
+
+The proof test loads the packaged Lean definitions through Lynx,
+checks the generic theorems for unexpected axioms, compares the Lean
+and Elixir predicates on signed boundary cases and values around
+`2^200`, and confirms that Lean rejects an invalid membership claim.
+These finite comparisons check the serialization and examples; they
+are not a universal proof of the Elixir implementation. The generic
+theorems apply to the Lean definitions. Basic arithmetic size propagation
+is described below, followed by program inference and size-dependent
+operation-cost contracts. No immediate-integer threshold or ERTS
+reduction accounting is assumed here.
+
+### Unknown information and unreachable states
+
+`IntegerSize.unknown/0` returns the unconstrained `%IntegerSize{}` and
+admits every integer. `IntegerSize.unreachable/0` returns the distinct
+atom `:unreachable` and admits no integer. Both are valid representations;
+missing size information must not be interpreted as an impossible state.
+
+`normalize/1` converts exactly the empty constraint sets to
+`:unreachable`. Satisfiable structs are returned unchanged, and
+normalizing `:unreachable` returns `:unreachable`. `unreachable?/1` tests
+semantic emptiness through this normalization. Malformed field values
+remain errors rather than being silently classified as unreachable.
+Membership in `:unreachable` is false for every integer.
+
+The emptiness check constructs a candidate from the interval endpoints:
+use zero when neither endpoint is known, clamp zero toward a finite
+endpoint when only one is known, and use `max(lower, min(0, upper))`
+when both are known. If any integer satisfies the range and magnitude
+constraints, this candidate satisfies them too. It is therefore enough
+to test this single candidate, even for one-sided ranges or magnitudes
+larger than a machine word. This check does not enumerate the interval.
+
+Lean's `Domain` adds `.unreachable` alongside `.bounded bounds`.
+`Domain.Holds` assigns the former the empty set and the latter the
+existing `Holds` predicate. `witnessHolds` proves the candidate property.
+`normalizeSound` proves membership equivalence before and after
+normalization for every integer. `normalizeUnreachableIff` proves that
+the normalized result is unreachable if and only if no integer satisfies
+the original constraints. `normalizeIdempotent` proves that a second
+normalization changes nothing. `unknownHolds`, `unreachableHolds`, and
+`unknownNotUnreachable` establish the distinction between the two states.
+The test's axiom audit includes these theorems.
+
+ExUnit tests exercise partial bounds, zero, conflicting magnitude bounds,
+large integers, and every combination of endpoints from -5 through 5 or
+unbounded with magnitude bounds 0 through 3 or unknown. The proof test
+compares Elixir and Lean normalization results and membership, and checks
+that Lean rejects declaring unknown information unreachable. These tests
+extend the two integer-size test files listed above. Finite comparisons
+do not establish universal correctness of the Elixir implementation.
+The domain is not yet connected to branch conditions in the analyzers;
+a claim that actual program control cannot reach a branch will also need
+proof that the constraints describe all states at that point.
+
+### Constants and arithmetic size propagation
+
+The common integer domain now provides `from_integer/1`, `add/2`,
+`subtract/2`, and `multiply/2`. For every pair of integer operands
+satisfying the supplied descriptions, the result description contains
+the corresponding arithmetic result. These are domain operations;
+they are not yet applied automatically to extracted Core Erlang.
+
+For a constant `z`, `from_integer(z)` has the exact interval `[z, z]`
+and the smallest magnitude width with `abs(z) < 2^width`. Zero has
+width zero. Let `[L1, U1]` and `[L2, U2]` denote finite operand
+intervals, and let `w1` and `w2` be known magnitude bounds.
+
+| Operation | Interval rule | Magnitude bound |
+| --- | --- | --- |
+| Addition | `[L1 + L2, U1 + U2]` | `max(w1, w2) + 1` |
+| Subtraction | `[L1 - U2, U1 - L2]` | `max(w1, w2) + 1` |
+| Multiplication | Minimum and maximum of `L1*L2`, `L1*U2`, `U1*L2`, `U1*U2` | `w1 + w2` |
+
+For addition and subtraction, an endpoint is unknown if a required
+operand endpoint is unknown. The magnitude result is unknown if either
+operand magnitude is unknown. For multiplication, this first rule uses
+unbounded endpoints unless all four operand endpoints are finite. It
+still propagates known magnitude bounds. A valid operand with magnitude
+zero, or with both endpoints zero, gives an exact zero product when the
+other operand is not unreachable. The one-sided multiplication rule
+is deliberately conservative and can be refined later.
+
+Both operands are validated and normalized before every operation.
+If either denotes the empty set, the result is `:unreachable`, including
+zero times an unreachable operand. Malformed information remains an
+error, even if the other operand is unreachable. Result normalization
+preserves the represented set.
+
+The domain does not track correlations between operands. Subtracting
+`[1, 3]` from the same description therefore gives `[-2, 2]` rather
+than inferring zero. Constant cancellation can still produce the exact
+interval `[0, 0]`, while the propagated magnitude bound is deliberately
+coarse. The analysis keeps descriptions of intermediate values separate:
+a zero final result does not reduce the bound on an earlier product.
+For example, squaring `2^200` has exact value `2^400` and a propagated
+magnitude bound of 402, even if subtracting that product from itself
+later produces zero.
+
+In Lean, `magnitudeBitsCorrect` and `magnitudeBitsMinimal` characterize
+the constant width, and `singletonExact` characterizes its represented
+set. The endpoint and magnitude lemmas establish the arithmetic rules
+for all integer values. `productInterval` bounds the signed product by
+the four corners, and `zeroValue` justifies the zero shortcut.
+`boundsAddSound`, `boundsSubtractSound`, and `boundsMultiplySound`
+combine interval and magnitude constraints. `binarySound` lifts these
+rules through input and output normalization. `addSound`,
+`subtractSound`, and `multiplySound` state the final domain guarantees
+under operand membership assumptions. The same axiom audit covers
+all these theorems.
+
+The existing two integer-size test files also cover carry bits,
+negative products, one-sided bounds, unreachable inputs, invalid inputs,
+large intermediate products, and cancellation. Finite-domain tests
+check every admitted operand pair in the chosen small grid. The proof
+test compares the Elixir and Lean transfer results for all combinations
+of its example descriptions and rejects false claims about a missing
+carry bit and unrelated operands. These comparisons test agreement on
+examples; the universal theorems apply to the Lean definitions.
+
+The following sections cover constant shifts, low-bit masks, XOR,
+branch refinement, and propagation through supported Core Erlang bindings.
+The separate integer cost entry point below adds static call contracts,
+finite recursion with invariants, and size-dependent cost functions. No runtime word size,
+small-integer boundary, or ERTS reduction formula is fixed here.
+
+### Constant left shifts and low-bit masks
+
+`shift_left/2` accepts a size description and a fixed nonnegative integer
+shift amount `k`. Each finite endpoint is multiplied by `2^k`; missing
+endpoints remain unbounded. A known magnitude bound `w` becomes `w + k`,
+while an unknown bound stays unknown. Positive scaling preserves the
+order of negative as well as positive endpoints. A known zero input
+remains exact zero. The modeled value is `shiftValue z k = z <<< k`.
+`shiftValueMultiply` relates it to `z * 2^k` using Lean's signed shift
+semantics. `lowerShiftSound`, `upperShiftSound`, and `shiftBitsSound`
+prove the component rules, and `boundsShiftLeftSound` combines them.
+
+`mask/2` retains the low `k` bits, for any signed integer input. Its
+mathematical value is the nonnegative remainder `maskValue z k = z % 2^k`
+with Euclidean division. This defines a low-bit mask without choosing
+a machine word size. In particular, masking `-1` gives `2^k - 1`;
+it does not retain the original magnitude bound of one bit. The general
+result interval is `[0, 2^k - 1]` and its magnitude bound is `k`.
+A known zero input, or a zero mask width, gives exact zero. This first
+rule deliberately drops other range information from the input.
+
+`maskRange` proves the nonnegative range, `maskResidue` proves that the
+remainder preserves the residue modulo `2^k`, and `maskUnique` proves
+uniqueness under those two conditions. `maskMagnitudeBound` gives the
+width bound. `maskInRange` proves that a value already in range is
+unchanged, `maskNegativeOne` handles `-1` for every width, and
+`maskAfterFullShift` proves that shifting by `k` and then retaining only
+`k` low bits gives zero. `boundsMaskSound` proves the size rule for this
+mathematical masking operation.
+
+Both APIs reject negative, fractional, or unknown shift amounts and mask
+widths; their width argument is a constant, not a size description.
+They validate and normalize the input and preserve unreachable states,
+including when the width is zero. The shared `Domain.unary` rule applies
+normalization on input and output. `unarySound` proves that it lifts a
+sound operation on `Bounds` to the domain containing unreachable states.
+`shiftLeftSound` and `maskSound` specialize that rule.
+
+The unit tests compare actual `Bitwise.bsl/2` and `Bitwise.band/2` results
+with the mathematical value operations and check that the propagated
+bounds contain them. Cases include negative values, widths zero and 64,
+values around `2^200`, partial ranges, invalid widths, and empty inputs.
+The proof test also compares those actual values and the Elixir transfer
+results with the Lean definitions, audits the new theorems, and checks
+that Lean rejects dropping shifted bits or retaining a negative masked
+result. These finite comparisons do not constitute a universal proof of
+the Elixir primitives or a translation theorem for an Erlang built-in.
+The universal size theorems cover the stated Lean value models and make
+no cost claim.
+
+Size descriptions are immutable and remain separate at each operation.
+For example, shifting `2^100` by 100 produces `2^200` with width bound
+201. Retaining its low 64 bits then produces a value bounded by 64 bits,
+which is zero for this concrete input. The later mask does not reduce
+the recorded bound for the earlier shifted intermediate.
+
+The two integer-size test files listed above reproduce these checks.
+These rules introduce no immediate integer boundary or concrete ERTS
+reduction charges.
+
+### Signed XOR and constant right shifts
+
+`bit_xor/2` propagates a conservative magnitude bound for signed XOR.
+With operand bounds `a` and `b`, the result has magnitude bound
+`max(a, b) + 1`. Its interval endpoints are unbounded. If either
+magnitude is unknown, the result magnitude is unknown. The extra bit
+is necessary for this uniform signed rule: `3 XOR -1 = -4`.
+`xorValue` defines the operation using natural-number XOR and the
+signed complement representation; `xorMagnitude`, `boundsXorSound`,
+and `xorSound` establish the size bound for every pair of admitted
+mathematical integers.
+
+`shift_right/2` accepts a fixed nonnegative amount `k`. It divides
+finite endpoints by `2^k` with floor rounding. The result retains the
+original magnitude bound, a deliberate conservative choice that also
+covers negative values such as `-1 >> k = -1`. `rightValue` uses
+Lean's signed right shift. `rightMagnitude`, `divideMonotone`,
+`boundsShiftRightSound`, and `shiftRightSound` justify the rule.
+Both operations validate and normalize operands and preserve
+unreachable information. The tests compare actual signed Elixir
+operations with the Lean definitions on boundary cases; these finite
+checks are not a proof of an Erlang built-in implementation.
+
+### Comparison assumptions and joins
+
+`assume(size, comparison, constant, truth)` refines an integer
+under a comparison with a constant `k`. The supported comparisons
+are `:lt`, `:le`, `:eq`, `:ne`, `:ge`, and `:gt`. For example,
+the true branch of `x < k` sets an upper bound of `k - 1`, and
+the false branch sets a lower bound of `k`. The true branch of
+`x == k` intersects both endpoints with `k`. Negated equality
+cannot in general be represented as one interval, so it leaves
+the description unchanged. `:ne`, `:ge`, and `:gt` use the
+corresponding complementary rules. Normalization turns contradictory
+branch constraints into `:unreachable`. `assumeSound` proves that
+every admitted value satisfying the selected condition remains admitted.
+
+`join/2` covers the union of two alternatives: take the minimum
+finite lower endpoint, maximum finite upper endpoint, and maximum
+known magnitude bound. An absent endpoint or unknown magnitude on
+either side makes that component unknown. `:unreachable` is the
+identity. `joinLeftSound` and `joinRightSound` prove inclusion of
+both alternatives. The domain does not track operand correlations
+or excluded interior points. Finite endpoints do not automatically
+supply a magnitude bound when `magnitude_bits` is unknown.
+
+### Size propagation through a Core Erlang fragment
+
+`ReductionBounds.infer_integer_sizes/2` extracts a target's Core Erlang
+from its BEAM debug information and decodes a non-recursive integer
+fragment. It supports integer literals, variables, single-variable
+bindings, sequencing of integer expressions, unary signs, addition,
+subtraction, multiplication, XOR, constant nonnegative shifts, low-bit
+masks, and Boolean branches comparing an integer expression with a
+constant. Constants on either side of a comparison are supported.
+An expression used as a test operand is bound to a fresh variable
+before branch refinement. Other function calls, recursion, variable
+shift amounts, general masks, and unsupported conditions are rejected
+with the target and a location in the decoded expression.
+
+```elixir
+alias ReductionBounds.IntegerSize
+
+{:ok, analysis} =
+  ReductionBounds.infer_integer_sizes({MyModule, :update, 1},
+    input_sizes: [%IntegerSize{lower: -2, upper: 4, magnitude_bits: 3}]
+  )
+```
+
+For `update(x)` defined as `y = x * 3` followed by
+`if y < 0, do: y - 1, else: y + 1`, the returned result has
+range `[-7, 13]` and magnitude bound 6. Omitted input descriptions
+are unknown; supplied descriptions must occur in argument order.
+`beam_binaries` supports modules compiled only in memory, as for
+other inference APIs. If an input is unreachable, the entire input
+state is unreachable, including for a constant-returning body.
+
+The result exposes `input_sizes`, `result_size`, and an ordered
+`intermediates` list. Each row records its expression path, operation,
+and inferred size. Operation rows also record operand sizes; rows
+inside a branch include its comparison and refined description.
+`unresolved_sizes` identifies rows without magnitude bounds. Intermediate
+sizes remain recorded before later masking or cancellation. The CRC-style
+fixture therefore reports a 16-bit shifted intermediate and a conservative
+17-bit XOR intermediate before returning an 8-bit masked result.
+
+`IntegerAnalysis.lean` defines a concrete mathematical integer
+evaluator and an abstract interpreter for the same expression datatype.
+`Covers` relates an input environment to its size descriptions.
+`bindCovers` proves preservation when a binding receives a value admitted
+by its inferred description. `refineCovers` proves preservation on a
+selected comparison branch. The structural theorem `inferSound`
+connects these rules: for every environment satisfying `Covers`,
+evaluation returns a value admitted by the inferred result description.
+The evaluator terminates by structural recursion on this finite,
+non-recursive expression syntax.
+
+For each target, `targetIntegerSizeCorrect` checks that the Elixir
+candidate equals the Lean interpreter's inferred result.
+`targetIntegerTraceCorrect` checks the complete ordered list of
+intermediate expression paths and size descriptions against the Lean
+trace. Additional descriptive metadata is not part of this equality.
+`targetIntegerSizeBound` instantiates the universal soundness theorem
+under the supplied input conditions. The common verification path records
+these theorem names and audits their dependencies; only `propext`,
+`Classical.choice`, and `Quot.sound` are permitted as axioms.
+
+The proof starts at the reified integer fragment. Extraction from
+BEAM debug information and the Elixir decoder remain trusted; this
+change does not prove correspondence with the original Core Erlang
+or with a Lynx-translated target. The result explicitly reports
+`proof_scope: :reified_integer_fragment`, `value_agreement: :not_checked`,
+`termination: :structural_model`, and `cost_model: :not_analyzed`.
+The result is size information, not a bound on runtime reductions or
+execution time. The separate integer cost entry point below adds size-dependent cost
+functions, bounded recursion, and contracts for call results; those
+features do not change this older entry point's proof scope.
+
+The following commands reproduce the domain tests, Lean comparisons,
+compiled-fixture checks, and rejection of falsified results and traces:
+
+```sh
+mix test test/reduction_bounds/integer_size_test.exs \
+  test/reduction_bounds/integer_size_proof_test.exs \
+  test/reduction_bounds/integer_analysis_test.exs
+```
+
+## Integer sizes connected to symbolic costs
+
+`ReductionBounds.infer_integer_cost_bound/2` connects integer size
+information to the symbolic cost rules. It is a separate entry point
+from `infer_integer_sizes/2`: the latter retains its original,
+non-recursive interpreter and trusted decoder boundary. The new entry
+point checks a lowering certificate from a reified supported Core
+fragment and a cost derivation, including finite recursive expansions.
+
+### Size-dependent charges and composition
+
+A cost leaf `{:cost, name, [a, b]}` denotes `charge(name, a, b)`.
+The mathematical contract requires a natural-valued cost function
+nondecreasing in both size parameters. The arithmetic and XOR leaves
+use magnitude bounds for their operands. A shift leaf uses the input
+magnitude bound and constant shift amount. A mask leaf uses the input
+magnitude bound and constant mask width. Value evaluation, variable
+lookup, binding, and the local static- and recursive-call charges use parameters
+`[0, 0]`. A comparison charge includes the variable and constant used
+in the branch test; their retrieval is included in that local charge.
+Unary signs are lowered to addition or subtraction from zero, including
+the corresponding zero-literal charge in this conservative cost model.
+
+`Budget` in `IntegerCost.lean` combines leaves by addition for sequential
+work and maximum for alternatives. If an actual operand has magnitude
+`beta(v)` and its inferred bound is `w`, `knownWidth` supplies
+`beta(v) <= w`. `MonotoneCharges` then justifies replacing the actual
+size by `w` in the charge. The proof reuses the existing `IntegerSize`
+arithmetic, shift, mask, refinement, and join theorems.
+
+`Derives` records the derivation for literals, variables, bindings,
+operations, branches, static unary calls, and two-argument self calls.
+Every intermediate summary is explicitly typed in the generated
+certificate, so a changed intermediate size or budget must also pass
+the rules. `derivationSound` proves, for every modeled execution under
+its input conditions and call contracts, both result-size membership
+and the cost inequality. `derivationTerminates` constructs a finite
+normally returning execution from a finite checked derivation. External
+functions denote normally returning mathematical call models; their
+contracts are explicit assumptions about their results and costs.
+
+### Static call contracts and checked callee reuse
+
+Local and remote unary calls use the same contracts. A `call_contracts`
+map is keyed by `{module, function, 1}`. A supplied
+contract contains `input_size`, `result_size`, and `upper_bound`. The
+call argument is analyzed first. `included/2` checks that its domain
+is contained in the required input domain; `inclusionSound` proves the
+semantic inclusion. The result description then propagates into the
+caller, and the callee budget and local static-call charge are added to
+the argument-evaluation budget.
+Unknown result widths remain visible in `unresolved_sizes`; attempting
+to use such a value at a size-dependent operation reports an error.
+
+A unary result returned by `infer_integer_cost_bound/2` can itself be
+supplied as a contract. Its source and cost certificates are regenerated
+and checked in a separate Lean namespace in the caller's verification.
+`costReuseN` checks equality of the reused output description and budget
+with the callee summary. The same symbolic cost-function registry is
+used across the proofs. Nested checked contracts are rechecked recursively.
+The axiom audit includes the reused proofs, not just their names in
+an Elixir result map. A user-supplied contract is recorded as
+`:user_contract`; a rechecked result as `:checked_model_bound`.
+
+Call-model agreement remains an explicit assumption even for a
+rechecked callee bound: a bound proved for a model does not by itself
+identify an arbitrary external function with that model. No contract
+is silently inferred for an unsupported call, BIF, or NIF. This phase
+does not establish native-code behavior, yielding, or ERTS accounting.
+
+### Finite recursion and invariant preservation
+
+For two-argument self recursion, the analyzer propagates the two
+argument domains into another copy of the same body. Every reachable
+branch needs a complete derivation. `max_unfolding` limits nested self
+calls and `max_nodes` limits analysis nodes. If a live recursive path
+still requires expansion at the limit, the result is
+`:unresolved_recursion`, not a successful result conditional on assumed
+termination. These limits control analysis effort. They are not input
+preconditions or execution bounds.
+
+With a finite counter range, this permits a sequence of different
+operand-size bounds. For example, `sum(counter, accumulator)` adds the
+positive counter and calls itself with its predecessor, returning the
+accumulator otherwise. From counter range `[0, 4]` with magnitude bound
+3 and initial accumulator zero, the result interval is `[0, 10]`,
+with a conservative propagated magnitude bound of 7. The budget adds
+size-dependent costs at each expanded level and takes maxima over the
+possible stopping branches. There is no assumption that the initial
+accumulator width bounds all later additions.
+
+An optional two-element `recursive_invariant` supplies independent
+integer domains for the counter and accumulator. The analyzer checks
+inclusion at entry and at every reachable self call. More importantly,
+the `Derives.recur` constructor requires a semantic invariant proof
+for every pair of values admitted by that call's argument summaries.
+`derivationInvariant` proves `RunInvariant` for every modeled run:
+the supplied invariant holds at every recursive call, including those
+inside bindings and branches. `integerCostInvariant` instantiates
+this theorem. `costInvariants` also checks the recorded domain-inclusion
+obligations. Automatically inferred domains and the supplied invariant
+are separately exposed in `conditions`.
+
+The CRC loop fixture uses counter interval `[0, 4]` without a magnitude
+constraint in the invariant, and accumulator interval `[0, 255]` with
+magnitude bound 8. Its initial counter description still supplies a
+magnitude bound for cost inference. Each update shifts and applies XOR
+before masking. The intermediate widths remain in the derivation,
+while the mask reestablishes the eight-bit accumulator invariant.
+An invariant requiring an unchanged zero accumulator for the sum
+fixture is rejected. This domain does not represent relational
+invariants between the counter and accumulator, and this implementation
+does not synthesize closed recurrences with an unbounded symbolic
+counter. It verifies each supplied finite input range by a finite
+derivation.
+
+### Reified Core semantics and transformation checking
+
+`IntegerCostSource.lean` defines an annotation-free Core fragment with
+integer literals, variables, single-variable lets, calls with retained
+module/function atom spellings, two Boolean case clauses in their
+original order, local unary calls, and two-argument local self calls. The Elixir reifier
+rejects unsupported constructors and guards. The supported tests compare
+a variable with an integer constant, on either side. Comparison of two
+arbitrary expressions is outside this entry point's current profile.
+Native arithmetic, shifts, masks, and comparison semantics are
+mathematical integer models, without runtime representation boundaries.
+
+`Translates` is a checked lowering relation. Its premises check the
+actual operation names, constant amounts, low-bit masks, Boolean clause
+order, variable indices, and self-call name. A registered external call
+must have the matching module and function. `UniqueNames` rules out
+ambiguous external registrations. `sourceAgreement` maps every costed
+model execution to a source execution with the same value.
+`sourceComplete` maps every execution of the reified source fragment
+back to a costed model execution. This includes recursive body calls.
+
+For each target, `integerCostValueAgreement` states the resulting
+value equivalence. `integerCostSourceBound` connects every source result
+to a costed run satisfying the result description and budget.
+`integerCostSound` bounds every model run. `integerCostTotal` constructs
+a finite source and model execution under the stated input and call
+conditions. `costCandidate` checks the returned result description and
+budget, and the common verification path audits the dependencies of
+these theorems and any reused proofs. Only `propext`, `Classical.choice`,
+and `Quot.sound` are permitted as axioms.
+
+The remaining trusted boundary is extraction and faithful reification
+of the accepted Core syntax, plus the choice of mathematical primitive
+semantics. This is not a formalization of the entire Erlang language,
+a compiler-correctness theorem, or a proof about arbitrary BEAM bytecode.
+The result reports `proof_scope: :reified_core_integer_cost_fragment`,
+`value_agreement: :checked`, and `runtime_correspondence: :not_checked`.
+Neither this result nor its termination theorem identifies symbolic
+costs with ERTS reductions or elapsed time.
+
+### Reproducing the integer cost cases
+
+The module documentation gives examples of a recursive sum, a checked
+callee reused by its caller, a supplied external call contract, and
+a recursive accumulator invariant. The fixture
+`test/fixtures/integer_cost_programs.ex` supplies compiled arithmetic,
+branching, CRC, caller, and recursion cases. Run:
+
+```sh
+ELAN_TOOLCHAIN="$(cat deps/lynx/lean-toolchain)" mix test \
+  test/reduction_bounds/integer_cost_bound_test.exs
+```
+
+The tests check the reported formulas, size information, conditions,
+and theorem names, compare returned values with the compiled fixtures,
+and exercise missing widths, missing or inapplicable call contracts,
+invalid invariants, endless recursion, and analysis limits. Negative
+Lean tests change a result, budget, source operation, or intermediate
+summary and require rejection. A falsified callee result must also be
+rejected when supplied to a caller.
+
+### Signed boundaries, cancellation, and wide intermediates
+
+The Issue #1 boundary regressions use mathematical magnitude boundaries,
+not a fixed small-integer/bignum representation threshold. For widths
+1, 8, 32, 64, and 200, the domain tests cover both signs immediately
+below, at, and above `2^width`. They check exact constant descriptions,
+the strict magnitude condition, and carry and negative subtraction
+results. The Lean comparison test checks the same signed boundary
+family against `Holds` and `contains`.
+
+The compiled cost fixtures exercise addition and subtraction around
+signed boundaries at widths 1, 32, 64, and 200. Their tests require the
+source-bound theorem and retain the operand widths in the cost leaves.
+They also compare the compiled functions' endpoint results with the
+inferred result descriptions.
+
+`cancel_products/2` squares two independently supplied signed inputs
+and subtracts the products. For inputs `-(2^200 + 1)` and `2^200 + 1`,
+the final result is zero. The trace must nevertheless retain both
+products with magnitude bound 402, both multiplication charges with
+operand bounds `[201, 201]`, and the subtraction charge with operand
+bounds `[402, 402]`. This prevents a small final result from hiding
+large intermediate work. A negative Lean test changes the returned
+budget to charge those multiplications at zero operand width and
+requires rejection.
+
+`crc64_step/1` is a CRC-style expression with a fixed polynomial and
+a 64-bit mask, not a complete CRC implementation. On input interval
+`[-2^64, 2^64]` with magnitude bound 65, shifting left by eight gives
+bound 73 and signed XOR gives conservative bound 74. The mask returns
+range `[0, 2^64 - 1]` with magnitude bound 64. The test requires the
+shift, XOR, and mask cost leaves to use their respective intermediate
+operand sizes, including the 74-bit input to the mask. It checks
+compiled results on negative, zero, and positive boundary inputs.
+
+Reproduce these regressions with the existing integer test files:
+
+```sh
+ELAN_TOOLCHAIN="$(cat deps/lynx/lean-toolchain)" mix test \
+  test/reduction_bounds/integer_size_test.exs \
+  test/reduction_bounds/integer_size_proof_test.exs \
+  test/reduction_bounds/integer_cost_bound_test.exs
+```
+
+These cases cover the VM-independent portion of acceptance criterion 2:
+signed size boundaries, negative values, cancellation, and integers much
+wider than a machine word. The finite comparisons supplement the generic
+Lean theorems; they do not prove correctness of the Elixir compiler or
+runtime arithmetic. The tests keep `runtime_correspondence: :not_checked`.
+They do not detect native integer representations, establish a
+small-integer/bignum transition threshold, measure ERTS reductions, or
+claim conformance with a complete CRC-64 algorithm. Representation
+boundary tests remain a separate implementation-specific validation task.
+
+### Representative variance and table-driven CRC expressions
+
+The acceptance criterion about representative variance and CRC
+expressions is exercised in
+`test/reduction_bounds/integer_cost_cases_test.exs`, using the compiled
+fixture `test/fixtures/integer_cost_cases.ex`. These kernels use the
+existing integer size and cost rules; there is no new recognizer or
+cost rule specific to variance or CRC.
+
+The variance kernels follow the integer expression in the
+[Mobius change motivating Issue #1](https://github.com/mobius-home/mobius/commit/bf00f21638b12bf9a3a683126dc5a1cf87f58983).
+For a count `n`, sum `s`, and sum of squares `q`, the numerator is
+`n * q - s * s`, and the denominator is `n * (n - 1)`. The numerator
+takes three integer arguments; the denominator's test requires
+`2 <= n <= 8`. Division, floating-point conversion, clamping, and square
+root are outside these kernels and have no supplied contracts here.
+The fixture does not analyze the complete Mobius module.
+
+The exact-input tests use closely spaced positive and negative samples
+near `1_788_878_897_448`, samples near `2^200`, and identical samples
+near `2^200`. The compiled numerator returns 6 or 0 while both products
+exceed `2^64`. The tests compare it with the independent identity
+`sum((x_i - x_j)^2, i < j)`, check the exact result interval, and retain
+both product summaries and size-dependent multiplication charges.
+A negative Lean test requires rejection of a zero budget for this work.
+An interval-input test also checks the bound on independently specified
+summary ranges and compares the compiled expression on a finite grid
+of three-sample datasets. Statistical consistency of arbitrary summaries
+is not assumed: independent intervals can include combinations that
+are not summaries of any dataset. Consequently, that interval analysis
+does not establish that every admitted numerator is nonnegative.
+
+The CRC kernels follow the table-driven expressions in
+[the cerlc implementation](https://github.com/mdsebald/cerlc/blob/750d85e56ecef4770583f495faace160398b195d/src/cerlc.erl),
+specialized to a 64-bit state. Let `u` be the current state, `t` a table
+entry, and `b` an input byte. Their arithmetic is:
+
+| Kernel | Integer expression |
+| --- | --- |
+| Normal update | `((u << 8) XOR t) AND (2^64 - 1)` |
+| Reflected update | `((u >> 8) XOR t) AND (2^64 - 1)` |
+| Normal table index | `(((u >> 56) XOR b) AND 255) + 1` |
+| Reflected table index | `((u XOR b) AND 255) + 1` |
+
+The update contracts require both inputs in `[0, 2^64 - 1]`, with
+magnitude bound 64. The normal path records a 72-bit shift bound and
+a conservative 73-bit XOR bound before masking to 64 bits. The reflected
+path retains the conservative 64-bit right-shift bound, then a 65-bit
+XOR bound before masking. The mask's charge uses the intermediate
+width, not the final width. Index inputs require a 64-bit state and
+byte range `[0, 255]`; the resulting one-based index is in `[1, 256]`.
+Tests cover all 256 byte values for selected boundary states.
+
+These are arithmetic expressions, not a full CRC implementation. The
+table entry is an explicit input with a stated size condition. Table
+lookup, table generation, records, byte-list traversal, configuration,
+and final XOR are not analyzed by these cases. No claim is made that
+an arbitrary supplied table implements a particular CRC polynomial.
+
+For every successful case, the test requires checked source agreement,
+the source cost-bound and totality theorem names, no unresolved sizes,
+and no external call contracts. The result remains
+`runtime_correspondence: :not_checked`. The generic Lean theorems cover
+the reified supported kernels under their input and symbolic-cost
+conditions; comparisons with compiled fixtures are finite regression
+checks, not compiler or ERTS correctness proofs.
+
+Run the representative-expression cases with:
+
+```sh
+ELAN_TOOLCHAIN="$(cat deps/lynx/lean-toolchain)" mix test \
+  test/reduction_bounds/integer_cost_cases_test.exs
+```
+
 ## Map and struct operations
 
 The decoder handles fixed atom keys and the supported Boolean guard
