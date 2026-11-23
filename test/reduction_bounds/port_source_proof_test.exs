@@ -14,7 +14,8 @@ defmodule ReductionBounds.PortSourceProofTest do
 
       assert bound.source_correspondence == :checked
       assert bound.lean_status == :checked
-      assert bound.verification_scope == :finite_normal_executions_under_call_contracts
+      assert bound.verification_scope.kind == :core_connected_port_client
+      assert bound.execution_domain == :finite_normal_executions_under_call_contracts
       assert Enum.all?(bound.reports, &(&1.status == :ok))
       assert :exceptions in bound.unverified
       assert :termination in bound.unverified

@@ -34,6 +34,7 @@ defmodule ReductionBounds.MixProject do
         "docs/examples/verification.md",
         "docs/examples/cost_contracts.md",
         "docs/examples/list_bounds.md",
+        "docs/examples/ports.md",
         "docs/proof.md",
         "docs/roadmap.md",
         "docs/toolchains.md",

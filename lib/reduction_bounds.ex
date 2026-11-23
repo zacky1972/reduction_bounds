@@ -95,7 +95,7 @@ defmodule ReductionBounds do
 
   ```elixir
   contract = ~LEAN"""
-  def inputInvariant (xs : List Int) : Prop := ∀ x ∈ xs, 0 < x
+  def inputInvariant (xs : List Int) : Prop := ∀ x ∈ xs, x > 0
   def inputPrecondition (xs : List Int) : Prop :=
     xs.length < 100 ∧ inputInvariant xs
   def inputSize (xs : List Int) : Nat := (xs.map Int.toNat).sum
@@ -1026,6 +1026,48 @@ defmodule ReductionBounds do
   defp list_size_measure(%Lynx.Lean{}), do: :input_size
 
   @doc """
+  Verifies supplied Port-model traces, universal cost safety and optional completion conditions.
+
+  `events` accepts registered event names or protocol event structs. Supply
+  `observations: %{index => observation}` from `ProtocolConditions.observe/2`.
+  Optional `completion: [limits: ..., progress: ..., goal: :termination]`
+  declares the earlier model's completion conditions. Missing progress keeps
+  a checked cost bound and reports diagnostics; it does not establish completion.
+
+  The result reports `verification_scope`, `checked_theorems`, assumptions,
+  trusted processing and unresolved obligations. Conditional completion is
+  scoped to the supplied model. This API does not analyze a target function.
+  See the Port interactions guide under the examples documentation.
+
+  ```elixir
+  names = [:prepare, :submit_accepted]
+  {:ok, observation} = ReductionBounds.ProtocolConditions.observe(%{request: []})
+  observations = %{0 => observation, 1 => observation}
+  {:ok, result} = ReductionBounds.verify_port_model(profile, names, observations: observations)
+  result.verification_scope.kind
+  #=> :supplied_port_model
+  result.completion.theorem_status
+  #=> :not_established
+  ```
+
+  Construct `profile` with `PortProtocol.conditions/1` and `ProtocolCost.new/2`;
+  the examples guide supplies the complete size, count and cost declarations.
+  """
+  @spec verify_port_model(ReductionBounds.ProtocolCost.t(), list(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def verify_port_model(profile, events, options \\ []) do
+    with {:ok, options} <- validate_options(options, :port_model),
+         {observations, options} = Keyword.pop!(options, :observations),
+         {completion, options} = Keyword.pop!(options, :completion),
+         {:ok, candidate, proof} <-
+           ReductionBounds.PortWorkflow.build(profile, events, observations, completion),
+         {:ok, result} <-
+           verify_bound({__MODULE__, :verify_port_model, 3}, candidate, proof, options) do
+      ReductionBounds.PortResult.verified(result, result.reports)
+    end
+  end
+
+  @doc """
   Checks a finite Port-client Core fragment against the supplied protocol profile.
 
   The target's first argument is the Port and its second is preparation input.
@@ -1045,6 +1087,18 @@ defmodule ReductionBounds do
   Helper implementation correctness, exceptions, progress, and runtime charging
   remain unverified. Native receive and recursive clients are unsupported.
   Standard timeout, concurrency, Lean, and BEAM-binary options apply.
+
+  ```elixir
+  {:ok, result} = ReductionBounds.infer_port_bound({Client, :request, 2}, profile,
+    calls: %{prepare: {Helpers, :prepare, 1}, reply: {Helpers, :await_reply, 1},
+      decode: {Helpers, :decode, 1}})
+  result.verification_scope.kind
+  #=> :core_connected_port_client
+  result.source_correspondence
+  #=> :checked
+  result.completion.theorem_status
+  #=> :not_established
+  ```
   """
   @spec infer_port_bound(target(), ReductionBounds.ProtocolCost.t(), [
           struct_inference_option() | {:calls, map()}
@@ -1061,8 +1115,7 @@ defmodule ReductionBounds do
              source_options ++ Keyword.take(verify_options, [:beam_binaries])
            ),
          {:ok, result} <- verify_bound(target, candidate, proof, verify_options) do
-      {:ok,
-       result |> Map.put(:lean_status, :checked) |> Map.put(:source_correspondence, :checked)}
+      ReductionBounds.PortResult.verified(result, result.reports)
     else
       false -> {:error, :invalid_options}
       error -> error
@@ -1101,6 +1154,9 @@ defmodule ReductionBounds do
       {:ok, verify_targets(translation, Enum.uniq(targets), options, definition)}
     end
   end
+
+  defp proof_postludes(proof, :port_completion),
+    do: ReductionBounds.ProofInput.port_completion_postludes(proof)
 
   defp proof_postludes(proof, :port_source),
     do: ReductionBounds.ProofInput.port_source_postludes(proof)
@@ -1174,13 +1230,19 @@ defmodule ReductionBounds do
     end
   end
 
-  defp invalid_option_keys(source, keys) when source in [:cost_comparison, :bound_transfer],
-    do: {:error, {:unknown_options, Enum.sort(keys)}}
+  defp invalid_option_keys(source, keys)
+       when source in [:cost_comparison, :bound_transfer, :port_model],
+       do: {:error, {:unknown_options, Enum.sort(keys)}}
 
   defp invalid_option_keys(_source, _keys), do: {:error, :invalid_options}
 
   defp option_defaults(:inline, defaults), do: [:postlude | defaults]
   defp option_defaults(:list_bound, defaults), do: [:input_contract | defaults]
+
+  defp option_defaults(:port_model, defaults),
+    do:
+      [observations: %{}, completion: []] ++
+        Keyword.drop(defaults, [:beam_binaries, :termination_suffixes])
 
   defp option_defaults(:struct_bound, defaults),
     do: Keyword.delete(defaults, :termination_suffixes)
@@ -1215,6 +1277,11 @@ defmodule ReductionBounds do
     do: [:periodic_contract | Keyword.delete(defaults, :termination_suffixes)]
 
   defp option_defaults(_scope, defaults), do: defaults
+
+  defp valid_option_for?(:port_model, {:observations, value}),
+    do: is_map(value) and not is_struct(value)
+
+  defp valid_option_for?(:port_model, {:completion, value}), do: Keyword.keyword?(value)
 
   defp valid_option_for?(:bound_transfer, {:callee_correspondence, %Lynx.Lean{source: source}}),
     do: is_binary(source)
@@ -1357,7 +1424,7 @@ defmodule ReductionBounds do
     files = assemble_target(translation, target, definition)
     reports = Lynx.Commands.verify!(project_dir, files, options: lean_options)
 
-    if Enum.all?(reports, &(&1.status == :ok)) do
+    if reports != [] and Enum.all?(reports, &(&1.status == :ok)) do
       {:ok, reports}
     else
       {:error, {:verification_failed, reports}}
@@ -1382,6 +1449,7 @@ defmodule ReductionBounds do
 
   defp assemble_target(translation, _target, fragment)
        when fragment in [
+              :port_completion,
               :port_source,
               :periodic_fragment,
               :integer_fragment,

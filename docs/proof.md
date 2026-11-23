@@ -1173,14 +1173,14 @@ participant's unit. An environment observation has neither an owner nor a
 cost unit. In particular, observing an arrival does not bound external work.
 Different participants may use different units; this layer does not sum them.
 
-`Protocol.new/1` validates declarations. It rejects unknown states or events,
+`ReductionBounds.Protocol.new/1` validates declarations. It rejects unknown states or events,
 ambiguous transitions for the same state and event name, transitions leaving
-terminal states, and inconsistent ownership or units. `Protocol.check_trace/2`
+terminal states, and inconsistent ownership or units. `ReductionBounds.Protocol.check_trace/2`
 checks supplied event occurrences and records all visited states. Empty traces
 and unfinished prefixes are accepted when admissible. Invalid occurrences
 report a zero-based index, the event, and the reason. `terminal?` classifies
 the end of this supplied trace, not a guarantee that all interactions finish.
-`Protocol.events_for/2` selects occurrences owned by a participant.
+`ReductionBounds.Protocol.events_for/2` selects occurrences owned by a participant.
 
 The initial `ReductionBounds.PortProtocol` model assumes that the caller is
 the Port owner and at most one request is in progress. Preparation is followed
@@ -2314,7 +2314,7 @@ available under its earlier conditions. Helper exceptions, decoding failures
 that raise, native Core receive loops, recursion, dynamic calls, blocking
 submission, arbitrary guards and unsupported arguments are rejected or
 explicitly outside the checked source claim. The caller result records
-`verification_scope: :finite_normal_executions_under_call_contracts`, assumed
+`execution_domain: :finite_normal_executions_under_call_contracts`, assumed
 helper contracts, unresolved source-prefix and exception obligations, and
 unverified runtime and timing correspondence. The earlier model-level
 conditional completion theorem is not automatically a source termination
@@ -2338,3 +2338,64 @@ Lean independently rejects altered helper identities, submission options,
 Boolean orientation, primitive identities, local limits, returned formulas
 and unfinished connection certificates. No test launches an external Port
 program or measures reductions.
+
+## Port API, diagnostics and reproducible evaluation
+
+The [Port guide](examples/ports.md) provides complete profile declarations and
+public API examples. `verify_port_model/3` verifies a supplied model trace,
+finite-trace and prefix cost safety, and optional conditional completion.
+`infer_port_bound/3` checks the supported Core client correspondence and caller
+bound. Both use the existing bounded verification runner and reject empty or
+failed Lean reports. Constructors and proof builders remain unchecked until
+that runner succeeds. Event names are resolved through the registered Port
+contract; event structs retain their ownership checks.
+
+Public results now share the reporting conventions of the contract workflow:
+
+| Field | Model check | Source check |
+| --- | --- | --- |
+| `verification_scope.kind` | `:supplied_port_model` | `:core_connected_port_client` |
+| `source_correspondence` | `:not_checked` | `:checked` for the supported fragment |
+| Cost claim | All modeled finite traces and prefixes under conditions | Finite normally returning source executions under call and profile conditions |
+| Completion scope | Protocol model only | Source completion not established |
+| `checked_theorems` | Protocol, condition, cost, and applicable completion theorems | Protocol, condition, cost, and Core connection theorems |
+
+`verification_scope` records checked claims, conditional claims, assumptions,
+trusted processing and unresolved obligations separately. The original source
+execution-domain label is retained in `execution_domain`. Source results remove
+the empty profile-validation trace, so it cannot be mistaken for an observed
+target execution. Source-prefix, exception and helper-totality obligations
+remain explicit. A source result does not inherit the model completion theorem.
+
+Model diagnostics distinguish missing completion hypotheses from inconsistent
+limits and a failed outcome that conflicts with requested success. A checked
+cost bound can still be returned in those cases. `completion.theorem_status`
+is `:checked_under_assumptions` only when the applicable completion theorem
+was generated and checked; `actual_completion` remains `:not_established`.
+External behavior and environment progress are assumptions, not proven facts.
+Missing size/cost conditions or exceeded cost-profile counters instead prevent
+verification. Event and target errors retain the offending occurrence or source
+path. Unknown event names and option keys have explicit tuple diagnostics.
+Forged checked flags do not replace fresh validation and proof checking.
+
+The workflow tests use a declared event cost of `event_work` plus the bounded
+byte and structure dimensions. With all symbolic charges set to one, the
+reproducible profile budget is 1156 symbolic units. The supported client adds
+25 local source units, giving 1181. These numerical interpretations are
+examples of the formulas, not measurements or ERTS reduction budgets.
+
+```sh
+mix test --only port_workflow
+REDUCTION_BOUNDS_REPORT=1 mix test --only port_workflow
+```
+
+Each path is an independent bounded verification test. The reports include
+formulas, conditions, supported and observed outcomes, progress hypotheses,
+checked theorem names, and diagnostics. Existing `protocol_model`,
+`protocol_conditions`, `protocol_cost`, `port_completion`, and `port_source`
+tags reproduce the lower-level positive and altered-evidence checks. The
+public workflow covers all supported terminal outcomes, unfinished waiting,
+retry and receive inspection paths, missing progress, conflicting completion
+conditions, unsupported target routing and source/model scope separation.
+It does not execute an external Port program, validate actual helper contracts,
+connect arbitrary Core receive code, or establish runtime/time correspondence.

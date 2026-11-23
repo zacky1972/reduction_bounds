@@ -178,6 +178,31 @@ defmodule ReductionBounds.ProofInput do
     end
   end
 
+  @doc false
+  @spec communication_theorems(map()) :: [String.t()]
+  def communication_theorems(candidate) do
+    owners = candidate.upper_bounds |> Map.keys() |> Enum.sort()
+
+    base =
+      case_study_theorems(%{source: :protocol_trace}) ++
+        case_study_theorems(%{source: :protocol_conditions}) ++
+        case_study_theorems(%{source: :protocol_cost, owners: owners})
+
+    Enum.uniq(base ++ communication_specific_theorems(candidate))
+  end
+
+  defp communication_specific_theorems(%{source: :port_source}),
+    do: case_study_theorems(%{source: :port_source})
+
+  defp communication_specific_theorems(%{source: :port_completion, completion: value}) do
+    case_study_theorems(%{
+      source: :port_completion,
+      completion_status: value.status,
+      goal: value.goal,
+      trace_checked: match?({:ok, _}, value.trace_evidence)
+    })
+  end
+
   @spec scope_evidence(map()) :: map()
   def scope_evidence(%{source: :cost_contract_comparison} = candidate) do
     %{

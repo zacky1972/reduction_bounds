@@ -74,7 +74,7 @@ defmodule ReductionBounds.PortCompletion do
       {:ok, Map.new(options)}
     else
       false -> {:error, :invalid_port_completion_options}
-      error -> error
+      {:error, keys} -> {:error, {:unknown_port_completion_options, Enum.sort(keys)}}
     end
   end
 
