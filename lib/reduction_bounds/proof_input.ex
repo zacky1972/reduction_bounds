@@ -74,6 +74,18 @@ defmodule ReductionBounds.ProofInput do
     ])
   end
 
+  @spec port_source_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def port_source_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, [
+      "IntegerSize.lean",
+      "Protocol.lean",
+      "ProtocolConditions.lean",
+      "ProtocolCost.lean",
+      "PortSource.lean"
+    ])
+  end
+
   @spec integer_postludes(Lynx.Lean.t()) ::
           {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
   def integer_postludes(%Lynx.Lean{} = proof) do
@@ -266,6 +278,15 @@ defmodule ReductionBounds.ProofInput do
       ReductionBounds.PortCompletion.suppliedStateInvariant
       ReductionBounds.PortCompletion.suppliedTerminalBudget)
     generic ++ port_trace_theorems(candidate) ++ port_completion_theorems(candidate)
+  end
+
+  defp case_study_theorems(%{source: :port_source}) do
+    ~w(ReductionBounds.PortSource.localBound ReductionBounds.PortSource.sourceAgreement
+      ReductionBounds.PortSource.modelSafe ReductionBounds.PortSource.connectedCostBound
+      ReductionBounds.PortSource.suppliedRegistryValid ReductionBounds.PortSource.suppliedConnection
+      ReductionBounds.PortSource.suppliedLocalBudget
+      ReductionBounds.PortSource.suppliedSourceFormulaMatches ReductionBounds.PortSource.suppliedSourceAgreement
+      ReductionBounds.PortSource.suppliedSourceBound)
   end
 
   defp case_study_theorems(%{source: :integer_cost_fragment} = candidate) do

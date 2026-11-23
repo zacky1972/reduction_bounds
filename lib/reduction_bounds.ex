@@ -1025,6 +1025,50 @@ defmodule ReductionBounds do
   defp list_size_measure(nil), do: :list_length
   defp list_size_measure(%Lynx.Lean{}), do: :input_size
 
+  @doc """
+  Checks a finite Port-client Core fragment against the supplied protocol profile.
+
+  The target's first argument is the Port and its second is preparation input.
+  Supply `calls: %{prepare: {Helpers, :prepare, 1}, reply: {Helpers, :await_reply, 1},
+  decode: {Helpers, :decode, 1}}`. These helper contracts remain assumptions.
+  The fragment requires `port_command/3` with `[:nosuspend]`, Boolean outcome
+  cases, and reply patterns `{:data, payload}`, `:closed`, and `:timeout`.
+
+  The caller bound adds `source_node_bound * source_node` to the protocol
+  budget. The symbolic source-node charge covers supported local evaluation,
+  bindings, argument retrieval, and finite case dispatch. Event charges cover
+  contracted helper and primitive work. This is not concrete ERTS accounting.
+
+  Only after Lean verifies the connection, semantics, and returned formula is
+  `source_correspondence` set to `:checked`. The claim covers finite normally
+  returning executions under the declared call, size and event-count contracts.
+  Helper implementation correctness, exceptions, progress, and runtime charging
+  remain unverified. Native receive and recursive clients are unsupported.
+  Standard timeout, concurrency, Lean, and BEAM-binary options apply.
+  """
+  @spec infer_port_bound(target(), ReductionBounds.ProtocolCost.t(), [
+          struct_inference_option() | {:calls, map()}
+        ]) :: {:ok, map()} | {:error, term()}
+  def infer_port_bound(target, profile, options \\ []) do
+    with :ok <- validate_targets([target]),
+         true <- Keyword.keyword?(options),
+         {source_options, verify_options} = Keyword.split(options, [:calls]),
+         {:ok, verify_options} <- validate_options(verify_options, :struct_bound),
+         {:ok, candidate, proof} <-
+           ReductionBounds.PortSourceProof.build(
+             target,
+             profile,
+             source_options ++ Keyword.take(verify_options, [:beam_binaries])
+           ),
+         {:ok, result} <- verify_bound(target, candidate, proof, verify_options) do
+      {:ok,
+       result |> Map.put(:lean_status, :checked) |> Map.put(:source_correspondence, :checked)}
+    else
+      false -> {:error, :invalid_options}
+      error -> error
+    end
+  end
+
   defp verify_bound(target, candidate, proof, options) do
     source = Map.get(candidate, :source, :translated)
     {proof, evidence} = ReductionBounds.ProofInput.audit_bound(proof, candidate)
@@ -1057,6 +1101,9 @@ defmodule ReductionBounds do
       {:ok, verify_targets(translation, Enum.uniq(targets), options, definition)}
     end
   end
+
+  defp proof_postludes(proof, :port_source),
+    do: ReductionBounds.ProofInput.port_source_postludes(proof)
 
   defp proof_postludes(proof, :integer_bound_transfer),
     do: ReductionBounds.ProofInput.transfer_postludes(proof)
@@ -1335,6 +1382,7 @@ defmodule ReductionBounds do
 
   defp assemble_target(translation, _target, fragment)
        when fragment in [
+              :port_source,
               :periodic_fragment,
               :integer_fragment,
               :integer_cost_fragment,

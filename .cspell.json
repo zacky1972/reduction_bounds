@@ -40,6 +40,8 @@
     "componentwise",
     "simpa",
     "unmodeled",
-    "nonterminal"
+    "nonterminal",
+    "nosuspend",
+    "primop"
   ]
 }

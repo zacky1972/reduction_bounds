@@ -2154,6 +2154,187 @@ exhausted allowances, and invalid transitions. Lean independently rejects
 altered transitions, rank bounds, and unfinished certificates. A permanent
 waiting example is checked, while an unconditional completion claim for that
 example is rejected. The results concern the supplied external Port protocol
-model. Actual Core Erlang correspondence, framing/matching correctness,
-external-program and linked-in driver behavior, concrete ERTS charging,
-OS scheduling, delivery guarantees, and deadlines remain unverified.
+model. The source-fragment checks below connect finite normally returning
+client executions to that model, but do not transfer the completion theorem
+to actual receive helpers. Framing/matching correctness, external-program and
+linked-in driver behavior, concrete ERTS charging, OS scheduling, delivery
+guarantees, and deadlines remain unverified.
+
+## Connecting a supported Core Erlang client to the Port model
+
+`ReductionBounds.infer_port_bound/3` adds source correspondence for a finite
+client fragment. The input is the target MFA, a `ProtocolCost` profile for
+`PortProtocol.new/0`, and explicit helper contracts. A successful result has
+`source_correspondence: :checked` only after Lean verifies the generated
+connection and bound. Proof builders and `PortSource.infer/3` return pending
+evidence with `lean_status: :not_checked`; they do not establish a bound by
+constructing a candidate alone.
+
+### Accepted client and call contracts
+
+The first argument is the Port and the second is preparation input. A typical
+accepted body is:
+
+```elixir
+def request(port, input) do
+  prepared = Helpers.prepare(input)
+
+  case :erlang.port_command(port, prepared, [:nosuspend]) do
+    true ->
+      case Helpers.await_reply(port) do
+        {:data, data} -> Helpers.decode(data)
+        :closed -> :closed
+        :timeout -> :timeout
+      end
+    false -> :rejected
+  end
+end
+```
+
+The preparation binding, Port argument, prepared request, reply binder and
+decoder argument are checked. Boolean clauses and the three disjoint reply
+patterns may be reordered. Guards must be literal true. The compiler's final
+case-failure clause must have the recognized generated shape; it is excluded
+under the declared result contracts. There is no silent fallback for an
+unsupported expression. Errors retain the target and a path such as a binding,
+subject, argument, or response branch.
+
+Helper declarations have the form:
+
+```elixir
+calls = %{
+  prepare: {Helpers, :prepare, 1},
+  reply: {Helpers, :await_reply, 1},
+  decode: {Helpers, :decode, 1}
+}
+{:ok, bound} = ReductionBounds.infer_port_bound(
+  {Client, :request, 2}, profile,
+  calls: calls, beam_binaries: beams, timeout: 60_000)
+bound.source_correspondence
+#=> :checked
+bound.source_node_bound
+#=> 25
+```
+
+Here `profile` is the explicit `ProtocolCost` profile from the preceding
+sections. It must cover every work context, including failure handling.
+`beams` contains the target's compiled binary for an in-memory module; it may
+be omitted for modules with readable BEAM files on the code path. Standard
+verification timeout, concurrency and Lean options apply. The test fixture
+`test/fixtures/port_client.ex` supplies both the normal and reordered clients,
+and `mix test --only port_source` reproduces their checks. The fixture is
+compiled once by `test_helper.exs`, and the tests retain its BEAM binaries.
+
+`Contracts` is an explicit Lean hypothesis over the external-call relation.
+It states, for each registered call, that the returned value has the allowed
+shape and its modeled work events form a protocol run between the stated
+entry and exit states:
+
+| Role | Entry | Normal result | Exit |
+| --- | --- | --- | --- |
+| Prepare | idle | Any modeled value | prepared |
+| Submit | prepared | true / false | awaiting response / rejected |
+| Reply | awaiting response | data / closed / timeout | response received / closed / timed out |
+| Decode | response received | Any modeled value | complete |
+
+The submit role is fixed to `erlang:port_command/3` with the `nosuspend` option.
+Helper roles must have distinct registered names and arity one. Reply traces
+may include finite unrelated-message inspections and explicit response,
+closure, or timeout handling; their counts and data sizes still require the
+independent profile conditions. Call-event charges must cover the contracted
+helper or primitive work. Unknown external-program work remains outside the
+caller budget. A helper's implementation is not verified by declaring its
+name: `call_contracts` records `status: :assumed` and normal-return totality as
+`:not_established`. A valid Port, permitted caller/owner relationship, framing,
+matching, size bounds, and coverage of actual helper work remain applicability
+conditions. No encoding or response-size relation is inferred from the request.
+
+### Checked connection and source costs
+
+`PortSource` reads the target through the existing BEAM debug-information
+path. It reifies accepted Core blocks without source annotations, retaining
+static call identities, pure arguments, variable bindings, Boolean clause
+order and reply-pattern order. The `Core` semantics in `PortSource.lean`
+evaluates these blocks using mathematical values, an environment and an
+external-call relation. Opaque values represent input Ports and payloads;
+the theorem does not establish a concrete runtime representation relation.
+The source execution records returned values, ordered call occurrences and
+local work. Calls do not acquire protocol correctness merely from their names.
+
+The separate `Program` semantics attaches roles and protocol events. `Connect`
+checks all control arms and exact argument routing. `ReturnShape` restricts
+pure returns to final rejection handling or an already terminal state;
+a return cannot invent arbitrary communication events. `RegistryValid` checks
+distinct role identities. The generated `suppliedConnection` is a Lean proof
+of this relation, not an unchecked status flag from Elixir.
+
+`sourceAgreement` proves that each finite normally returning source execution
+has a model execution with the same value, variable bindings, call order and
+local work. `modelSafe` composes the declared call contracts and proves that
+the resulting trace is admitted by the shared Port protocol and reaches a
+supported terminal state. This proves the connection for every source
+execution in the stated fragment under the contracts, not just for one
+selected success trace.
+
+Local source work is charged separately so that bindings, argument retrieval
+and case dispatch are not omitted. In the abstract semantics, returning a
+value costs one local unit; a preparation binding costs `2 + arity`; Boolean
+dispatch costs `4 + arity`; reply-pattern dispatch costs `9 + arity`; a tail
+call costs `1 + arity`. The work of nested expressions is added. `Core.budget` adds the
+budgets of all alternatives, giving a conservative finite limit `L`.
+`localBound` proves that every source derivation has local work at most `L`.
+For the example, `L = 25`. With a natural symbolic local-unit charge
+`source_node` (written as `c_s` below), and protocol budget `B_p`, the caller formula is
+
+\[
+ B_s = L c_s + B_p.
+\]
+
+The returned Elixir expression has the form:
+
+```elixir
+{:add, {:mul, 25, {:charge, :source_node}}, protocol_formula}
+```
+
+`connectedCostBound` combines local-work safety with the universal protocol
+cost theorem under `RowsHold` and `CountsHold`. `suppliedLocalBudget` checks
+the reported `L`. `suppliedSourceFormulaMatches` checks that the returned
+formula is exactly the local budget plus the checked protocol formula.
+`suppliedSourceAgreement` and `suppliedSourceBound` specialize the shared
+theorems to the extracted target. All selected theorem dependencies, including
+connection certificates, are audited against the existing axiom allowlist.
+These are symbolic units, with no claim that a local unit is an ERTS reduction.
+
+### Scope, diagnostics and reproduction
+
+This stage connects finite normally returning client executions. It does not
+prove that calls return, nor connect unfinished source execution prefixes
+inside an opaque receive helper. Protocol-level prefix safety remains
+available under its earlier conditions. Helper exceptions, decoding failures
+that raise, native Core receive loops, recursion, dynamic calls, blocking
+submission, arbitrary guards and unsupported arguments are rejected or
+explicitly outside the checked source claim. The caller result records
+`verification_scope: :finite_normal_executions_under_call_contracts`, assumed
+helper contracts, unresolved source-prefix and exception obligations, and
+unverified runtime and timing correspondence. The earlier model-level
+conditional completion theorem is not automatically a source termination
+proof.
+
+BEAM extraction, recognition of accepted Core blocks, abstraction of runtime
+values, and serialization remain trusted. Lean checks the reified Core-to-model
+connection and mathematical semantics; it does not certify the BEAM debug
+backend, the Elixir reifier, a concrete ERTS build or external helper code.
+Unsupported code and wrong Port/request/reply arguments fail with source paths
+instead of falling back to a checked model-only result for that target.
+
+```sh
+mix test --only port_source
+```
+
+Positive checks use compiled BEAM for both clause orders and exercise the
+public verification API. Negative checks reject missing or mismatched helper
+contracts, wrong Port routing, blocking commands and native receive syntax.
+Lean independently rejects altered helper identities, submission options,
+Boolean orientation, primitive identities, local limits, returned formulas
+and unfinished connection certificates. No test launches an external Port
+program or measures reductions.
