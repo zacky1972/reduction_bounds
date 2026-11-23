@@ -41,6 +41,7 @@ defmodule ReductionBounds.MixProject do
         "docs/toolchains.md",
         "docs/benchmarking.md",
         "docs/baselines/issue8-linux-otp29.md",
+        "docs/baselines/issue8-integer-cache.md",
         "LICENSE.md"
       ]
     ]

@@ -188,7 +188,7 @@ defmodule ReductionBounds.Benchmark do
       container_cpu_max: read_resource("/sys/fs/cgroup/cpu.max"),
       environment:
         Map.new(
-          ~w(ERL_FLAGS ELIXIR_ERL_OPTIONS LEAN_NUM_THREADS ELAN_TOOLCHAIN),
+          ~w(ERL_FLAGS ELIXIR_ERL_OPTIONS LEAN_NUM_THREADS ELAN_TOOLCHAIN REDUCTION_BOUNDS_PROOF_CACHE REDUCTION_BOUNDS_PROOF_MODE),
           &{&1, System.get_env(&1)}
         ),
       suite_max_cases: opts[:max_cases],
@@ -202,9 +202,14 @@ defmodule ReductionBounds.Benchmark do
       workspace_retained: opts[:keep_workspace],
       lean_build_already_present:
         File.exists?(
-          Path.join(ReductionBounds.Verification.project_dir(), ".lake/build/bin/Lynx.Runner")
+          Path.join(ReductionBounds.Verification.project_dir(), ".lake/build/bin/Lynx-Runner")
         ),
-      verification_cache_policy: "unchanged; assembly disables persistent verification caching",
+      verification_cache_policy: %{
+        integer_mode: System.get_env("REDUCTION_BOUNDS_PROOF_MODE", "named"),
+        integer_cache: System.get_env("REDUCTION_BOUNDS_PROOF_CACHE", "on"),
+        other_families: "uncached",
+        untracked_external_imports: "uncached with dependents"
+      },
       timing_scope:
         "preparation is an isolated Mix build; existing dependency Lean build artifacts may be reused",
       overhead_scope:

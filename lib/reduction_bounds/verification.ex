@@ -2,6 +2,8 @@
 defmodule ReductionBounds.Verification do
   @moduledoc false
 
+  alias ReductionBounds.{ProofCache, ProofModules}
+
   @typep translation :: %Lynx.Translation{}
 
   @fragment_imports ["Erlang.erlang", "Erlang.maps"]
@@ -10,14 +12,51 @@ defmodule ReductionBounds.Verification do
   def assemble(translation, opts \\ []) do
     {translation, imports} = prepare(translation, opts)
 
-    translation
-    |> Lynx.Translation.assemble(cache: false)
-    |> Enum.map(fn
-      %{"module" => "Erlang.postlude"} = file ->
-        Map.update!(file, "imports", &Enum.uniq(imports ++ &1))
+    {translation, shared} =
+      if embedded?(opts),
+        do: {translation, []},
+        else: ProofModules.split(translation, opts[:definition])
 
-      file ->
-        file
+    translation =
+      if shared != [] and translation.postludes != [] do
+        origin = List.last(translation.postludes).file
+        %{translation | postludes: translation.postludes ++ [ProofModules.audit(origin)]}
+      else
+        translation
+      end
+
+    shared_imports = Enum.map(shared, & &1["module"])
+
+    files =
+      translation
+      |> Lynx.Translation.assemble(cache: false)
+      |> Enum.map(fn
+        %{"module" => "Erlang.postlude"} = file ->
+          Map.update!(file, "imports", &Enum.uniq(imports ++ shared_imports ++ &1))
+
+        file ->
+          file
+      end)
+
+    ProofCache.finalize(shared ++ files, Keyword.get(opts, :options, []), cache_policy(opts))
+  end
+
+  defp embedded?(opts) do
+    Keyword.get(
+      opts,
+      :shared_modules,
+      System.get_env("REDUCTION_BOUNDS_PROOF_MODE") != "embedded"
+    ) == false
+  end
+
+  defp cache_policy(opts) do
+    Keyword.get_lazy(opts, :cache, fn ->
+      case System.get_env("REDUCTION_BOUNDS_PROOF_CACHE", "on") do
+        "on" -> true
+        "off" -> false
+        "shared" -> :shared
+        value -> raise ArgumentError, "invalid REDUCTION_BOUNDS_PROOF_CACHE: #{inspect(value)}"
+      end
     end)
   end
 
@@ -37,7 +76,9 @@ defmodule ReductionBounds.Verification do
   end
 
   defp files(%Lynx.Translation{} = translation, opts), do: assemble(translation, opts)
-  defp files(files, _opts) when is_list(files), do: files
+
+  defp files(files, opts) when is_list(files),
+    do: ProofCache.finalize(files, Keyword.get(opts, :options, []), cache_policy(opts))
 
   defp invoke(files, opts) do
     Lynx.Commands.verify!(project_dir(), files, options: Keyword.get(opts, :options, []))

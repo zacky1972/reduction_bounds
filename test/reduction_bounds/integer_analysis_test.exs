@@ -31,7 +31,8 @@ defmodule ReductionBounds.IntegerAnalysisTest do
     assert result.cost_model == :not_analyzed
     assert result.unresolved_sizes == []
     assert "targetIntegerSizeBound" in result.checked_theorems
-    assert [%{status: :ok}] = result.reports
+    assert Enum.all?(result.reports, &(&1.status == :ok))
+    assert List.last(result.reports).module == "Erlang.postlude"
 
     for x <- -2..4,
         do: assert(IntegerSize.contains?(result.result_size, apply(Fixture, :conditional, [x])))

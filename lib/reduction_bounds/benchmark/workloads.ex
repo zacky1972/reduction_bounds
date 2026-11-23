@@ -12,7 +12,8 @@ defmodule ReductionBounds.Benchmark.Workloads do
 
   @spec names() :: [String.t()]
   def names(),
-    do: ~w(integer_cost bound_transfer list circular_buffer port runner_empty runner_runtime)
+    do:
+      ~w(integer_analysis integer_cost bound_transfer list circular_buffer port runner_empty runner_runtime)
 
   @spec run(String.t()) :: :ok
   def run("runner_empty") do
@@ -40,6 +41,18 @@ defmodule ReductionBounds.Benchmark.Workloads do
 
   def run("circular_buffer") do
     {:ok, _result} = ReductionBounds.infer_circular_buffer_bound()
+    :ok
+  end
+
+  def run("integer_analysis") do
+    beam = compile_program()
+
+    {:ok, _result} =
+      ReductionBounds.infer_integer_sizes({__MODULE__.Program, :product, 1},
+        beam_binaries: [beam],
+        input_sizes: [%IntegerSize{lower: -4, upper: 4, magnitude_bits: 3}]
+      )
+
     :ok
   end
 
