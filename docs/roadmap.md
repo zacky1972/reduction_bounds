@@ -16,6 +16,11 @@ The original evaluation targets now have model-level analyses:
   proofs against a bounded FIFO specification.
 - Supported integer code has size-dependent symbolic costs, finite
   recursive derivations, contract comparison, and verified bound reuse.
+- The external Port model has finite-trace and prefix cost safety and
+  conditional completion under explicit progress and loop conditions.
+- A finite normally returning Core Erlang client can be connected to that
+  model under explicit helper contracts. Public results distinguish model
+  theorems from source correspondence and unresolved completion obligations.
 - The public proof workflow records assumptions, checked theorem names,
   trusted processing, and unverified runtime claims.
 
@@ -26,6 +31,10 @@ see the proof reference for the remaining correspondence obligations.
 
 - Extend the supported program fragments and reusable contracts while
   continuing to report unsupported operations and unresolved obligations.
+- Extend Port source correspondence to unfinished prefixes, native receive,
+  exception handling and helper implementations. Source termination requires
+  further totality and progress arguments; the model completion theorem alone
+  does not provide them.
 - Improve automatic derivation and document which input conditions,
   invariants, and size measures users must supply.
 - Extend source-to-model correspondence where the current proofs still

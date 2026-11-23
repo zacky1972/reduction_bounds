@@ -8,6 +8,7 @@ Start with one of these guides after completing the installation in the
 | --- | --- |
 | [Verify Lean declarations](examples/verification.md) | Supply a proof for a translated function, including a module compiled in IEx |
 | [Compare cost contracts and reuse a verified bound](examples/cost_contracts.md) | Derive an integer cost bound, compare contracts, and transfer the bound |
+| [Port models and supported clients](examples/ports.md) | Check finite traces, conditional model completion, and a supported Core Erlang client |
 | [Symbolic list bounds](examples/list_bounds.md) | Understand traversal bounds and find list, input-contract, and composition examples |
 
 The module documentation contains additional API examples. The
@@ -22,6 +23,7 @@ remain assumptions. The following cases reuse those proof rules:
 | One ring-buffer insertion | [Single-insertion model](proof.md#one-circularbuffer-insertion) |
 | Consecutive ring-buffer insertions and FIFO contents | [Insertion sequences](proof.md#consecutive-circularbuffer-insertions) |
 | Fixed progress and periodic resets | [Shared transition rule](proof.md#fixed-progress-and-periodic-resets) |
+| Port outcomes, finite prefixes, and supported client correspondence | [Port workflow](examples/ports.md) |
 | Contract comparison and verified bound reuse | [Public API evaluation](proof.md#public-api-integration-and-evaluation) |
 
 To print the integer workflow's upper-bound formulas, contracts,
@@ -29,6 +31,13 @@ conditions, and checked theorem names:
 
 ```sh
 REDUCTION_BOUNDS_REPORT=1 mix test --only cost_contract_workflow --trace
+```
+
+To print the Port workflow's formulas, conditions, completion assumptions,
+verification scopes, diagnostics, and checked theorem names:
+
+```sh
+REDUCTION_BOUNDS_REPORT=1 mix test --only port_workflow
 ```
 
 To reproduce the tagged list and ring-buffer verification cases:

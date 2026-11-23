@@ -1163,6 +1163,188 @@ ELAN_TOOLCHAIN="$(cat deps/lynx/lean-toolchain)" mix test \
   test/reduction_bounds/integer_cost_cases_test.exs
 ```
 
+## Shared communication events, traces, and contracts
+
+`ReductionBounds.Protocol` defines finite protocol contracts shared by the
+Port and request/response work. Contracts declare participants and their cost
+units, states, an initial state, terminal states, event ownership, and allowed
+transitions. A work event belongs to exactly one participant and carries that
+participant's unit. An environment observation has neither an owner nor a
+cost unit. In particular, observing an arrival does not bound external work.
+Different participants may use different units; this layer does not sum them.
+
+`ReductionBounds.Protocol.new/1` validates declarations. It rejects unknown states or events,
+ambiguous transitions for the same state and event name, transitions leaving
+terminal states, and inconsistent ownership or units. `ReductionBounds.Protocol.check_trace/2`
+checks supplied event occurrences and records all visited states. Empty traces
+and unfinished prefixes are accepted when admissible. Invalid occurrences
+report a zero-based index, the event, and the reason. `terminal?` classifies
+the end of this supplied trace, not a guarantee that all interactions finish.
+`ReductionBounds.Protocol.events_for/2` selects occurrences owned by a participant.
+
+The initial `ReductionBounds.PortProtocol` model assumes that the caller is
+the Port owner and at most one request is in progress. Preparation is followed
+by acceptance, rejection, or submission suspension. Rejection can be returned
+or retried. Suspension handling and resumption are explicit work events;
+waiting itself is a state. After acceptance, an environment response-arrival
+event precedes caller-side retrieval and decoding. Closure is another
+environment observation; a distinct caller-owned event handles the closure
+before reaching the closed terminal state. A second submission after acceptance, duplicate
+arrival, or response retrieval before arrival is rejected by the model.
+
+```elixir
+alias ReductionBounds.{PortProtocol, Protocol}
+{:ok, contract} = PortProtocol.new()
+names = [:prepare, :submit_accepted, :response_arrived, :receive_response, :decode]
+events = Enum.map(names, fn name ->
+  {:ok, event} = Protocol.event(contract, name)
+  event
+end)
+{:ok, trace} = Protocol.check_trace(contract, events)
+{trace.final, trace.terminal?}
+#=> {:complete, true}
+Enum.map(Protocol.events_for(trace, :caller), & &1.name)
+#=> [:prepare, :submit_accepted, :receive_response, :decode]
+```
+
+`ProtocolProof.build/2` rechecks the supplied model trace and generates Lean
+contract, event, and successor-state declarations. `ProofInput.protocol_postludes/1`
+loads `priv/lean/reduction_bounds/Protocol.lean`. Its `checkTraceSound` theorem
+proves that an accepted certificate describes a `Runs` derivation of allowed
+transitions under a well-formed contract. The successor-state list is checked
+by Lean rather than trusted. `Runs.eventsValid` establishes registration and
+accounting metadata for every occurrence. `ownerExclusive` prevents one
+occurrence from having two different owners. `Runs.preserves` transports an
+arbitrary state invariant from the initial to final state when each allowed
+step preserves it; such step obligations remain explicit. The generated
+`suppliedInvariant` specializes this rule to the supplied trace. Selected
+shared and generated theorem dependencies are audited against the existing
+axiom allowlist, including rejection of unfinished proof replacements.
+
+Reproduce both the Elixir validation and Lynx/Lean checks with:
+
+```sh
+mix test --only protocol_model
+```
+
+Tests cover success, rejection, retry, closure, suspension and resumption,
+waiting prefixes, event ownership and units, malformed declarations, and
+illegal transitions. Altered successor states and event ownership are rejected
+independently in Lean, even if the generated certificate text is modified.
+
+This shared trace layer alone supplies no cost functions or size and
+event-count bounds. The checks below add explicit conditions to that layer. Retry and receive-inspection cycles
+may occur arbitrarily often in that unrestricted trace layer. The cost-safety
+and conditional-completion sections below add separate bounds and progress
+hypotheses. Neither layer connects a target Core Erlang function to the
+protocol or covers a real Port program or driver. Faithful serialization and the chosen
+protocol remain trusted. Port-side and external-computation costs, concrete
+ERTS charging, runtime timing, and scheduler behavior remain unverified.
+
+## Communication size and event-count conditions
+
+`ProtocolSize` describes independent byte and structural upper bounds. Unknown
+fields are `:unknown`, never zero. `ProtocolSize.from_iodata/1` counts one
+structural unit for every binary, byte, empty list, and list cell. Thus
+`[[], []]` has zero bytes and five structural units, whereas a 1000-byte binary
+has 1000 bytes and one structural unit. Binary traversal still needs its byte
+bound. Valid binary tails are supported; scalar top-level bytes, non-byte list
+items, non-binary improper tails, and bitstrings with fractional bytes are
+rejected. This measure does not specify ERTS allocation or reduction charging.
+
+`ProtocolConditions` adds a condition profile to a supplied protocol contract.
+Every allowed state/event context must have an explicit `Rule`, even an empty
+one. Rules name data requirements, integer requirements, and counters. Data
+bounds require both dimensions to be finite. Integer bounds reuse
+`IntegerSize` value ranges and magnitude bounds, with a finite magnitude bound
+and a nonempty domain. Data and count declarations are validated even for
+branches not visited by a supplied trace. No request-to-response size relation
+or integer-to-byte encoding relation is assumed or synthesized.
+
+`PortProtocol.conditions/1` supplies rules for the initial Port model. Its
+independent data fields are `:request`, `:response`, and `:message`; the last
+covers inspections of messages that do not match. Matching response retrieval uses the
+response bound and also increments `:receive_inspections`. The profile requires
+finite caps for `:total_events`, `:submission_attempts`, `:submission_events`,
+`:resumptions`, `:retries`, and `:receive_inspections`. Total events include
+work and environment observations. All other counters count named occurrences
+across the entire trace, including repeated scans and events after arrivals.
+
+The Port model now distinguishes `:submission_resumed` from `:prepared`.
+Starting submission from `:prepared` increments the attempt count. After a
+suspension, a resumed outcome increments the submission-event count without
+starting another attempt. Repeated suspension/resumption still contributes
+work events and is limited independently. This prevents a single suspended
+submission from being counted as multiple new attempts.
+
+```elixir
+alias ReductionBounds.{PortProtocol, Protocol, ProtocolConditions, ProtocolSize}
+{:ok, profile} = PortProtocol.conditions(
+  data_bounds: %{
+    request: %ProtocolSize{bytes: 8, structure: 10},
+    response: %ProtocolSize{bytes: 4, structure: 8},
+    message: %ProtocolSize{bytes: 8, structure: 8}
+  },
+  count_bounds: %{total_events: 10, submission_attempts: 1,
+    submission_events: 1, resumptions: 0, retries: 0, receive_inspections: 1})
+names = [:prepare, :submit_accepted, :response_arrived, :receive_response, :decode]
+events = Enum.map(names, fn name ->
+  {:ok, event} = Protocol.event(profile.contract, name)
+  event
+end)
+{:ok, observation} = ProtocolConditions.observe(%{request: [1], response: <<2>>, message: []})
+observations = events |> Enum.with_index() |> Map.new(fn {_event, i} -> {i, observation} end)
+{:ok, result} = ProtocolConditions.check_trace(profile, events, observations)
+result.counts
+#=> %{total_events: 5, submission_attempts: 1, submission_events: 1,
+#=>   resumptions: 0, retries: 0, receive_inspections: 1}
+```
+
+Optional `integer_events` associates event names with integer-condition names
+in `integer_bounds`. `ProtocolConditions.observe/2` accepts a separate map of
+mathematical integer values. The checker uses `IntegerSize.contains?/2`; a
+large integer cannot be substituted directly for an encoded iodata byte.
+Custom state-specific conditions can be declared through
+`ProtocolConditions.new/2`. Results retain the supplied profile and the
+per-occurrence state, rule, observation, and independently computed counters.
+Missing bounds, missing observations, unknown dimensions, exceeded caps, and
+invalid observation indexes are errors. A zero-length prefix has zero counts
+but does not imply completion.
+
+`ProtocolConditionsProof.build/3` rechecks the trace and emits the profile,
+observations, and reported counts. `ProofInput.protocol_condition_postludes/1`
+loads the integer-size semantics and the shared protocol and condition rules.
+Lean's `checkConditionsSound` connects the accepted certificate to the shared
+`Runs` relation, well-formed declarations, `RowsHold` for every occurrence,
+and `CountsHold` for every declared counter. `RowsHold` requires both data
+inequalities and the existing `IntegerSize.Holds` proposition. `countFrom`
+recomputes counts from the Lean events, states, and rules rather than trusting
+an Elixir total. Generated theorems additionally check that reported count
+names and values match that computation. Selected dependencies are audited.
+
+Reproduce the new cases with:
+
+```sh
+mix test --only protocol_conditions
+```
+
+Tests cover independent response and structure bounds, nested empty lists,
+wide integers, resumed submission accounting, scans across arrivals, matching
+inspections, missing conditions, and invalid iodata. Lean independently rejects
+altered size summaries, count caps, reported counts, unknown magnitude bounds,
+and unfinished condition certificates. The `protocol_model` tests continue to
+exercise the underlying trace layer.
+
+These are checks of supplied model traces under explicit conditions, not an
+inference of bounds for all possible runs. The Elixir validator returns
+`lean_status: :not_checked`; generating proof text also does not execute Lean.
+The integration tests perform that separate check through Lynx. Association
+of size summaries and integer values with actual target data, Elixir iodata
+measurement, and faithful serialization remain trusted. No concrete encoding,
+source-code correspondence, cost bound, progress guarantee, or ERTS accounting
+is established at this stage. Later all-trace cost proofs must state these
+size and count conditions as premises, rather than infer them from one sample.
+
 ## Map and struct operations
 
 The decoder handles fixed atom keys and the supported Boolean guard
@@ -1745,3 +1927,475 @@ The inequalities bound the symbolic cost model. To obtain an upper
 bound for ERTS reductions, a separate proof must relate the charges to
 the accounting of the target ERTS build, including when the built-in
 yields and resumes under a fresh reduction budget.
+
+## Cost safety for finite protocol traces and prefixes
+
+`ProtocolCost.new/2` associates every owned state/event context with a
+nonnegative cost expression and a counter. Constants and participant-scoped
+symbolic charges can be combined by addition, multiplication, and maximum.
+Data references use both byte length and structural size; integer references
+use the magnitude bit-length bounds from `IntegerSize`. A reference must be
+required by the corresponding condition rule. Environmental observations
+cannot be assigned work. A counter must count that context, including the
+state-dependent distinction between a fresh submission and its resumption.
+
+For participant `p` and counter `k`, let `M(p,k)` be the maximum of the
+capped expressions assigned to that pair, and `N(k)` its declared finite
+count limit. The generated budget is
+
+\[
+ B_p=\sum_k N(k)M(p,k).
+\]
+
+Capping replaces each size reference by its supplied upper bound. The
+expression language is monotone in these nonnegative parameters, even for
+products. Alternatives share a maximum; they are not all charged at each
+occurrence. An event contributes its expression only to its unique owner.
+Participant budgets retain their declared cost units and are not added
+across participants. Participants without modeled work events are reported
+as `unmodeled_participants`, without a claim about their actual work.
+
+In `ProtocolCost.lean`, `featureBound` connects the row conditions to actual
+size parameters. `Expr.monotone` and `localBound` bound each local event.
+`traceBound` sums these inequalities; `costSafety` applies the finite counter
+limits. `prefixCostLe` proves that taking any aligned prefix cannot increase
+the cost. `prefixCostSafety` therefore establishes the same budget for every
+prefix of any finite trace satisfying the supplied size and count conditions.
+The empty trace and prefixes ending in suspended or waiting states are
+included. No terminal-state premise is required.
+
+`ProtocolCostProof.build/3` emits `suppliedCostCertificate`, checking complete
+work-context coverage, feature permissions, counted contexts, and budget
+groups. `suppliedCostSafety` and `suppliedPrefixSafety` quantify over arbitrary
+finite event, state, and observation lists under `RowsHold` and `CountsHold`;
+they are not restricted to the example trace. Protocol validity is checked
+separately by the existing `Protocol` certificate. For a valid execution,
+these theorems apply to its certified event/state sequence. Generated
+`suppliedBoundMatches` theorems also check that the returned Elixir formulas
+are exactly Lean's `boundExpr`. `suppliedTraceBudget` and
+`suppliedTracePrefixes` specialize safety to the supplied trace. Selected
+proof dependencies are audited against the existing axiom allowlist.
+
+Constructors return `lean_status: :not_checked`; constructing a proof does
+not execute Lean. To run the checks, pass the generated proof through
+`ProofInput.protocol_cost_postludes/1`, assemble it with `ProofInput`, and
+run `Lynx.Commands.verify!/2`, as demonstrated by the proof test.
+
+Reproduce the tests with:
+
+```sh
+mix test --only protocol_cost
+```
+
+The tests include empty traces, suspension before completion, rejected
+submissions followed by retries, receive inspections and successful responses,
+large integer bounds, and symbolic charges. Negative checks reject missing
+work rules, charges on environmental events, unsupported size references,
+counters that do not count a context, forged formulas, altered evidence,
+and unfinished proofs. These results concern the declared symbolic cost
+semantics. Association of observations with real data, source-code
+correspondence, concrete reduction accounting, and wall-clock time remain
+outside the proof. Bounded finite-trace work does not prove eventual response,
+scheduling, timeout completion, or any other progress property.
+
+## Port transitions and conditional completion
+
+`PortProtocol.new/0` now also distinguishes decoding failure and an
+application receive timeout. The supported terminal states are:
+
+| Final state | Observed outcome | Final caller event |
+| --- | --- | --- |
+| `:complete` | `:success` | `:decode` |
+| `:failed` | `:rejected` | `:return_rejection` |
+| `:closed` | `:port_closed` | `:handle_closure` |
+| `:timed_out` | `:timeout` | `:handle_timeout` |
+| `:decode_failed` | `:decode_error` | `:decode_error` |
+
+The environment event `:timeout_elapsed` is allowed only while awaiting a
+response, followed by caller-owned timeout handling. This represents an
+application's receive-timeout protocol, not a timeout option of
+`port_command/2,3`. It cannot interrupt a suspended submission. Closure,
+arrival, and timeout observations have no owned work charge; their handlers
+have separate caller cost expressions. Decoding failure uses the independent
+response-size conditions. Every new work context must have an explicit cost
+rule, so its cost cannot silently be omitted from a participant budget.
+
+### The termination measure
+
+`PortCompletion.lean` defines a `Configuration` containing the protocol state
+and remaining allowances for rejected outcomes, submission resumptions, and
+receive inspections (including the matching response). These allowances are
+separate from a retry count: a final rejected submission consumes an allowance
+even if it is returned instead of retried. With remaining allowances `R`, `S`,
+and `I`, the rank is
+
+\[
+ \rho(s)=10(R+S+I)+p(s), \qquad
+ 0\leq p(s)\leq9.
+\]
+
+Here `p(s)` is the protocol phase. The initial phase is 9. Local phases order preparation, submission, response
+handling, and terminal handling. Every cycle consumes an allowance; all other
+transitions strictly decrease the phase. `Ranked` checks these properties
+against every transition in the supplied Port contract. `Advance` requires an
+allowed transition and exact allowance balances. `advanceDecreases` proves
+strict rank decrease. `checkMovesSound` checks the entire supplied sequence
+of configurations, and `Moves.erased` connects it back to the shared protocol
+`Runs` relation. `Moves.bounded` bounds active events by the initial rank.
+`acceptedPreserves` and `noRetransmission`, under `PostAcceptanceSafe`, prove
+that after acceptance the protocol stays in the later states and cannot
+submit or retry another request. The generated certificate checks this
+condition against the supplied transition table.
+
+### Explicit progress assumptions
+
+`Behavior` describes an arbitrary infinite sequence of observations. A tick
+with no event leaves the configuration unchanged. An active tick must satisfy
+`Advance`; terminal configurations may remain idle forever. Thus the model
+permits arbitrary finite idle delays without treating waiting as active work.
+The `Progress` proposition requires an eventual next active event in each
+nonterminal state, according to four separate hypotheses:
+
+| Declaration | Lean field | Applicable states |
+| --- | --- | --- |
+| `:caller_progress` | `caller` | Preparation, retry/rejection handling, retrieval, decoding, and terminal handling |
+| `:submission_progress` | `submission` | Submission returns an outcome or observes closure |
+| `:resumption_progress` | `resumption` | Suspended submission eventually resumes or observes closure |
+| `:response_progress` | `response` | Waiting eventually observes a response, closure, timeout, or a permitted inspection |
+
+Each eventual event must respect the protocol and remaining allowances.
+Repeated inspections cannot indefinitely substitute for response progress,
+because they consume a finite allowance. Likewise, rejection and suspension
+cycles cannot continue indefinitely. These are assumptions about the complete
+behavior, not facts inferred from the observed prefix. A bounded external
+computation is neither required for the caller cost proof nor sufficient to
+establish these progress hypotheses.
+
+`behaviorInvariant` preserves declared states. `conditionalCompletion` uses
+strong induction on the rank and the progress assumptions to prove that a
+terminal state is eventually reached. `eventCountBound` bounds the active
+events in every finite prefix by `9 + 10*(R + S + I)`. This bounds neither the
+number of idle ticks nor elapsed time. `stalledNotComplete` exhibits permanent
+idle waiting without completion; finite cost safety alone cannot exclude it.
+
+Termination does not imply a successful response. `successfulCompletion`
+additionally requires `NoFailure`: no final rejection, closure handler,
+timeout handler, or decoding-failure event occurs. `SuccessSpec` checks that
+these are exactly the ways to enter the failure terminal states. This
+additional assumption includes successful decoding and exclusion of the
+supported error outcomes; it is not derived from acceptance of a command.
+
+### Construction, evidence and diagnostics
+
+For an existing Port cost profile `profile` and supplied `events` and
+`observations`, build completion evidence as follows:
+
+```elixir
+options = [
+  limits: %{rejections: 2, resumptions: 3, inspections: 8},
+  progress: [:caller_progress, :submission_progress,
+             :resumption_progress, :response_progress],
+  goal: :termination
+]
+{:ok, result, proof} = ReductionBounds.PortCompletionProof.build(
+  profile, events, observations, options)
+result.completion.status
+#=> :conditional
+result.completion.active_event_bound
+#=> 139
+{:ok, postludes} = ReductionBounds.ProofInput.port_completion_postludes(proof)
+translation = Lynx.Translation.new(postludes: postludes)
+project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
+reports = Lynx.Commands.verify!(project, ReductionBounds.ProofInput.assemble(translation))
+```
+
+`PortCompletion.check_trace/4` and the proof builder retain `lean_status:
+:not_checked`; inspect the Lean reports to establish that proof checking
+succeeded. `:conditional` means the requested hypotheses were declared and
+the supplied trace respects the completion allowances. It is not a proof
+that a real environment satisfies those hypotheses. The generated
+`suppliedConditionalCompletion` has explicit `Behavior`, initial-configuration,
+and `Progress` hypotheses; the declarations do not introduce progress axioms.
+For `goal: :success`, add `:no_failure_outcomes` to the declarations. Only
+then is `suppliedSuccessfulCompletion` emitted, still with an explicit
+`NoFailure` premise.
+
+When assumptions or allowances are missing, the result reports
+`:insufficient_assumptions` and lists them. It still returns the independent
+participant cost formulas and generates the cost proofs, but emits no
+supplied completion theorem. Exhausted allowances report
+`:inconsistent_limits` with the failing occurrence. Requesting success after
+an observed failure reports `:inconsistent_assumptions`. The observed outcome
+of the supplied trace is reported separately from the conditional theorem.
+External work remains `:not_bounded`, and external progress declarations are
+reported individually as assumed or missing.
+
+`suppliedTerminalBudget` applies the existing universal cost theorem to every
+supported terminal outcome under `RowsHold` and `CountsHold`. The cost
+conditions are independent of the progress hypotheses: the rank's event bound
+does not automatically establish a user's tighter size or counter limits.
+The completion theorem concerns arbitrary behaviors; the cost theorem
+concerns their finite event traces when those conditions hold. Generated
+configuration, rank, terminal-cost, and completion theorems are audited
+against the existing axiom allowlist.
+
+Reproduce the new and regression checks with:
+
+```sh
+mix test --only port_completion
+mix test --only protocol_model
+mix test --only protocol_conditions
+mix test --only protocol_cost
+```
+
+Tests exercise every supported terminal outcome, suspension, retry, unrelated
+message inspections, successful completion assumptions, missing progress,
+exhausted allowances, and invalid transitions. Lean independently rejects
+altered transitions, rank bounds, and unfinished certificates. A permanent
+waiting example is checked, while an unconditional completion claim for that
+example is rejected. The results concern the supplied external Port protocol
+model. The source-fragment checks below connect finite normally returning
+client executions to that model, but do not transfer the completion theorem
+to actual receive helpers. Framing/matching correctness, external-program and
+linked-in driver behavior, concrete ERTS charging, OS scheduling, delivery
+guarantees, and deadlines remain unverified.
+
+## Connecting a supported Core Erlang client to the Port model
+
+`ReductionBounds.infer_port_bound/3` adds source correspondence for a finite
+client fragment. The input is the target MFA, a `ProtocolCost` profile for
+`PortProtocol.new/0`, and explicit helper contracts. A successful result has
+`source_correspondence: :checked` only after Lean verifies the generated
+connection and bound. Proof builders and `PortSource.infer/3` return pending
+evidence with `lean_status: :not_checked`; they do not establish a bound by
+constructing a candidate alone.
+
+### Accepted client and call contracts
+
+The first argument is the Port and the second is preparation input. A typical
+accepted body is:
+
+```elixir
+def request(port, input) do
+  prepared = Helpers.prepare(input)
+
+  case :erlang.port_command(port, prepared, [:nosuspend]) do
+    true ->
+      case Helpers.await_reply(port) do
+        {:data, data} -> Helpers.decode(data)
+        :closed -> :closed
+        :timeout -> :timeout
+      end
+    false -> :rejected
+  end
+end
+```
+
+The preparation binding, Port argument, prepared request, reply binder and
+decoder argument are checked. Boolean clauses and the three disjoint reply
+patterns may be reordered. Guards must be literal true. The compiler's final
+case-failure clause must have the recognized generated shape; it is excluded
+under the declared result contracts. There is no silent fallback for an
+unsupported expression. Errors retain the target and a path such as a binding,
+subject, argument, or response branch.
+
+Helper declarations have the form:
+
+```elixir
+calls = %{
+  prepare: {Helpers, :prepare, 1},
+  reply: {Helpers, :await_reply, 1},
+  decode: {Helpers, :decode, 1}
+}
+{:ok, bound} = ReductionBounds.infer_port_bound(
+  {Client, :request, 2}, profile,
+  calls: calls, beam_binaries: beams, timeout: 60_000)
+bound.source_correspondence
+#=> :checked
+bound.source_node_bound
+#=> 25
+```
+
+Here `profile` is the explicit `ProtocolCost` profile from the preceding
+sections. It must cover every work context, including failure handling.
+`beams` contains the target's compiled binary for an in-memory module; it may
+be omitted for modules with readable BEAM files on the code path. Standard
+verification timeout, concurrency and Lean options apply. The test fixture
+`test/fixtures/port_client.ex` supplies both the normal and reordered clients,
+and `mix test --only port_source` reproduces their checks. The fixture is
+compiled once by `test_helper.exs`, and the tests retain its BEAM binaries.
+
+`Contracts` is an explicit Lean hypothesis over the external-call relation.
+It states, for each registered call, that the returned value has the allowed
+shape and its modeled work events form a protocol run between the stated
+entry and exit states:
+
+| Role | Entry | Normal result | Exit |
+| --- | --- | --- | --- |
+| Prepare | idle | Any modeled value | prepared |
+| Submit | prepared | true / false | awaiting response / rejected |
+| Reply | awaiting response | data / closed / timeout | response received / closed / timed out |
+| Decode | response received | Any modeled value | complete |
+
+The submit role is fixed to `erlang:port_command/3` with the `nosuspend` option.
+Helper roles must have distinct registered names and arity one. Reply traces
+may include finite unrelated-message inspections and explicit response,
+closure, or timeout handling; their counts and data sizes still require the
+independent profile conditions. Call-event charges must cover the contracted
+helper or primitive work. Unknown external-program work remains outside the
+caller budget. A helper's implementation is not verified by declaring its
+name: `call_contracts` records `status: :assumed` and normal-return totality as
+`:not_established`. A valid Port, permitted caller/owner relationship, framing,
+matching, size bounds, and coverage of actual helper work remain applicability
+conditions. No encoding or response-size relation is inferred from the request.
+
+### Checked connection and source costs
+
+`PortSource` reads the target through the existing BEAM debug-information
+path. It reifies accepted Core blocks without source annotations, retaining
+static call identities, pure arguments, variable bindings, Boolean clause
+order and reply-pattern order. The `Core` semantics in `PortSource.lean`
+evaluates these blocks using mathematical values, an environment and an
+external-call relation. Opaque values represent input Ports and payloads;
+the theorem does not establish a concrete runtime representation relation.
+The source execution records returned values, ordered call occurrences and
+local work. Calls do not acquire protocol correctness merely from their names.
+
+The separate `Program` semantics attaches roles and protocol events. `Connect`
+checks all control arms and exact argument routing. `ReturnShape` restricts
+pure returns to final rejection handling or an already terminal state;
+a return cannot invent arbitrary communication events. `RegistryValid` checks
+distinct role identities. The generated `suppliedConnection` is a Lean proof
+of this relation, not an unchecked status flag from Elixir.
+
+`sourceAgreement` proves that each finite normally returning source execution
+has a model execution with the same value, variable bindings, call order and
+local work. `modelSafe` composes the declared call contracts and proves that
+the resulting trace is admitted by the shared Port protocol and reaches a
+supported terminal state. This proves the connection for every source
+execution in the stated fragment under the contracts, not just for one
+selected success trace.
+
+Local source work is charged separately so that bindings, argument retrieval
+and case dispatch are not omitted. In the abstract semantics, returning a
+value costs one local unit; a preparation binding costs `2 + arity`; Boolean
+dispatch costs `4 + arity`; reply-pattern dispatch costs `9 + arity`; a tail
+call costs `1 + arity`. The work of nested expressions is added. `Core.budget` adds the
+budgets of all alternatives, giving a conservative finite limit `L`.
+`localBound` proves that every source derivation has local work at most `L`.
+For the example, `L = 25`. With a natural symbolic local-unit charge
+`source_node` (written as `c_s` below), and protocol budget `B_p`, the caller formula is
+
+\[
+ B_s = L c_s + B_p.
+\]
+
+The returned Elixir expression has the form:
+
+```elixir
+{:add, {:mul, 25, {:charge, :source_node}}, protocol_formula}
+```
+
+`connectedCostBound` combines local-work safety with the universal protocol
+cost theorem under `RowsHold` and `CountsHold`. `suppliedLocalBudget` checks
+the reported `L`. `suppliedSourceFormulaMatches` checks that the returned
+formula is exactly the local budget plus the checked protocol formula.
+`suppliedSourceAgreement` and `suppliedSourceBound` specialize the shared
+theorems to the extracted target. All selected theorem dependencies, including
+connection certificates, are audited against the existing axiom allowlist.
+These are symbolic units, with no claim that a local unit is an ERTS reduction.
+
+### Scope, diagnostics and reproduction
+
+This stage connects finite normally returning client executions. It does not
+prove that calls return, nor connect unfinished source execution prefixes
+inside an opaque receive helper. Protocol-level prefix safety remains
+available under its earlier conditions. Helper exceptions, decoding failures
+that raise, native Core receive loops, recursion, dynamic calls, blocking
+submission, arbitrary guards and unsupported arguments are rejected or
+explicitly outside the checked source claim. The caller result records
+`execution_domain: :finite_normal_executions_under_call_contracts`, assumed
+helper contracts, unresolved source-prefix and exception obligations, and
+unverified runtime and timing correspondence. The earlier model-level
+conditional completion theorem is not automatically a source termination
+proof.
+
+BEAM extraction, recognition of accepted Core blocks, abstraction of runtime
+values, and serialization remain trusted. Lean checks the reified Core-to-model
+connection and mathematical semantics; it does not certify the BEAM debug
+backend, the Elixir reifier, a concrete ERTS build or external helper code.
+Unsupported code and wrong Port/request/reply arguments fail with source paths
+instead of falling back to a checked model-only result for that target.
+
+```sh
+mix test --only port_source
+```
+
+Positive checks use compiled BEAM for both clause orders and exercise the
+public verification API. Negative checks reject missing or mismatched helper
+contracts, wrong Port routing, blocking commands and native receive syntax.
+Lean independently rejects altered helper identities, submission options,
+Boolean orientation, primitive identities, local limits, returned formulas
+and unfinished connection certificates. No test launches an external Port
+program or measures reductions.
+
+## Port API, diagnostics and reproducible evaluation
+
+The [Port guide](examples/ports.md) provides complete profile declarations and
+public API examples. `verify_port_model/3` verifies a supplied model trace,
+finite-trace and prefix cost safety, and optional conditional completion.
+`infer_port_bound/3` checks the supported Core client correspondence and caller
+bound. Both use the existing bounded verification runner and reject empty or
+failed Lean reports. Constructors and proof builders remain unchecked until
+that runner succeeds. Event names are resolved through the registered Port
+contract; event structs retain their ownership checks.
+
+Public results now share the reporting conventions of the contract workflow:
+
+| Field | Model check | Source check |
+| --- | --- | --- |
+| `verification_scope.kind` | `:supplied_port_model` | `:core_connected_port_client` |
+| `source_correspondence` | `:not_checked` | `:checked` for the supported fragment |
+| Cost claim | All modeled finite traces and prefixes under conditions | Finite normally returning source executions under call and profile conditions |
+| Completion scope | Protocol model only | Source completion not established |
+| `checked_theorems` | Protocol, condition, cost, and applicable completion theorems | Protocol, condition, cost, and Core connection theorems |
+
+`verification_scope` records checked claims, conditional claims, assumptions,
+trusted processing and unresolved obligations separately. The original source
+execution-domain label is retained in `execution_domain`. Source results remove
+the empty profile-validation trace, so it cannot be mistaken for an observed
+target execution. Source-prefix, exception and helper-totality obligations
+remain explicit. A source result does not inherit the model completion theorem.
+
+Model diagnostics distinguish missing completion hypotheses from inconsistent
+limits and a failed outcome that conflicts with requested success. A checked
+cost bound can still be returned in those cases. `completion.theorem_status`
+is `:checked_under_assumptions` only when the applicable completion theorem
+was generated and checked; `actual_completion` remains `:not_established`.
+External behavior and environment progress are assumptions, not proven facts.
+Missing size/cost conditions or exceeded cost-profile counters instead prevent
+verification. Event and target errors retain the offending occurrence or source
+path. Unknown event names and option keys have explicit tuple diagnostics.
+Forged checked flags do not replace fresh validation and proof checking.
+
+The workflow tests use a declared event cost of `event_work` plus the bounded
+byte and structure dimensions. With all symbolic charges set to one, the
+reproducible profile budget is 1156 symbolic units. The supported client adds
+25 local source units, giving 1181. These numerical interpretations are
+examples of the formulas, not measurements or ERTS reduction budgets.
+
+```sh
+mix test --only port_workflow
+REDUCTION_BOUNDS_REPORT=1 mix test --only port_workflow
+```
+
+Each path is an independent bounded verification test. The reports include
+formulas, conditions, supported and observed outcomes, progress hypotheses,
+checked theorem names, and diagnostics. Existing `protocol_model`,
+`protocol_conditions`, `protocol_cost`, `port_completion`, and `port_source`
+tags reproduce the lower-level positive and altered-evidence checks. The
+public workflow covers all supported terminal outcomes, unfinished waiting,
+retry and receive inspection paths, missing progress, conflicting completion
+conditions, unsupported target routing and source/model scope separation.
+It does not execute an external Port program, validate actual helper contracts,
+connect arbitrary Core receive code, or establish runtime/time correspondence.

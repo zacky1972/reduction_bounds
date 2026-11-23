@@ -38,6 +38,10 @@
     "elim",
     "bignum",
     "componentwise",
-    "simpa"
+    "simpa",
+    "unmodeled",
+    "nonterminal",
+    "nosuspend",
+    "primop"
   ]
 }

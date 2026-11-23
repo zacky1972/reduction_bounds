@@ -39,6 +39,53 @@ defmodule ReductionBounds.ProofInput do
     packaged_postludes(proof, @sources ++ ["ExecutionBound.lean"])
   end
 
+  @spec protocol_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def protocol_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, ["Protocol.lean"])
+  end
+
+  @spec protocol_condition_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def protocol_condition_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, ["IntegerSize.lean", "Protocol.lean", "ProtocolConditions.lean"])
+  end
+
+  @spec protocol_cost_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def protocol_cost_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, [
+      "IntegerSize.lean",
+      "Protocol.lean",
+      "ProtocolConditions.lean",
+      "ProtocolCost.lean"
+    ])
+  end
+
+  @spec port_completion_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def port_completion_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, [
+      "IntegerSize.lean",
+      "Protocol.lean",
+      "ProtocolConditions.lean",
+      "ProtocolCost.lean",
+      "PortCompletion.lean"
+    ])
+  end
+
+  @spec port_source_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def port_source_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, [
+      "IntegerSize.lean",
+      "Protocol.lean",
+      "ProtocolConditions.lean",
+      "ProtocolCost.lean",
+      "PortSource.lean"
+    ])
+  end
+
   @spec integer_postludes(Lynx.Lean.t()) ::
           {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
   def integer_postludes(%Lynx.Lean{} = proof) do
@@ -131,6 +178,31 @@ defmodule ReductionBounds.ProofInput do
     end
   end
 
+  @doc false
+  @spec communication_theorems(map()) :: [String.t()]
+  def communication_theorems(candidate) do
+    owners = candidate.upper_bounds |> Map.keys() |> Enum.sort()
+
+    base =
+      case_study_theorems(%{source: :protocol_trace}) ++
+        case_study_theorems(%{source: :protocol_conditions}) ++
+        case_study_theorems(%{source: :protocol_cost, owners: owners})
+
+    Enum.uniq(base ++ communication_specific_theorems(candidate))
+  end
+
+  defp communication_specific_theorems(%{source: :port_source}),
+    do: case_study_theorems(%{source: :port_source})
+
+  defp communication_specific_theorems(%{source: :port_completion, completion: value}) do
+    case_study_theorems(%{
+      source: :port_completion,
+      completion_status: value.status,
+      goal: value.goal,
+      trace_checked: match?({:ok, _}, value.trace_evidence)
+    })
+  end
+
   @spec scope_evidence(map()) :: map()
   def scope_evidence(%{source: :cost_contract_comparison} = candidate) do
     %{
@@ -186,6 +258,61 @@ defmodule ReductionBounds.ProofInput do
   end
 
   def scope_evidence(_candidate), do: %{}
+
+  defp case_study_theorems(%{source: :protocol_trace}) do
+    ~w(ReductionBounds.Protocol.checkFromSound ReductionBounds.Protocol.checkTraceSound
+      ReductionBounds.Protocol.Runs.preserves ReductionBounds.Protocol.Runs.eventsValid
+      ReductionBounds.Protocol.ownerExclusive ReductionBounds.Protocol.suppliedCertificate
+      ReductionBounds.Protocol.suppliedWellFormed ReductionBounds.Protocol.suppliedTraceSound
+      ReductionBounds.Protocol.suppliedInvariant ReductionBounds.Protocol.suppliedEventsValid)
+  end
+
+  defp case_study_theorems(%{source: :protocol_conditions}) do
+    ~w(ReductionBounds.ProtocolConditions.checkRowsCorrect
+      ReductionBounds.ProtocolConditions.checkConditionsSound
+      ReductionBounds.ProtocolConditions.suppliedConditionsCertificate
+      ReductionBounds.ProtocolConditions.suppliedConditionsSound
+      ReductionBounds.ProtocolConditions.suppliedCountKeys
+      ReductionBounds.ProtocolConditions.suppliedCountsMatch)
+  end
+
+  defp case_study_theorems(%{source: :protocol_cost, owners: owners}) do
+    generic =
+      ~w(ReductionBounds.ProtocolCost.featureBound
+      ReductionBounds.ProtocolCost.Expr.monotone ReductionBounds.ProtocolCost.costSafety
+      ReductionBounds.ProtocolCost.prefixCostLe ReductionBounds.ProtocolCost.prefixCostSafety
+      ReductionBounds.ProtocolCost.boundExprCorrect ReductionBounds.ProtocolCost.suppliedCostCertificate
+      ReductionBounds.ProtocolCost.suppliedCostSafety ReductionBounds.ProtocolCost.suppliedPrefixSafety
+      ReductionBounds.ProtocolCost.suppliedTraceBudget ReductionBounds.ProtocolCost.suppliedTracePrefixes)
+
+    generic ++
+      Enum.with_index(owners, fn _owner, index ->
+        "ReductionBounds.ProtocolCost.suppliedBoundMatches#{index}"
+      end)
+  end
+
+  defp case_study_theorems(%{source: :port_completion} = candidate) do
+    generic = ~w(ReductionBounds.PortCompletion.advanceDecreases
+      ReductionBounds.PortCompletion.checkMovesSound ReductionBounds.PortCompletion.Moves.erased
+      ReductionBounds.PortCompletion.Moves.bounded ReductionBounds.PortCompletion.acceptedPreserves
+      ReductionBounds.PortCompletion.noRetransmission ReductionBounds.PortCompletion.behaviorInvariant
+      ReductionBounds.PortCompletion.conditionalCompletion ReductionBounds.PortCompletion.eventCountBound
+      ReductionBounds.PortCompletion.noFailureInvariant ReductionBounds.PortCompletion.successfulCompletion
+      ReductionBounds.PortCompletion.stalledNotComplete ReductionBounds.PortCompletion.suppliedRanking
+      ReductionBounds.PortCompletion.suppliedPostAcceptance ReductionBounds.PortCompletion.suppliedSuccessSpec
+      ReductionBounds.PortCompletion.suppliedStateInvariant
+      ReductionBounds.PortCompletion.suppliedTerminalBudget)
+    generic ++ port_trace_theorems(candidate) ++ port_completion_theorems(candidate)
+  end
+
+  defp case_study_theorems(%{source: :port_source}) do
+    ~w(ReductionBounds.PortSource.localBound ReductionBounds.PortSource.sourceAgreement
+      ReductionBounds.PortSource.modelSafe ReductionBounds.PortSource.connectedCostBound
+      ReductionBounds.PortSource.suppliedRegistryValid ReductionBounds.PortSource.suppliedConnection
+      ReductionBounds.PortSource.suppliedLocalBudget
+      ReductionBounds.PortSource.suppliedSourceFormulaMatches ReductionBounds.PortSource.suppliedSourceAgreement
+      ReductionBounds.PortSource.suppliedSourceBound)
+  end
 
   defp case_study_theorems(%{source: :integer_cost_fragment} = candidate) do
     global =
@@ -264,6 +391,24 @@ defmodule ReductionBounds.ProofInput do
   end
 
   defp case_study_theorems(_candidate), do: []
+
+  defp port_trace_theorems(%{trace_checked: true}) do
+    ~w(ReductionBounds.PortCompletion.suppliedConfigurationStates
+      ReductionBounds.PortCompletion.suppliedMovesCertificate ReductionBounds.PortCompletion.suppliedMoves
+      ReductionBounds.PortCompletion.suppliedTraceRank ReductionBounds.PortCompletion.suppliedActiveBudget)
+  end
+
+  defp port_trace_theorems(_candidate), do: []
+
+  defp port_completion_theorems(%{completion_status: :conditional, goal: :success}) do
+    ~w(ReductionBounds.PortCompletion.suppliedConditionalCompletion
+      ReductionBounds.PortCompletion.suppliedSuccessfulCompletion)
+  end
+
+  defp port_completion_theorems(%{completion_status: :conditional}),
+    do: ~w(ReductionBounds.PortCompletion.suppliedConditionalCompletion)
+
+  defp port_completion_theorems(_candidate), do: []
 
   defp integer_cost_theorems(candidate, prefix) do
     local =
