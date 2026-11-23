@@ -1,0 +1,2 @@
+{"id":"1153-1","target":"{:lists, :member, 2}","event":"started"}
+{"id":"1153-1","reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":765,"theorems":[]}],"event":"completed","assembly_ms":0.037,"module_wall_ms":765,"runner_non_module_wall_ms":796.1569999999999,"runner_wall_ms":1561.157}

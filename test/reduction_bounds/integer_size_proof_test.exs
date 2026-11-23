@@ -272,8 +272,7 @@ defmodule ReductionBounds.IntegerSizeProofTest do
         postludes: [Lynx.Lean.from_file!(path), Lynx.Lean.from_file!(analysis_path), proof]
       )
 
-    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
-    Lynx.Commands.verify!(project, Lynx.Translation.assemble(translation, cache: false))
+    ReductionBounds.Verification.verify!(translation)
   end
 
   defp audit() do

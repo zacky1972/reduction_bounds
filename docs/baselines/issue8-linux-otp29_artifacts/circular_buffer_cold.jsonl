@@ -1,0 +1,2 @@
+{"id":"1325-1","target":"{CircularBuffer, :insert, 2}","event":"started"}
+{"id":"1325-1","reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":979,"theorems":[]}],"event":"completed","assembly_ms":0.027,"module_wall_ms":979,"runner_non_module_wall_ms":728.9090000000001,"runner_wall_ms":1707.909}

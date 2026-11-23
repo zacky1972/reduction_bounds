@@ -179,10 +179,9 @@ defmodule ReductionBounds.IntegerAnalysisTest do
       proof = IntegerAnalysis.proof(falsified)
       assert {:ok, postludes} = ReductionBounds.ProofInput.integer_postludes(proof)
       translation = Lynx.Translation.new(postludes: postludes)
-      project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
 
       reports =
-        Lynx.Commands.verify!(project, Lynx.Translation.assemble(translation, cache: false))
+        ReductionBounds.Verification.verify!(translation)
 
       assert Enum.any?(reports, &(&1.status == :error))
     end

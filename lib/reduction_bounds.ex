@@ -1397,7 +1397,6 @@ defmodule ReductionBounds do
   defp verify_targets(_translation, [], _options, _definition), do: []
 
   defp verify_targets(translation, targets, options, definition) do
-    project_dir = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
     {lean_options, task_options} = Keyword.pop!(options, :lean_options)
     {:ok, supervisor} = Task.Supervisor.start_link()
 
@@ -1406,7 +1405,7 @@ defmodule ReductionBounds do
       |> Task.Supervisor.async_stream_nolink(
         targets,
         fn target ->
-          {target, verify_target(target, translation, project_dir, lean_options, definition)}
+          {target, verify_target(target, translation, lean_options, definition)}
         end,
         task_options ++ [on_timeout: :kill_task, zip_input_on_exit: true]
       )
@@ -1420,9 +1419,13 @@ defmodule ReductionBounds do
     end
   end
 
-  defp verify_target(target, translation, project_dir, lean_options, definition) do
-    files = assemble_target(translation, target, definition)
-    reports = Lynx.Commands.verify!(project_dir, files, options: lean_options)
+  defp verify_target(target, translation, lean_options, definition) do
+    reports =
+      ReductionBounds.Verification.verify!(translation,
+        target: target,
+        definition: definition,
+        options: lean_options
+      )
 
     if reports != [] and Enum.all?(reports, &(&1.status == :ok)) do
       {:ok, reports}
@@ -1431,56 +1434,5 @@ defmodule ReductionBounds do
     end
   rescue
     error -> {:error, {:lynx, error}}
-  end
-
-  defp assemble_target(translation, {module, function, arity}, :translated) do
-    translation
-    |> Lynx.Translation.translate(module, [{function, arity}])
-    |> Lynx.Translation.assemble(cache: false)
-  end
-
-  defp assemble_target(translation, target, :composed) do
-    translation |> assemble_target(target, :translated) |> import_postlude("Erlang.lists")
-  end
-
-  defp assemble_target(translation, _target, :circular_buffer_model) do
-    translation |> Lynx.Translation.assemble(cache: false) |> import_postlude("Erlang.lists")
-  end
-
-  defp assemble_target(translation, _target, fragment)
-       when fragment in [
-              :port_completion,
-              :port_source,
-              :periodic_fragment,
-              :integer_fragment,
-              :integer_cost_fragment,
-              :integer_bound_transfer,
-              :cost_contract_comparison
-            ] do
-    Lynx.Translation.assemble(translation, cache: false)
-  end
-
-  defp assemble_target(translation, _target, fragment)
-       when fragment in [:struct_fragment, :execution_fragment] do
-    ReductionBounds.ProofInput.assemble(translation)
-  end
-
-  # cspell:words leanj
-  defp assemble_target(translation, {module, _, _}, :lynx_builtin) do
-    # Lynx's runner resolves this import to its bundled Erlang model.
-    import = :lynx_core_to_leanj.module_name(module)
-    translation |> Lynx.Translation.assemble(cache: false) |> import_postlude(import)
-  end
-
-  defp import_postlude(files, import) do
-    for file <- files do
-      case file do
-        %{"module" => "Erlang.postlude"} ->
-          Map.update!(file, "imports", &Enum.uniq([import | &1]))
-
-        _ ->
-          file
-      end
-    end
   end
 end

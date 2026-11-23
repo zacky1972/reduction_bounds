@@ -28,6 +28,7 @@ defmodule ReductionBounds.MixProject do
   def docs do
     [
       main: "readme",
+      assets: %{"docs/baselines" => "."},
       extras: [
         "README.md",
         "docs/examples.md",
@@ -38,6 +39,8 @@ defmodule ReductionBounds.MixProject do
         "docs/proof.md",
         "docs/roadmap.md",
         "docs/toolchains.md",
+        "docs/benchmarking.md",
+        "docs/baselines/issue8-linux-otp29.md",
         "LICENSE.md"
       ]
     ]
@@ -77,7 +80,7 @@ defmodule ReductionBounds.MixProject do
 
   def cli do
     [
-      preferred_envs: [precommit: :test]
+      preferred_envs: [precommit: :test, "reduction_bounds.bench": :test]
     ]
   end
 

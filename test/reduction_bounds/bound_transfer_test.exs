@@ -342,8 +342,7 @@ defmodule ReductionBounds.BoundTransferTest do
     {proof, _evidence} = ProofInput.audit_bound(BoundTransfer.proof(candidate), candidate)
     {:ok, postludes} = ProofInput.transfer_postludes(proof)
     translation = Lynx.Translation.new(postludes: postludes)
-    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
-    Lynx.Commands.verify!(project, Lynx.Translation.assemble(translation, cache: false))
+    ReductionBounds.Verification.verify!(translation)
   end
 
   defp size(lower, upper, bits),

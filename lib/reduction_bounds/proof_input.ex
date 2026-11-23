@@ -18,15 +18,9 @@ defmodule ReductionBounds.ProofInput do
 
   @spec assemble(translation()) :: [map()]
   def assemble(translation) do
-    translation
-    |> Lynx.Translation.assemble(cache: false)
-    |> Enum.map(fn
-      %{"module" => "Erlang.postlude"} = file ->
-        Map.update!(file, "imports", &Enum.uniq(["Erlang.erlang", "Erlang.maps" | &1]))
-
-      file ->
-        file
-    end)
+    ReductionBounds.Verification.assemble(translation,
+      postlude_imports: ["Erlang.erlang", "Erlang.maps"]
+    )
   end
 
   @spec postludes(Lynx.Lean.t()) ::

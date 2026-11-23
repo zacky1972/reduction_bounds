@@ -103,10 +103,11 @@ defmodule ReductionBounds.ExecutionBoundTest do
     refute source == proof.source
     assert {:ok, postludes} = ProofInput.execution_postludes(%{proof | source: source})
     translation = Lynx.Translation.new(postludes: postludes)
-    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
 
     assert [%{status: :error, diagnostics: diagnostics}] =
-             Lynx.Commands.verify!(project, ProofInput.assemble(translation))
+             ReductionBounds.Verification.verify!(translation,
+               postlude_imports: ["Erlang.erlang", "Erlang.maps"]
+             )
 
     assert Enum.any?(diagnostics, &(&1.severity == :error and &1.message =~ "targetUpper"))
   end

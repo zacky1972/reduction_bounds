@@ -76,10 +76,11 @@ defmodule ReductionBounds.StructBoundTest do
 
     assert {:ok, postludes} = ProofInput.postludes(proof)
     translation = Lynx.Translation.new(postludes: postludes)
-    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
 
     assert [%{module: "Erlang.postlude", status: :ok}] =
-             Lynx.Commands.verify!(project, ProofInput.assemble(translation))
+             ReductionBounds.Verification.verify!(translation,
+               postlude_imports: ["Erlang.erlang", "Erlang.maps"]
+             )
   end
 
   defp charges({operation, left, right}) when operation in [:add, :max],

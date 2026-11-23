@@ -153,7 +153,9 @@ defmodule ReductionBounds.ProtocolCostProofTest do
   defp reports(proof) do
     {:ok, postludes} = ProofInput.protocol_cost_postludes(proof)
     translation = Lynx.Translation.new(postludes: postludes)
-    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
-    Lynx.Commands.verify!(project, ProofInput.assemble(translation))
+
+    ReductionBounds.Verification.verify!(translation,
+      postlude_imports: ["Erlang.erlang", "Erlang.maps"]
+    )
   end
 end

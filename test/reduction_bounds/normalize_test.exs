@@ -177,10 +177,11 @@ defmodule ReductionBounds.NormalizeTest do
 
     assert {:ok, postludes} = ProofInput.postludes(proof)
     translation = Lynx.Translation.new(postludes: postludes)
-    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
 
     assert [%{module: "Erlang.postlude"} = report] =
-             Lynx.Commands.verify!(project, ProofInput.assemble(translation))
+             ReductionBounds.Verification.verify!(translation,
+               postlude_imports: ["Erlang.erlang", "Erlang.maps"]
+             )
 
     report
   end
