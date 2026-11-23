@@ -1234,9 +1234,10 @@ independently in Lean, even if the generated certificate text is modified.
 
 This shared trace layer alone supplies no cost functions or size and
 event-count bounds. The checks below add explicit conditions to that layer. Retry and receive-inspection cycles
-may occur arbitrarily often. No theorem yet bounds all runs, proves eventual
-response or completion, connects a target Core Erlang function to the protocol,
-or covers a real Port program or driver. Faithful serialization and the chosen
+may occur arbitrarily often in that unrestricted trace layer. The cost-safety
+and conditional-completion sections below add separate bounds and progress
+hypotheses. Neither layer connects a target Core Erlang function to the
+protocol or covers a real Port program or driver. Faithful serialization and the chosen
 protocol remain trusted. Port-side and external-computation costs, concrete
 ERTS charging, runtime timing, and scheduler behavior remain unverified.
 
@@ -1996,3 +1997,163 @@ semantics. Association of observations with real data, source-code
 correspondence, concrete reduction accounting, and wall-clock time remain
 outside the proof. Bounded finite-trace work does not prove eventual response,
 scheduling, timeout completion, or any other progress property.
+
+## Port transitions and conditional completion
+
+`PortProtocol.new/0` now also distinguishes decoding failure and an
+application receive timeout. The supported terminal states are:
+
+| Final state | Observed outcome | Final caller event |
+| --- | --- | --- |
+| `:complete` | `:success` | `:decode` |
+| `:failed` | `:rejected` | `:return_rejection` |
+| `:closed` | `:port_closed` | `:handle_closure` |
+| `:timed_out` | `:timeout` | `:handle_timeout` |
+| `:decode_failed` | `:decode_error` | `:decode_error` |
+
+The environment event `:timeout_elapsed` is allowed only while awaiting a
+response, followed by caller-owned timeout handling. This represents an
+application's receive-timeout protocol, not a timeout option of
+`port_command/2,3`. It cannot interrupt a suspended submission. Closure,
+arrival, and timeout observations have no owned work charge; their handlers
+have separate caller cost expressions. Decoding failure uses the independent
+response-size conditions. Every new work context must have an explicit cost
+rule, so its cost cannot silently be omitted from a participant budget.
+
+### The termination measure
+
+`PortCompletion.lean` defines a `Configuration` containing the protocol state
+and remaining allowances for rejected outcomes, submission resumptions, and
+receive inspections (including the matching response). These allowances are
+separate from a retry count: a final rejected submission consumes an allowance
+even if it is returned instead of retried. With remaining allowances `R`, `S`,
+and `I`, the rank is
+
+\[
+ \rho(s)=10(R+S+I)+p(s), \qquad
+ 0\leq p(s)\leq9.
+\]
+
+Here `p(s)` is the protocol phase. The initial phase is 9. Local phases order preparation, submission, response
+handling, and terminal handling. Every cycle consumes an allowance; all other
+transitions strictly decrease the phase. `Ranked` checks these properties
+against every transition in the supplied Port contract. `Advance` requires an
+allowed transition and exact allowance balances. `advanceDecreases` proves
+strict rank decrease. `checkMovesSound` checks the entire supplied sequence
+of configurations, and `Moves.erased` connects it back to the shared protocol
+`Runs` relation. `Moves.bounded` bounds active events by the initial rank.
+`acceptedPreserves` and `noRetransmission`, under `PostAcceptanceSafe`, prove
+that after acceptance the protocol stays in the later states and cannot
+submit or retry another request. The generated certificate checks this
+condition against the supplied transition table.
+
+### Explicit progress assumptions
+
+`Behavior` describes an arbitrary infinite sequence of observations. A tick
+with no event leaves the configuration unchanged. An active tick must satisfy
+`Advance`; terminal configurations may remain idle forever. Thus the model
+permits arbitrary finite idle delays without treating waiting as active work.
+The `Progress` proposition requires an eventual next active event in each
+nonterminal state, according to four separate hypotheses:
+
+| Declaration | Lean field | Applicable states |
+| --- | --- | --- |
+| `:caller_progress` | `caller` | Preparation, retry/rejection handling, retrieval, decoding, and terminal handling |
+| `:submission_progress` | `submission` | Submission returns an outcome or observes closure |
+| `:resumption_progress` | `resumption` | Suspended submission eventually resumes or observes closure |
+| `:response_progress` | `response` | Waiting eventually observes a response, closure, timeout, or a permitted inspection |
+
+Each eventual event must respect the protocol and remaining allowances.
+Repeated inspections cannot indefinitely substitute for response progress,
+because they consume a finite allowance. Likewise, rejection and suspension
+cycles cannot continue indefinitely. These are assumptions about the complete
+behavior, not facts inferred from the observed prefix. A bounded external
+computation is neither required for the caller cost proof nor sufficient to
+establish these progress hypotheses.
+
+`behaviorInvariant` preserves declared states. `conditionalCompletion` uses
+strong induction on the rank and the progress assumptions to prove that a
+terminal state is eventually reached. `eventCountBound` bounds the active
+events in every finite prefix by `9 + 10*(R + S + I)`. This bounds neither the
+number of idle ticks nor elapsed time. `stalledNotComplete` exhibits permanent
+idle waiting without completion; finite cost safety alone cannot exclude it.
+
+Termination does not imply a successful response. `successfulCompletion`
+additionally requires `NoFailure`: no final rejection, closure handler,
+timeout handler, or decoding-failure event occurs. `SuccessSpec` checks that
+these are exactly the ways to enter the failure terminal states. This
+additional assumption includes successful decoding and exclusion of the
+supported error outcomes; it is not derived from acceptance of a command.
+
+### Construction, evidence and diagnostics
+
+For an existing Port cost profile `profile` and supplied `events` and
+`observations`, build completion evidence as follows:
+
+```elixir
+options = [
+  limits: %{rejections: 2, resumptions: 3, inspections: 8},
+  progress: [:caller_progress, :submission_progress,
+             :resumption_progress, :response_progress],
+  goal: :termination
+]
+{:ok, result, proof} = ReductionBounds.PortCompletionProof.build(
+  profile, events, observations, options)
+result.completion.status
+#=> :conditional
+result.completion.active_event_bound
+#=> 139
+{:ok, postludes} = ReductionBounds.ProofInput.port_completion_postludes(proof)
+translation = Lynx.Translation.new(postludes: postludes)
+project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
+reports = Lynx.Commands.verify!(project, ReductionBounds.ProofInput.assemble(translation))
+```
+
+`PortCompletion.check_trace/4` and the proof builder retain `lean_status:
+:not_checked`; inspect the Lean reports to establish that proof checking
+succeeded. `:conditional` means the requested hypotheses were declared and
+the supplied trace respects the completion allowances. It is not a proof
+that a real environment satisfies those hypotheses. The generated
+`suppliedConditionalCompletion` has explicit `Behavior`, initial-configuration,
+and `Progress` hypotheses; the declarations do not introduce progress axioms.
+For `goal: :success`, add `:no_failure_outcomes` to the declarations. Only
+then is `suppliedSuccessfulCompletion` emitted, still with an explicit
+`NoFailure` premise.
+
+When assumptions or allowances are missing, the result reports
+`:insufficient_assumptions` and lists them. It still returns the independent
+participant cost formulas and generates the cost proofs, but emits no
+supplied completion theorem. Exhausted allowances report
+`:inconsistent_limits` with the failing occurrence. Requesting success after
+an observed failure reports `:inconsistent_assumptions`. The observed outcome
+of the supplied trace is reported separately from the conditional theorem.
+External work remains `:not_bounded`, and external progress declarations are
+reported individually as assumed or missing.
+
+`suppliedTerminalBudget` applies the existing universal cost theorem to every
+supported terminal outcome under `RowsHold` and `CountsHold`. The cost
+conditions are independent of the progress hypotheses: the rank's event bound
+does not automatically establish a user's tighter size or counter limits.
+The completion theorem concerns arbitrary behaviors; the cost theorem
+concerns their finite event traces when those conditions hold. Generated
+configuration, rank, terminal-cost, and completion theorems are audited
+against the existing axiom allowlist.
+
+Reproduce the new and regression checks with:
+
+```sh
+mix test --only port_completion
+mix test --only protocol_model
+mix test --only protocol_conditions
+mix test --only protocol_cost
+```
+
+Tests exercise every supported terminal outcome, suspension, retry, unrelated
+message inspections, successful completion assumptions, missing progress,
+exhausted allowances, and invalid transitions. Lean independently rejects
+altered transitions, rank bounds, and unfinished certificates. A permanent
+waiting example is checked, while an unconditional completion claim for that
+example is rejected. The results concern the supplied external Port protocol
+model. Actual Core Erlang correspondence, framing/matching correctness,
+external-program and linked-in driver behavior, concrete ERTS charging,
+OS scheduling, delivery guarantees, and deadlines remain unverified.

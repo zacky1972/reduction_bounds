@@ -62,6 +62,18 @@ defmodule ReductionBounds.ProofInput do
     ])
   end
 
+  @spec port_completion_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def port_completion_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, [
+      "IntegerSize.lean",
+      "Protocol.lean",
+      "ProtocolConditions.lean",
+      "ProtocolCost.lean",
+      "PortCompletion.lean"
+    ])
+  end
+
   @spec integer_postludes(Lynx.Lean.t()) ::
           {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
   def integer_postludes(%Lynx.Lean{} = proof) do
@@ -242,6 +254,20 @@ defmodule ReductionBounds.ProofInput do
       end)
   end
 
+  defp case_study_theorems(%{source: :port_completion} = candidate) do
+    generic = ~w(ReductionBounds.PortCompletion.advanceDecreases
+      ReductionBounds.PortCompletion.checkMovesSound ReductionBounds.PortCompletion.Moves.erased
+      ReductionBounds.PortCompletion.Moves.bounded ReductionBounds.PortCompletion.acceptedPreserves
+      ReductionBounds.PortCompletion.noRetransmission ReductionBounds.PortCompletion.behaviorInvariant
+      ReductionBounds.PortCompletion.conditionalCompletion ReductionBounds.PortCompletion.eventCountBound
+      ReductionBounds.PortCompletion.noFailureInvariant ReductionBounds.PortCompletion.successfulCompletion
+      ReductionBounds.PortCompletion.stalledNotComplete ReductionBounds.PortCompletion.suppliedRanking
+      ReductionBounds.PortCompletion.suppliedPostAcceptance ReductionBounds.PortCompletion.suppliedSuccessSpec
+      ReductionBounds.PortCompletion.suppliedStateInvariant
+      ReductionBounds.PortCompletion.suppliedTerminalBudget)
+    generic ++ port_trace_theorems(candidate) ++ port_completion_theorems(candidate)
+  end
+
   defp case_study_theorems(%{source: :integer_cost_fragment} = candidate) do
     global =
       ~w(ReductionBounds.IntegerCost.inclusionSound ReductionBounds.IntegerCost.derivationSound
@@ -319,6 +345,24 @@ defmodule ReductionBounds.ProofInput do
   end
 
   defp case_study_theorems(_candidate), do: []
+
+  defp port_trace_theorems(%{trace_checked: true}) do
+    ~w(ReductionBounds.PortCompletion.suppliedConfigurationStates
+      ReductionBounds.PortCompletion.suppliedMovesCertificate ReductionBounds.PortCompletion.suppliedMoves
+      ReductionBounds.PortCompletion.suppliedTraceRank ReductionBounds.PortCompletion.suppliedActiveBudget)
+  end
+
+  defp port_trace_theorems(_candidate), do: []
+
+  defp port_completion_theorems(%{completion_status: :conditional, goal: :success}) do
+    ~w(ReductionBounds.PortCompletion.suppliedConditionalCompletion
+      ReductionBounds.PortCompletion.suppliedSuccessfulCompletion)
+  end
+
+  defp port_completion_theorems(%{completion_status: :conditional}),
+    do: ~w(ReductionBounds.PortCompletion.suppliedConditionalCompletion)
+
+  defp port_completion_theorems(_candidate), do: []
 
   defp integer_cost_theorems(candidate, prefix) do
     local =

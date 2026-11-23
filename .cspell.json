@@ -39,6 +39,7 @@
     "bignum",
     "componentwise",
     "simpa",
-    "unmodeled"
+    "unmodeled",
+    "nonterminal"
   ]
 }

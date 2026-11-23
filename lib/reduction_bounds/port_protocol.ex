@@ -12,6 +12,13 @@ defmodule ReductionBounds.PortProtocol do
   rejected-submission retries. It imposes no count bounds or progress
   assumptions. Units are symbolic labels and do not identify ERTS reductions.
   External computation and port-side costs are not inferred or bounded.
+
+  `:timeout_elapsed` represents an application receive-timeout observation
+  while awaiting a response, followed by caller-owned `:handle_timeout`.
+  It is not a timeout option for port command submission and cannot interrupt
+  a suspended submission. `:decode_error` is a distinct terminal outcome.
+  Conditional completion requires separate progress and finite-loop conditions;
+  neither an accepted command nor a cost bound establishes response arrival.
   """
 
   alias ReductionBounds.{Protocol, ProtocolConditions}
@@ -34,12 +41,15 @@ defmodule ReductionBounds.PortProtocol do
         :response_available,
         :response_received,
         :closure_observed,
+        :timeout_observed,
+        :timed_out,
+        :decode_failed,
         :complete,
         :failed,
         :closed
       ],
       initial: :idle,
-      terminal: [:complete, :failed, :closed],
+      terminal: [:complete, :failed, :closed, :timed_out, :decode_failed],
       events: %{
         prepare: work,
         submit_accepted: work,
@@ -51,6 +61,9 @@ defmodule ReductionBounds.PortProtocol do
         inspect_message: work,
         receive_response: work,
         decode: work,
+        decode_error: work,
+        handle_timeout: work,
+        timeout_elapsed: environment,
         handle_closure: work,
         response_arrived: environment,
         port_closed: environment
@@ -72,6 +85,9 @@ defmodule ReductionBounds.PortProtocol do
           {:response_available, :inspect_message, :response_available},
           {:response_available, :receive_response, :response_received},
           {:response_received, :decode, :complete},
+          {:response_received, :decode_error, :decode_failed},
+          {:awaiting_response, :timeout_elapsed, :timeout_observed},
+          {:timeout_observed, :handle_timeout, :timed_out},
           {:closure_observed, :handle_closure, :closed}
         ] ++ closure_transitions()
     )
@@ -138,8 +154,9 @@ defmodule ReductionBounds.PortProtocol do
        when event in [:prepare, :submit_accepted, :submit_rejected, :submit_suspended],
        do: [:request]
 
-  defp data_fields(event) when event in [:response_arrived, :receive_response, :decode],
-    do: [:response]
+  defp data_fields(event)
+       when event in [:response_arrived, :receive_response, :decode, :decode_error],
+       do: [:response]
 
   defp data_fields(:inspect_message), do: [:message]
   defp data_fields(_event), do: []
