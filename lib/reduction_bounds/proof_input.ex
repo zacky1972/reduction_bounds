@@ -51,6 +51,17 @@ defmodule ReductionBounds.ProofInput do
     packaged_postludes(proof, ["IntegerSize.lean", "Protocol.lean", "ProtocolConditions.lean"])
   end
 
+  @spec protocol_cost_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def protocol_cost_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, [
+      "IntegerSize.lean",
+      "Protocol.lean",
+      "ProtocolConditions.lean",
+      "ProtocolCost.lean"
+    ])
+  end
+
   @spec integer_postludes(Lynx.Lean.t()) ::
           {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
   def integer_postludes(%Lynx.Lean{} = proof) do
@@ -214,6 +225,21 @@ defmodule ReductionBounds.ProofInput do
       ReductionBounds.ProtocolConditions.suppliedConditionsSound
       ReductionBounds.ProtocolConditions.suppliedCountKeys
       ReductionBounds.ProtocolConditions.suppliedCountsMatch)
+  end
+
+  defp case_study_theorems(%{source: :protocol_cost, owners: owners}) do
+    generic =
+      ~w(ReductionBounds.ProtocolCost.featureBound
+      ReductionBounds.ProtocolCost.Expr.monotone ReductionBounds.ProtocolCost.costSafety
+      ReductionBounds.ProtocolCost.prefixCostLe ReductionBounds.ProtocolCost.prefixCostSafety
+      ReductionBounds.ProtocolCost.boundExprCorrect ReductionBounds.ProtocolCost.suppliedCostCertificate
+      ReductionBounds.ProtocolCost.suppliedCostSafety ReductionBounds.ProtocolCost.suppliedPrefixSafety
+      ReductionBounds.ProtocolCost.suppliedTraceBudget ReductionBounds.ProtocolCost.suppliedTracePrefixes)
+
+    generic ++
+      Enum.with_index(owners, fn _owner, index ->
+        "ReductionBounds.ProtocolCost.suppliedBoundMatches#{index}"
+      end)
   end
 
   defp case_study_theorems(%{source: :integer_cost_fragment} = candidate) do

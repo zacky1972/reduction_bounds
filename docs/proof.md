@@ -1926,3 +1926,73 @@ The inequalities bound the symbolic cost model. To obtain an upper
 bound for ERTS reductions, a separate proof must relate the charges to
 the accounting of the target ERTS build, including when the built-in
 yields and resumes under a fresh reduction budget.
+
+## Cost safety for finite protocol traces and prefixes
+
+`ProtocolCost.new/2` associates every owned state/event context with a
+nonnegative cost expression and a counter. Constants and participant-scoped
+symbolic charges can be combined by addition, multiplication, and maximum.
+Data references use both byte length and structural size; integer references
+use the magnitude bit-length bounds from `IntegerSize`. A reference must be
+required by the corresponding condition rule. Environmental observations
+cannot be assigned work. A counter must count that context, including the
+state-dependent distinction between a fresh submission and its resumption.
+
+For participant `p` and counter `k`, let `M(p,k)` be the maximum of the
+capped expressions assigned to that pair, and `N(k)` its declared finite
+count limit. The generated budget is
+
+\[
+ B_p=\sum_k N(k)M(p,k).
+\]
+
+Capping replaces each size reference by its supplied upper bound. The
+expression language is monotone in these nonnegative parameters, even for
+products. Alternatives share a maximum; they are not all charged at each
+occurrence. An event contributes its expression only to its unique owner.
+Participant budgets retain their declared cost units and are not added
+across participants. Participants without modeled work events are reported
+as `unmodeled_participants`, without a claim about their actual work.
+
+In `ProtocolCost.lean`, `featureBound` connects the row conditions to actual
+size parameters. `Expr.monotone` and `localBound` bound each local event.
+`traceBound` sums these inequalities; `costSafety` applies the finite counter
+limits. `prefixCostLe` proves that taking any aligned prefix cannot increase
+the cost. `prefixCostSafety` therefore establishes the same budget for every
+prefix of any finite trace satisfying the supplied size and count conditions.
+The empty trace and prefixes ending in suspended or waiting states are
+included. No terminal-state premise is required.
+
+`ProtocolCostProof.build/3` emits `suppliedCostCertificate`, checking complete
+work-context coverage, feature permissions, counted contexts, and budget
+groups. `suppliedCostSafety` and `suppliedPrefixSafety` quantify over arbitrary
+finite event, state, and observation lists under `RowsHold` and `CountsHold`;
+they are not restricted to the example trace. Protocol validity is checked
+separately by the existing `Protocol` certificate. For a valid execution,
+these theorems apply to its certified event/state sequence. Generated
+`suppliedBoundMatches` theorems also check that the returned Elixir formulas
+are exactly Lean's `boundExpr`. `suppliedTraceBudget` and
+`suppliedTracePrefixes` specialize safety to the supplied trace. Selected
+proof dependencies are audited against the existing axiom allowlist.
+
+Constructors return `lean_status: :not_checked`; constructing a proof does
+not execute Lean. To run the checks, pass the generated proof through
+`ProofInput.protocol_cost_postludes/1`, assemble it with `ProofInput`, and
+run `Lynx.Commands.verify!/2`, as demonstrated by the proof test.
+
+Reproduce the tests with:
+
+```sh
+mix test --only protocol_cost
+```
+
+The tests include empty traces, suspension before completion, rejected
+submissions followed by retries, receive inspections and successful responses,
+large integer bounds, and symbolic charges. Negative checks reject missing
+work rules, charges on environmental events, unsupported size references,
+counters that do not count a context, forged formulas, altered evidence,
+and unfinished proofs. These results concern the declared symbolic cost
+semantics. Association of observations with real data, source-code
+correspondence, concrete reduction accounting, and wall-clock time remain
+outside the proof. Bounded finite-trace work does not prove eventual response,
+scheduling, timeout completion, or any other progress property.

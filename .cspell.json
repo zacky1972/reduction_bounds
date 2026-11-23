@@ -38,6 +38,7 @@
     "elim",
     "bignum",
     "componentwise",
-    "simpa"
+    "simpa",
+    "unmodeled"
   ]
 }
