@@ -138,3 +138,7 @@ immutable fixture ownership, parameterized scenarios and selected-suite comparis
 
 See [controlled job-budget calibration](job_calibration.md) for a sequential
 cold/warm full-suite comparison of job limits on the target machine.
+
+The [conditional optimization review](runner_optimization_review.md) separates
+actual-call residuals from waiting and keeps runner reuse and cold scheduling
+subject to controlled evidence and a supported upstream API.

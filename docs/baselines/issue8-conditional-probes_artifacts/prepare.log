@@ -1,0 +1,137 @@
+==> earmark_parser
+Compiling 3 files (.erl)
+Compiling 32 files (.ex)
+Generated earmark_parser app
+==> file_system
+Compiling 7 files (.ex)
+Generated file_system app
+==> circular_buffer
+Compiling 1 file (.ex)
+Generated circular_buffer app
+==> bunt
+Compiling 2 files (.ex)
+Generated bunt app
+Build completed successfully (67 jobs).
+==> lynx
+Compiling 1 file (.erl)
+Compiling 8 files (.ex)
+Generated lynx app
+==> jason
+Compiling 10 files (.ex)
+Generated jason app
+==> erlex
+Compiling 2 files (.erl)
+Compiling 2 files (.ex)
+Generated erlex app
+==> nimble_parsec
+Compiling 4 files (.ex)
+Generated nimble_parsec app
+==> makeup
+Compiling 15 files (.ex)
+Generated makeup app
+==> makeup_elixir
+Compiling 6 files (.ex)
+Generated makeup_elixir app
+==> makeup_erlang
+Compiling 4 files (.ex)
+Compiling lib/makeup/lexers/erlang_lexer.ex (it's taking more than 10s)
+Generated makeup_erlang app
+==> ex_doc
+Compiling 30 files (.ex)
+Generated ex_doc app
+==> dialyxir
+Compiling 70 files (.ex)
+Generated dialyxir app
+==> credo
+Compiling 257 files (.ex)
+Generated credo app
+==> nimble_pool
+Compiling 2 files (.ex)
+Generated nimble_pool app
+==> bun
+Compiling 5 files (.ex)
+Generated bun app
+==> spellweaver
+Compiling 2 files (.ex)
+Generated spellweaver app
+==> nstandard
+Compiling 2 files (.ex)
+    warning: Igniter.Project.Application.app_name/1 is undefined (module Igniter.Project.Application is not available or is yet to be defined)
+    │
+ 20 │     app_name = ProjectApplication.app_name(igniter)
+    │                                   ~
+    │
+    └─ lib/nstandard/igniters.ex:20:35: Nstandard.Igniters.add_docs/1
+    └─ lib/nstandard/igniters.ex:38:35: Nstandard.Igniters.add_package/1
+
+    warning: Igniter.Project.MixProject.update/4 is undefined (module Igniter.Project.MixProject is not available or is yet to be defined)
+    │
+ 72 │       |> MixProject.update(
+    │                     ~
+    │
+    └─ lib/nstandard/igniters.ex:72:21: Nstandard.Igniters.add_linters/1
+    └─ lib/nstandard/igniters.ex:221:19: Nstandard.Igniters.new_project_function/3
+    └─ lib/nstandard/igniters.ex:252:20: Nstandard.Igniters.add_kv_pairs/3
+    └─ lib/nstandard/igniters.ex:254:20: Nstandard.Igniters.add_kv_pairs/3
+    └─ lib/nstandard/igniters.ex:273:19: Nstandard.Igniters.new_project_string/3
+
+    warning: Igniter.Project.Deps.add_dep/3 is undefined (module Igniter.Project.Deps is not available or is yet to be defined)
+    │
+ 84 │       ProjectDeps.add_dep(igniter, dep, append?: true)
+    │                   ~
+    │
+    └─ lib/nstandard/igniters.ex:84:19: Nstandard.Igniters.add_linters/1
+
+     warning: Igniter.create_new_file/4 is undefined (module Igniter is not available or is yet to be defined). Make sure the module name is correct and has been specified in full (or that an alias has been defined)
+     │
+ 112 │     |> Igniter.create_new_file(".credo.exs", contents, on_exists: :warning)
+     │                ~
+     │
+     └─ lib/nstandard/igniters.ex:112:16: Nstandard.Igniters.add_credo_config/1
+     └─ lib/nstandard/igniters.ex:122:16: Nstandard.Igniters.add_license/1
+     └─ lib/nstandard/igniters.ex:135:16: Nstandard.Igniters.add_changelog/1
+     └─ lib/nstandard/igniters.ex:145:16: Nstandard.Igniters.add_dialyzer_ignore/1
+     └─ lib/nstandard/igniters.ex:194:16: Nstandard.Igniters.add_cspell_config/1
+     └─ lib/nstandard/igniters.ex:205:16: Nstandard.Igniters.add_dependabot/1
+     └─ lib/nstandard/igniters.ex:216:16: Nstandard.Igniters.add_ci/1
+
+     warning: Igniter.exists?/2 is undefined (module Igniter is not available or is yet to be defined). Make sure the module name is correct and has been specified in full (or that an alias has been defined)
+     │
+ 149 │     if Igniter.exists?(igniter, "config/config.exs") do
+     │                ~
+     │
+     └─ lib/nstandard/igniters.ex:149:16: Nstandard.Igniters.add_bun_config/1
+
+     warning: Igniter.Project.Config.configure_new/5 is undefined (module Igniter.Project.Config is not available or is yet to be defined)
+     │
+ 150 │       ProjectConfig.configure_new(
+     │                     ~
+     │
+     └─ lib/nstandard/igniters.ex:150:21: Nstandard.Igniters.add_bun_config/1
+
+     warning: Igniter.mkdir/2 is undefined (module Igniter is not available or is yet to be defined). Make sure the module name is correct and has been specified in full (or that an alias has been defined)
+     │
+ 204 │     |> Igniter.mkdir(".github")
+     │                ~
+     │
+     └─ lib/nstandard/igniters.ex:204:16: Nstandard.Igniters.add_dependabot/1
+     └─ lib/nstandard/igniters.ex:215:16: Nstandard.Igniters.add_ci/1
+
+     warning: Rewrite.source/2 is undefined (module Rewrite is not available or is yet to be defined). Make sure the module name is correct and has been specified in full (or that an alias has been defined)
+     │
+ 260 │     case Rewrite.source(igniter.rewrite, "mix.exs") do
+     │                  ~
+     │
+     └─ lib/nstandard/igniters.ex:260:18: Nstandard.Igniters.has_defp_in_mix?/2
+
+     warning: Rewrite.Source.get/2 is undefined (module Rewrite.Source is not available or is yet to be defined)
+     │
+ 263 │         |> Source.get(:content)
+     │                   ~
+     │
+     └─ lib/nstandard/igniters.ex:263:19: Nstandard.Igniters.has_defp_in_mix?/2
+
+Generated nstandard app
+==> reduction_bounds
+Compiling 49 files (.ex)
+Generated reduction_bounds app

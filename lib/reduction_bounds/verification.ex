@@ -147,6 +147,7 @@ defmodule ReductionBounds.Verification do
       finished = now()
       runner_ms = milliseconds(finished - assembled)
       module_ms = Enum.sum(Enum.map(reports, & &1.time_ms))
+      cacheable = Map.new(files, &{&1["module"], Map.has_key?(&1, "cache_key")})
 
       emit(path, %{
         id: id,
@@ -159,7 +160,11 @@ defmodule ReductionBounds.Verification do
         module_wall_ms: module_ms,
         runner_non_module_wall_ms: max(0, runner_ms - module_ms),
         reports:
-          Enum.map(reports, &Map.take(&1, [:module, :status, :cached, :time_ms, :theorems]))
+          Enum.map(reports, fn report ->
+            report
+            |> Map.take([:module, :status, :cached, :time_ms, :theorems])
+            |> Map.put(:cacheable, Map.get(cacheable, report.module, false))
+          end)
       })
 
       reports

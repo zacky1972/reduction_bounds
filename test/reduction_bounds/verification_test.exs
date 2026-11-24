@@ -49,6 +49,10 @@ defmodule ReductionBounds.VerificationTest do
     assert completed["runner_wall_ms"] >= completed["module_wall_ms"]
     assert completed["reports"] |> hd() |> Map.fetch!("cached") == false
     assert completed["reports"] |> hd() |> Map.fetch!("theorems") == []
+    assert completed["reports"] |> hd() |> Map.fetch!("cacheable") == false
+    refute Map.has_key?(hd(reports), :cacheable)
+    evidence = ReductionBounds.Benchmark.summarize(events(path)).optimization_evidence
+    assert evidence.request_groups["uncacheable_or_bypassed"].paired_requests == 1
   end
 
   @tag :tmp_dir

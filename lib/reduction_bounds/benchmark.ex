@@ -4,7 +4,7 @@ defmodule ReductionBounds.Benchmark do
 
   alias Mix.Dep.Lock
 
-  alias ReductionBounds.Benchmark.Command
+  alias ReductionBounds.Benchmark.{Command, Opportunities}
 
   @spec run(keyword()) :: map()
   def run(opts) do
@@ -117,6 +117,7 @@ defmodule ReductionBounds.Benchmark do
       suite: Enum.find(events, &(&1["event"] == "suite_finished")),
       cached_modules: Enum.count(reports, & &1["cached"]),
       module_reports: reports,
+      optimization_evidence: Opportunities.summarize(events),
       theorem_timings_available: Enum.any?(reports, &(&1["theorems"] != []))
     }
   end
@@ -302,6 +303,12 @@ defmodule ReductionBounds.Benchmark do
         families: "all packaged families and reusable generated models",
         preparation: "coalesced by finalized dependency keys and compiled runtime context",
         untracked_external_imports: "uncached with dependents"
+      },
+      runner_backend: %{
+        request_mode: "one_shot",
+        module_schedule: "dependency_ordered_sequential",
+        shared_preparation: "coalesced_dependency_closure",
+        reusable_session_api: "not integrated"
       },
       timing_scope:
         "preparation is an isolated Mix build; existing dependency Lean build artifacts may be reused",

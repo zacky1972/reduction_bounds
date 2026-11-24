@@ -43,13 +43,14 @@ initial compilation needed to load this Mix task are outside the measured scope.
 - Request events separate assembly from the runner call and preserve module
   `time_ms`, `cached`, status, and available theorem timings. The runner's module
   durations cover rendering, imports, elaboration, auditing, and artifact writes.
-- `runner_non_module_wall_ms` is the remaining runner-call wall time. It includes
+- `runner_non_module_wall_ms` is the request interval after assembly minus module time. It includes
   preparation coordination, job admission queueing, Lake/process startup, shared-runtime initialization,
   protocol, and teardown.
   The pinned Lynx API cannot isolate these components individually. The
-  `runner_empty` and `runner_runtime` workloads provide startup-only and trivial
-  runtime-loading probes; differences between separate runs are estimates,
-  rather than exact initialization timings.
+  `runner_empty` and `runner_runtime` workloads provide empty-request and trivial-proof
+  one-shot probes. The empty request skips runtime imports in the pinned runner.
+  Differences between separate runs are estimates, not isolated startup or
+  exact initialization timings.
 - Empty theorem-timing arrays mean timings are unavailable (or no elaboration
   occurred on a cache hit), not that proof cost was zero.
 - All packaged proof families reuse checked named theories and target modules.
@@ -127,3 +128,8 @@ CPU sampling, suite-only runs and the process-wide Lean concurrency limit.
 
 For a controlled sequential comparison of global job budgets, use
 `mix reduction_bounds.calibrate`; see [job-budget calibration](job_calibration.md).
+
+See the [conditional runner optimization review](runner_optimization_review.md)
+for paired call residuals, cache-policy evidence and the gates for runner reuse
+and cold dependency scheduling. Use `mix reduction_bounds.assess` to reprocess
+a stored benchmark with adjacent event artifacts without invoking Lean.
