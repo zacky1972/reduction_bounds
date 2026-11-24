@@ -39,6 +39,12 @@ defmodule ReductionBounds.ProofInput do
     packaged_postludes(proof, ["Protocol.lean"])
   end
 
+  @spec rpc_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def rpc_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, ["Protocol.lean", "RpcProtocol.lean"])
+  end
+
   @spec protocol_condition_postludes(Lynx.Lean.t()) ::
           {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
   def protocol_condition_postludes(%Lynx.Lean{} = proof) do
@@ -261,6 +267,18 @@ defmodule ReductionBounds.ProofInput do
   end
 
   def scope_evidence(_candidate), do: %{}
+
+  defp case_study_theorems(%{source: :rpc_trace}) do
+    case_study_theorems(%{source: :protocol_trace}) ++
+      ~w(ReductionBounds.RpcProtocol.checkTraceSound
+        ReductionBounds.RpcProtocol.ValidTrace.requestCorrelation
+        ReductionBounds.RpcProtocol.ValidTrace.monitorCorrelation
+        ReductionBounds.RpcProtocol.suppliedContractMatches
+        ReductionBounds.RpcProtocol.suppliedErasure
+        ReductionBounds.RpcProtocol.suppliedRpcCertificate
+        ReductionBounds.RpcProtocol.suppliedRpcTraceSound
+        ReductionBounds.RpcProtocol.suppliedOutcomeMatches)
+  end
 
   defp case_study_theorems(%{source: :protocol_trace}) do
     ~w(ReductionBounds.Protocol.checkFromSound ReductionBounds.Protocol.checkTraceSound

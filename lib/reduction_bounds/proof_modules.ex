@@ -61,6 +61,12 @@ defmodule ReductionBounds.ProofModules do
       imports: []
     },
     %{
+      id: :rpc_protocol,
+      module: "ReductionBounds.Proofs.RpcProtocol",
+      source: "RpcProtocol.lean",
+      imports: [:protocol]
+    },
+    %{
       id: :protocol_conditions,
       module: "ReductionBounds.Proofs.ProtocolConditions",
       source: "ProtocolConditions.lean",

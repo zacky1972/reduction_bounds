@@ -2399,3 +2399,53 @@ retry and receive inspection paths, missing progress, conflicting completion
 conditions, unsupported target routing and source/model scope separation.
 It does not execute an external Port program, validate actual helper contracts,
 connect arbitrary Core receive code, or establish runtime/time correspondence.
+
+## Initial RPC model
+
+The first Issue 4 milestone reuses `Protocol` for a single-attempt same-node
+client/server protocol with one outstanding request. It adds independent abstract
+request and optional process-monitor identifiers. Work ownership stays separate
+for client and server; request/reply arrival, timeout and peer-down events are
+unowned observations. Sending does not imply delivery. Peer-down paths require
+an explicit monitor setup event. Retries and second sends are not admitted.
+
+`RpcProtocol.check_trace/2` validates a supplied model in Elixir, including direct
+struct construction and canonical contract equality. Its candidate always retains
+`lean_status: :not_checked`; merely building a proof does not establish a checked
+result. It distinguishes a pending prefix, successful reply processing, timeout,
+observed peer termination and decode failure. These classify a supplied trace,
+not eventual outcomes of arbitrary executions.
+
+`RpcProtocol.lean` fixes the monitored and unmonitored transition declarations.
+The generic `checkTraceSound` theorem connects the RPC Boolean certificate to
+`Protocol.Runs` plus a correlation predicate for every annotated event.
+`ValidTrace.requestCorrelation` and `ValidTrace.monitorCorrelation` recover the
+request token and the nonempty declared monitor token for the relevant events.
+The existing protocol soundness, invariant and exclusive-owner rules remain in
+use; they are not copied into a separate RPC runner.
+
+The generated target also checks:
+
+- `suppliedContractMatches`: serialized protocol declarations equal the canonical
+  RPC contract for that session, rather than an arbitrary supplied transition graph.
+- `suppliedErasure`: the annotated RPC events erase to the generic protocol events.
+- `suppliedRpcCertificate` and `suppliedRpcTraceSound`: the concrete trace satisfies
+  the canonical protocol and correlation predicate.
+- `suppliedOutcomeMatches`: its reported outcome agrees with the checked final state.
+
+All selected theorems and named-module dependencies retain the existing axiom
+allowlist. The RPC shared module depends on `Protocol`, using the existing
+verification boundary, preparation coordinator and artifact cache. Its source
+and dependency changes affect finalized keys. The embedded path uses the same
+packaged definitions. Tests check both paths, shared reuse across request IDs,
+transitive invalidation and independent Lean rejection of altered tokens, units,
+outcomes and unfinished certificates.
+
+This milestone does not prove mailbox contents, unmatched-message retention,
+ordered clause/guard selection, inspection bounds or the actual association of
+an observation with an Erlang message. The token model does not establish fresh
+reference generation or compiler receive optimization. There are no RPC size,
+cost, progress, source-code, runtime-reduction or wall-clock claims. Timeout ends
+the modeled client trace without asserting cancellation of server work or removal
+of late replies. The [RPC guide](examples/rpc.md) gives construction and low-level
+verification commands, supported outcomes and the remaining milestones.

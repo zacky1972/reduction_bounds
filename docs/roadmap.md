@@ -23,11 +23,18 @@ The original evaluation targets now have model-level analyses:
   theorems from source correspondence and unresolved completion obligations.
 - The public proof workflow records assumptions, checked theorem names,
   trusted processing, and unverified runtime claims.
+- An initial RPC model checks supplied single-attempt protocol traces and
+  request/monitor correlation on the shared communication foundation. It does
+  not yet analyze mailbox behavior or derive RPC cost/completion bounds.
 
 These descriptions refer to the checked models and supported fragments;
 see the proof reference for the remaining correspondence obligations.
 
 ## Further model development
+
+- Add RPC mailbox and selective-receive semantics, size/count conditions,
+  participant cost bounds, conditional completion and a supported source
+  connection. The [initial model](examples/rpc.md) is the first milestone.
 
 - Extend the supported program fragments and reusable contracts while
   continuing to report unsupported operations and unresolved obligations.
