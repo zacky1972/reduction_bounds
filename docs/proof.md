@@ -2496,3 +2496,29 @@ cost safety, server mailbox behavior, reply provenance, progress and source/runt
 correspondence remain subsequent work. See the
 [mailbox guide](examples/rpc_mailbox.md) for the grammar, supported guards,
 conditions, counters, timeline and reproduction commands.
+
+
+## RPC participant-specific cost safety
+
+The shared `RpcCost.lean` theory extracts disjoint operation counts from the
+connected RPC/mailbox state. Its fixed owner mapping keeps client and server
+units separate; coarse receive/inspection observations add no second charge.
+`participantSafety` and `prefixSafety` quantify over arbitrary natural work
+ledgers satisfying explicit count and cost-envelope contracts. They apply to
+finite pending prefixes without a progress premise. They do not infer future
+arrival limits or establish a runtime ledger correspondence.
+
+The generated proof checks operation-count equality, count caps and both numeric
+budget identities. Its admitted-run theorem applies to arbitrary modeled runs
+under the same count and envelope conditions. A server handler is either an
+explicit assumed bound or a replayed unary integer derivation under a declarative
+`:server_work` contract. Replay recovers current Core and checks the original
+source, derivation and contract through bound transfer. The request payload's
+input coverage is kernel-checked; each ledger handler execution can discharge
+its envelope from the replayed theorem. Server receiving/sending still requires
+an independent frame contract. All final theorems undergo the existing
+transitive axiom audit, named-module caching and global job budget.
+
+See the [cost guide](examples/rpc_cost.md) for the exact assumptions, proof workflow
+and deferred source/completion work. In particular, atomic modeled handler costs
+do not establish costs for arbitrary unfinished server source prefixes.

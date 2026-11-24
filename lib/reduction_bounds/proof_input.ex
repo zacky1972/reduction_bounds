@@ -63,6 +63,18 @@ defmodule ReductionBounds.ProofInput do
     ])
   end
 
+  @spec rpc_cost_postludes(Lynx.Lean.t(), keyword()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error()}
+  def rpc_cost_postludes(proof, options \\ []) do
+    roots =
+      [:rpc_cost] ++
+        if(options[:handler] == :replay, do: [:integer_cost_source, :bound_transfer], else: [])
+
+    {:ok, ReductionBounds.ProofModules.load(roots) ++ [proof]}
+  rescue
+    error in File.Error -> {:error, {:read_lean, error.path, error.reason}}
+  end
+
   @spec protocol_condition_postludes(Lynx.Lean.t()) ::
           {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
   def protocol_condition_postludes(%Lynx.Lean{} = proof) do
@@ -285,6 +297,24 @@ defmodule ReductionBounds.ProofInput do
   end
 
   def scope_evidence(_candidate), do: %{}
+
+  defp case_study_theorems(%{source: :rpc_cost, handler: handler}) do
+    case_study_theorems(%{source: :rpc_mailbox}) ++
+      ~w(ReductionBounds.RpcCost.participantSafety ReductionBounds.RpcCost.prefixSafety
+        ReductionBounds.RpcCost.composeServer ReductionBounds.RpcCost.composeServerCalls
+        ReductionBounds.RpcCost.suppliedServerRequestSize ReductionBounds.RpcCost.suppliedCountsMatch
+        ReductionBounds.RpcCost.suppliedCountsFit ReductionBounds.RpcCost.suppliedClientBudget
+        ReductionBounds.RpcCost.suppliedServerBudget ReductionBounds.RpcCost.suppliedCostSafety
+        ReductionBounds.RpcCost.suppliedPrefixSafety ReductionBounds.RpcCost.admittedCostSafety) ++
+      if handler == :replay do
+        ~w(RpcHandler.transferredNumericBound RpcHandler.transferredSourceBound
+          RpcHandler.requestArgumentMatches RpcHandler.requestInputCovered
+          RpcHandler.composedServerBound RpcHandler.replayedCoverage
+          RpcHandler.replayedCostSafety RpcHandler.replayedPrefixSafety)
+      else
+        ~w(ReductionBounds.RpcCost.suppliedServerComposition)
+      end
+  end
 
   defp case_study_theorems(%{source: :rpc_mailbox}) do
     case_study_theorems(%{source: :rpc_trace}) ++

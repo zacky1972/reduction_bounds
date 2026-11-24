@@ -41,3 +41,5 @@ if System.get_env("REDUCTION_BOUNDS_BENCH_EVENTS") do
       Enum.uniq(ExUnit.configuration()[:formatters] ++ [ReductionBounds.Benchmark.TestFormatter])
   )
 end
+
+Code.require_file("support/rpc_cost_support.ex", __DIR__)

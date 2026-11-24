@@ -152,3 +152,5 @@ REDUCTION_BOUNDS_LEAN_JOBS=4 LEAN_NUM_THREADS=2 \
   mix test test/reduction_bounds/mailbox_test.exs \
            test/reduction_bounds/mailbox_proof_test.exs
 ```
+
+The next layer adds [participant cost safety and server contracts](rpc_cost.md).

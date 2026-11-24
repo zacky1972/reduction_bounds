@@ -85,6 +85,12 @@ defmodule ReductionBounds.ProofModules do
       imports: [:rpc_protocol, :mailbox]
     },
     %{
+      id: :rpc_cost,
+      module: "ReductionBounds.Proofs.RpcCost",
+      source: "RpcCost.lean",
+      imports: [:rpc_mailbox]
+    },
+    %{
       id: :protocol_conditions,
       module: "ReductionBounds.Proofs.ProtocolConditions",
       source: "ProtocolConditions.lean",

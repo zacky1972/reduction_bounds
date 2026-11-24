@@ -89,3 +89,10 @@ benefits and overhead in smaller workflows.
 Named and embedded paths share source providers; both remain supported for
 comparison and audits. See [verification defaults](verification_defaults.md)
 for the retained policy and mixed workload measurements.
+
+
+The RPC cost layer adds `ReductionBounds.Proofs.RpcCost`, depending on the
+connected RPC/mailbox theory. Handler replay additionally loads the existing
+integer source and bound-transfer closure. Neither path introduces a separate
+runner or admission budget. Changed mailbox dependencies invalidate downstream
+cost artifacts through the same dependency-aware cache.
