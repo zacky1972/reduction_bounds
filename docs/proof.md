@@ -2593,3 +2593,21 @@ Helpers' native receive implementations, totality, exceptions and unfinished
 source prefixes remain unverified. Extraction, reification, abstraction and
 serialization remain trusted. See the [source guide](examples/rpc_source.md) for
 the exact accepted fragment, conditional formula and proof workflow.
+
+
+## Public RPC verification boundary
+
+The public model, conditions-only and restricted source entry points build the
+existing certificates, load their ordered shared dependencies and use the same
+target verification/timeout and central `Verification` path as other analyses.
+They preserve coalesced preparation, dependency keys, final axiom audits and the
+per-VM job budget. No RPC-specific runner or limiter is added.
+
+RPC result construction requires nonempty all-successful reports including the
+final target. Builders still return unchecked candidates. Checked model costs do
+not discharge progress; only compatible completion declarations enable a
+conditional theorem status. Assumed server bounds stay assumed and replayed
+handler evidence is reported as checked under its retained contracts. Restricted
+source correspondence is explicitly checked under contracts, with mailbox/data
+association, helper implementation and source totality obligations retained.
+See the [public workflow](examples/rpc_workflow.md) for the result schema and APIs.

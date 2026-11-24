@@ -47,13 +47,17 @@ The original evaluation targets now have model-level analyses:
   helper implementation/totality obligations remain explicit. It is not native
   receive analysis; see the [source guide](examples/rpc_source.md).
 
+- Public RPC APIs now submit model, conditions-only and restricted source proofs
+  through the shared verification boundary and report checked facts, conditional
+  completion, assumptions, unsupported features and unresolved obligations.
+
 These descriptions refer to the checked models and supported fragments;
 see the proof reference for the remaining correspondence obligations.
 
 ## Further model development
 
-- Integrate the restricted RPC source workflow and validate its applicability
-  reporting, while keeping helper contracts and model/source guarantees distinct.
+- Extend RPC applicability reporting and supported source forms while preserving
+  the [public workflow](examples/rpc_workflow.md) and its model/source boundaries.
   Extend source coverage beyond the [contracted fragment](examples/rpc_source.md)
   only with corresponding semantic evidence.
   Repeated RPC attempts require explicit retry and duplicate-execution contracts.

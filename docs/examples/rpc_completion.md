@@ -174,3 +174,5 @@ cost theory and Port completion. Named-module caching, dependency invalidation,
 transitive axiom audits and the global job budget are shared. Port APIs and
 proofs are unchanged. The [restricted source connection](rpc_source.md) adds finite normal-execution
 correspondence; model completion must not be relabeled as source termination.
+
+See the [public RPC workflow](rpc_workflow.md) for verification and result reporting.

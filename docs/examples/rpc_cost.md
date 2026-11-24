@@ -172,3 +172,5 @@ source-level exception paths and actual server mailbox scanning are not proved.
 Cost safety does not establish arrival, fairness, scheduling, successful reply,
 or deadline completion. The [conditional completion layer](rpc_completion.md) adds explicit progress
 premises independently of these cost theorems.
+
+See the [public RPC workflow](rpc_workflow.md) for verification and result reporting.

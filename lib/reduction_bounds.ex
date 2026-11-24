@@ -1185,6 +1185,104 @@ defmodule ReductionBounds do
     end
   end
 
+  @doc """
+  Verifies a supplied RPC mailbox timeline and assesses conditional completion.
+
+  Accepts a `RpcCost` profile. `completion: [progress: [...], goal: :termination | :success]`
+  declares universal model progress, never inferred from costs or a successful example.
+  Missing progress leaves verified conditional cost safety usable. Standard `timeout`,
+  `max_concurrency` and `lean_options` apply through the existing verification boundary.
+  Assumed contracts remain assumed; this does not verify runtime progress or source code.
+  """
+  @spec verify_rpc_model(map(), list(), list(), keyword()) :: {:ok, map()} | {:error, term()}
+  def verify_rpc_model(profile, queue, timeline, options \\ []) do
+    rpc_model(profile, queue, timeline, options, :cost)
+  end
+
+  @doc """
+  Verifies RPC mailbox conditions and conditional completion without a cost profile.
+
+  Uses a `RpcConditions` profile and the same completion and verification options
+  as `verify_rpc_model/4`. A checked model trace is not source correspondence.
+  """
+  @spec verify_rpc_conditions(map(), list(), list(), keyword()) :: {:ok, map()} | {:error, term()}
+  def verify_rpc_conditions(conditions, queue, timeline, options \\ []) do
+    rpc_model(conditions, queue, timeline, options, :conditions)
+  end
+
+  defp rpc_model(profile, queue, timeline, options, mode) do
+    with {:ok, options} <- validate_options(options, :rpc_model),
+         {completion, options} = Keyword.pop!(options, :completion),
+         {:ok, candidate, proof} <- rpc_model_proof(mode, profile, queue, timeline, completion),
+         {:ok, postludes} <-
+           ReductionBounds.ProofInput.rpc_completion_postludes(proof,
+             cost: mode == :cost,
+             handler: get_in(candidate, [:server_contract, :kind])
+           ) do
+      function = if mode == :cost, do: :verify_rpc_model, else: :verify_rpc_conditions
+      verify_rpc_candidate({__MODULE__, function, 4}, candidate, postludes, options)
+    end
+  end
+
+  defp rpc_model_proof(mode, p, q, t, c) do
+    ReductionBounds.Profile.measure(:source_generation, "RpcCompletionProof.build", fn ->
+      case mode do
+        :cost -> ReductionBounds.RpcCompletionProof.build_with_cost(p, q, t, c)
+        :conditions -> ReductionBounds.RpcCompletionProof.build(p, q, t, c)
+      end
+    end)
+  end
+
+  @doc """
+  Verifies a restricted helper-contracted RPC source fragment and conditional bound.
+
+  The target has server, reference, integer payload and timeout arguments. Supply
+  `calls: %{reply: {Helpers, :await_reply, 3}, decode: {Helpers, :decode, 1}}`.
+  `beam_binaries`, timeout, concurrency and Lean options use the existing workflow.
+  The verified claim covers finite normal reified-Core executions under input,
+  primitive/helper and mailbox/data association contracts. Native receive is
+  unsupported. Helper bodies, source termination and runtime charging stay unverified.
+  See the RPC source guide for the exact accepted Core forms and applicability.
+  """
+  @spec infer_rpc_bound(target(), map(), keyword()) :: {:ok, map()} | {:error, term()}
+  def infer_rpc_bound(target, profile, options \\ []) do
+    with :ok <- validate_targets([target]),
+         true <- Keyword.keyword?(options),
+         {source_options, verify_options} = Keyword.split(options, [:calls]),
+         {:ok, verify_options} <- validate_options(verify_options, :struct_bound),
+         {:ok, candidate, proof} <-
+           ReductionBounds.Profile.measure(:source_generation, "RpcSourceProof.build", fn ->
+             ReductionBounds.RpcSourceProof.build(
+               target,
+               profile,
+               source_options ++ Keyword.take(verify_options, [:beam_binaries])
+             )
+           end),
+         {:ok, postludes} <-
+           ReductionBounds.ProofInput.rpc_source_postludes(proof,
+             handler: candidate.server_contract.kind
+           ) do
+      verify_rpc_candidate(
+        target,
+        candidate,
+        postludes,
+        Keyword.delete(verify_options, :beam_binaries)
+      )
+    else
+      false -> {:error, :invalid_options}
+      error -> error
+    end
+  end
+
+  defp verify_rpc_candidate(target, candidate, postludes, options) do
+    with {:ok, translation} <- prepare_translation(postludes, [], %{}) do
+      case verify_targets(translation, [target], options, candidate.source) do
+        [{^target, {:ok, reports}}] -> ReductionBounds.RpcResult.verified(candidate, reports)
+        [{^target, {:error, reason}}] -> {:error, reason}
+      end
+    end
+  end
+
   defp verify_bound(target, candidate, proof, options) do
     source = Map.get(candidate, :source, :translated)
 
@@ -1313,6 +1411,9 @@ defmodule ReductionBounds do
   defp option_defaults(:inline, defaults), do: [:postlude | defaults]
   defp option_defaults(:list_bound, defaults), do: [:input_contract | defaults]
 
+  defp option_defaults(:rpc_model, defaults),
+    do: [completion: []] ++ Keyword.drop(defaults, [:beam_binaries, :termination_suffixes])
+
   defp option_defaults(:port_model, defaults),
     do:
       [observations: %{}, completion: []] ++
@@ -1351,6 +1452,8 @@ defmodule ReductionBounds do
     do: [:periodic_contract | Keyword.delete(defaults, :termination_suffixes)]
 
   defp option_defaults(_scope, defaults), do: defaults
+
+  defp valid_option_for?(:rpc_model, {:completion, value}), do: Keyword.keyword?(value)
 
   defp valid_option_for?(:port_model, {:observations, value}),
     do: is_map(value) and not is_struct(value)

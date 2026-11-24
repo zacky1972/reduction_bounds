@@ -190,3 +190,5 @@ totality, source termination, runtime correspondence and elapsed time remain
 unverified. [Model conditional completion](rpc_completion.md) is not promoted to
 source termination. Public workflow integration and broader source coverage are
 subsequent work in Issue #4.
+
+See the [public RPC workflow](rpc_workflow.md) for verification and result reporting.
