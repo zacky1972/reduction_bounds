@@ -2558,3 +2558,38 @@ reports do not prove external scheduling or delivery assumptions. Builders keep
 `:not_checked`; source termination and runtime correspondence remain unresolved.
 See the [completion guide](examples/rpc_completion.md) for the declarations,
 statuses, exact semantic boundary and verification workflow.
+
+
+## Restricted RPC source correspondence
+
+`RpcSource` reifies the pinned compiler's accepted Core blocks for a four-argument
+client: direct request tuple construction, one sequenced `:erlang.send/2`, a static
+contracted reply case and a decoding tail call or literal timeout return. The
+connection checks argument identities, clause order, timeout association and
+terminal handling. Unsupported native receive, monitoring, loops, guards,
+exceptions and dynamic calls produce target/structural-path diagnostics.
+
+`RpcSource.lean` defines finite normal source evaluation and its connected RPC
+program. `sourceAgreement` preserves values, calls and local work; `modelSafe`
+constructs correlated canonical protocol segments under explicit helper/primitive
+contracts. The generated request, send-argument and reply-argument theorems check
+how abstract input preconditions are carried through request construction.
+These preconditions identify the supplied request, not all values of a similar
+size. The fallback case failure is excluded by helper result contracts, not
+assigned zero work.
+
+The mailbox bridge additionally requires a checked mailbox execution, event-name
+association, reply-payload/timeout data association and a checked protocol
+projection ending at that state. Canonical transition determinism establishes
+final-state agreement. These association certificates remain explicit obligations;
+the source builder does not infer runtime helper/mailbox correspondence.
+`connectedCostBound` and the generated source bound combine structural source
+nodes with covered model work under compatible, disjoint accounting, preserving
+the server's separate budget and any replayed handler assumptions.
+
+The source theory reuses the RPC cost closure and central verification/cache/audit
+boundary. It does not import completion to manufacture source termination.
+Helpers' native receive implementations, totality, exceptions and unfinished
+source prefixes remain unverified. Extraction, reification, abstraction and
+serialization remain trusted. See the [source guide](examples/rpc_source.md) for
+the exact accepted fragment, conditional formula and proof workflow.

@@ -41,13 +41,21 @@ The original evaluation targets now have model-level analyses:
   timeout, peer termination and decoding failure. Suspended cost safety does not
   require progress; see the [completion guide](examples/rpc_completion.md).
 
+- A restricted RPC source client now constructs and sends one request, then
+  dispatches a contracted reply/timeout helper result. Its finite normal-execution
+  theorem connects to correlated protocol traces; mailbox/data association and
+  helper implementation/totality obligations remain explicit. It is not native
+  receive analysis; see the [source guide](examples/rpc_source.md).
+
 These descriptions refer to the checked models and supported fragments;
 see the proof reference for the remaining correspondence obligations.
 
 ## Further model development
 
-- Build a supported RPC source connection on the checked
-  [mailbox conditions](examples/rpc_mailbox.md) and conditional model theorems.
+- Integrate the restricted RPC source workflow and validate its applicability
+  reporting, while keeping helper contracts and model/source guarantees distinct.
+  Extend source coverage beyond the [contracted fragment](examples/rpc_source.md)
+  only with corresponding semantic evidence.
   Repeated RPC attempts require explicit retry and duplicate-execution contracts.
 
 - Extend the supported program fragments and reusable contracts while

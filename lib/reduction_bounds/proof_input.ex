@@ -88,6 +88,18 @@ defmodule ReductionBounds.ProofInput do
     error in File.Error -> {:error, {:read_lean, error.path, error.reason}}
   end
 
+  @spec rpc_source_postludes(Lynx.Lean.t(), keyword()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error()}
+  def rpc_source_postludes(proof, options \\ []) do
+    roots =
+      [:rpc_source] ++
+        if(options[:handler] == :replay, do: [:integer_cost_source, :bound_transfer], else: [])
+
+    {:ok, ReductionBounds.ProofModules.load(roots) ++ [proof]}
+  rescue
+    error in File.Error -> {:error, {:read_lean, error.path, error.reason}}
+  end
+
   @spec protocol_condition_postludes(Lynx.Lean.t()) ::
           {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
   def protocol_condition_postludes(%Lynx.Lean{} = proof) do
@@ -310,6 +322,21 @@ defmodule ReductionBounds.ProofInput do
   end
 
   def scope_evidence(_candidate), do: %{}
+
+  defp case_study_theorems(%{source: :rpc_source, handler: handler}) do
+    case_study_theorems(%{source: :rpc_cost, handler: handler}) ++
+      ~w(ReductionBounds.RpcSource.localBound ReductionBounds.RpcSource.sourceAgreement
+        ReductionBounds.RpcSource.modelSafe ReductionBounds.RpcSource.emptyContracts
+        ReductionBounds.RpcSource.suppliedContractsWithoutNormalReturn ReductionBounds.RpcSource.canonicalDeterministic
+        ReductionBounds.RpcSource.finalUnique ReductionBounds.RpcSource.connectedCostBound
+        ReductionBounds.RpcSource.suppliedRegistryValid ReductionBounds.RpcSource.suppliedTimeoutMatches
+        ReductionBounds.RpcSource.suppliedConnection ReductionBounds.RpcSource.suppliedLocalBudget
+        ReductionBounds.RpcSource.suppliedSourceFormulaMatches
+        ReductionBounds.RpcSource.suppliedRequestConstruction ReductionBounds.RpcSource.suppliedCorrelation
+        ReductionBounds.RpcSource.suppliedSendArguments ReductionBounds.RpcSource.suppliedReplyArguments
+        ReductionBounds.RpcSource.suppliedSourceAgreement
+        ReductionBounds.RpcSource.suppliedSourceMailboxBridge ReductionBounds.RpcSource.suppliedSourceBound)
+  end
 
   defp case_study_theorems(%{source: :rpc_completion} = c) do
     base =

@@ -102,3 +102,9 @@ cost artifacts through the same dependency-aware cache.
 importing RPC cost or Port completion. Optional cost composition loads the
 existing cost/handler dependencies alongside it. Both workflows use the same
 verification, dependency keys, axiom audits and job admission boundary.
+
+
+`ReductionBounds.Proofs.RpcSource` imports the RPC cost closure. Optional replayed
+handlers reuse the existing integer source/bound-transfer dependencies. The source
+connection keeps helper contracts and mailbox/data association obligations explicit;
+its dependencies do not include RPC completion or the Port source theory.

@@ -41,6 +41,7 @@ defmodule ReductionBounds.MixProject do
         "docs/examples/rpc_mailbox.md",
         "docs/examples/rpc_cost.md",
         "docs/examples/rpc_completion.md",
+        "docs/examples/rpc_source.md",
         "docs/proof.md",
         "docs/roadmap.md",
         "docs/toolchains.md",

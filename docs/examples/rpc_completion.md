@@ -172,5 +172,5 @@ replayed handler contracts retain their evidence status and applicability scope.
 The completion theory depends on the RPC/mailbox layer, independently of the
 cost theory and Port completion. Named-module caching, dependency invalidation,
 transitive axiom audits and the global job budget are shared. Port APIs and
-proofs are unchanged. The next Issue #4 milestone is a documented restricted
-source connection; model completion must not be relabeled as source termination.
+proofs are unchanged. The [restricted source connection](rpc_source.md) adds finite normal-execution
+correspondence; model completion must not be relabeled as source termination.
