@@ -132,7 +132,7 @@ defmodule ReductionBounds.Benchmark do
 
     tests =
       Enum.map(tests, fn test ->
-        related = Map.get(grouped, Map.take(test, ["module", "test"]), [])
+        related = Map.get(grouped, Map.take(test, ["module", "test", "parameters"]), [])
         completed = Enum.filter(related, &(&1["event"] == "completed"))
         phases = for %{"event" => "phase"} = event <- related, do: event
 
@@ -200,7 +200,9 @@ defmodule ReductionBounds.Benchmark do
         run(
           "suite",
           phase(repetition),
-          ["test", "--seed", to_string(opts[:seed]), "--max-cases", to_string(opts[:max_cases])],
+          ["test"] ++
+            Keyword.get(opts, :suite_files, []) ++
+            ["--seed", to_string(opts[:seed]), "--max-cases", to_string(opts[:max_cases])],
           env,
           artifacts,
           opts[:output]
@@ -284,6 +286,7 @@ defmodule ReductionBounds.Benchmark do
       target_max_concurrency: 2,
       target_timeout_ms: 60_000,
       suite_seed: opts[:seed],
+      suite_files: Keyword.get(opts, :suite_files, []),
       suite_runs: if(opts[:suite], do: 1 + Keyword.get(opts, :suite_repetitions, 0), else: 0),
       warm_repetitions: opts[:repetitions],
       workloads: opts[:workloads],

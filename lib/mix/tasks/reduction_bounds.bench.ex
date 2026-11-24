@@ -10,7 +10,8 @@ defmodule Mix.Tasks.ReductionBounds.Bench do
   `--repetitions N` (warm workload runs, default 3), `--[no-]suite` (default true),
   `--max-cases N`, `--seed N`, and `--keep-workspace`.
   Use `--suite-only` to profile just the ordinary suite; `--suite-repetitions N`
-  adds N warm suite runs after the cold run. Test timings are recorded without
+  adds N warm suite runs after the cold run. With `--suite-only`, use
+  `--test-files PATHS` (comma-separated) to compare a selected test cohort. Test timings are recorded without
   enabling trace mode. REDUCTION_BOUNDS_LEAN_JOBS sets the per-VM job limit (default 2).
 
   Logs and per-request events are saved beside the JSON report. Each workload has
@@ -37,6 +38,7 @@ defmodule Mix.Tasks.ReductionBounds.Bench do
           repetitions: :integer,
           suite: :boolean,
           suite_only: :boolean,
+          test_files: :string,
           suite_repetitions: :integer,
           max_cases: :integer,
           seed: :integer,
@@ -67,10 +69,14 @@ defmodule Mix.Tasks.ReductionBounds.Bench do
     unless (names != [] or opts[:suite_only]) and Enum.all?(names, &(&1 in Workloads.names())),
       do: Mix.raise("invalid workload selection")
 
+    opts = Keyword.put(opts, :suite_files, selected_test_files(opts))
     Benchmark.run(Keyword.put(opts, :workloads, Enum.uniq(names)))
   end
 
   defp validate_suite!(opts) do
+    if opts[:test_files] && not opts[:suite_only],
+      do: Mix.raise("test-files requires suite-only")
+
     if opts[:suite_only] and (not opts[:suite] or opts[:workloads]),
       do: Mix.raise("suite-only requires suite and cannot select workloads")
 
@@ -84,6 +90,19 @@ defmodule Mix.Tasks.ReductionBounds.Bench do
              Mix.raise(
                "repetitions and max-cases must be positive; seed and suite-repetitions must be nonnegative"
              )
+  end
+
+  defp selected_test_files(opts) do
+    files = String.split(opts[:test_files] || "", ",", trim: true)
+    if opts[:test_files] && files == [], do: Mix.raise("test-files cannot be empty")
+    Enum.each(files, &validate_test_file!/1)
+    files
+  end
+
+  defp validate_test_file!(file) do
+    unless String.starts_with?(Path.expand(file), Path.expand("test") <> "/") and
+             String.ends_with?(file, "_test.exs") and File.regular?(file),
+           do: Mix.raise("test-files must select existing test files inside test/")
   end
 
   defp selected_workloads(opts) do

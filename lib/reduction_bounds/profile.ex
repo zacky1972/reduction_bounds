@@ -50,14 +50,20 @@ defmodule ReductionBounds.Profile do
     [self() | Process.get(:"$callers", [])] |> Enum.find_value(&label_context/1)
   end
 
-  defp label_context(pid) do
-    case Process.get_label(pid) do
-      {module, test} when is_atom(module) and is_atom(test) ->
-        if function_exported?(module, :__ex_unit__, 0),
-          do: %{module: inspect(module), test: Atom.to_string(test)}
+  defp label_context(pid), do: label_context_for(Process.get_label(pid))
 
-      _ ->
-        nil
-    end
+  defp label_context_for({module, test}) when is_atom(module) and is_atom(test),
+    do: base_context(module, test)
+
+  defp label_context_for({module, test, parameters}) when is_atom(module) and is_atom(test) do
+    if context = base_context(module, test),
+      do: Map.put(context, :parameters, inspect(parameters))
+  end
+
+  defp label_context_for(_label), do: nil
+
+  defp base_context(module, test) do
+    if function_exported?(module, :__ex_unit__, 0),
+      do: %{module: inspect(module), test: Atom.to_string(test)}
   end
 end

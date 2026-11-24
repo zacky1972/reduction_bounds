@@ -1,56 +1,85 @@
-defmodule ReductionBounds.BoundTransferTest do
-  use ExUnit.Case, async: false
+defmodule ReductionBounds.BoundTransferSupport do
+  import ExUnit.Assertions
+  alias ReductionBounds.{CostContract, IntegerSize}
+  alias ReductionBounds.Fixtures.IntegerCostPrograms, as: Fixture
 
-  alias ReductionBounds.{BoundTransfer, CostContract, IntegerSize, ProofInput}
-  alias __MODULE__.Fixture
+  def assert_transfer(name, beam) do
+    {_name, inputs} = examples() |> Enum.find(fn {program, _inputs} -> program == name end)
+    bound = original(name, inputs, beam)
 
-  @moduletag timeout: 120_000
+    assert {:ok, result} =
+             ReductionBounds.transfer_integer_bound(bound, contract(:destination, 1),
+               beam_binaries: [beam]
+             )
 
-  setup_all do
-    source =
-      __DIR__
-      |> Path.join("../fixtures/integer_cost_programs.ex")
-      |> File.read!()
-      |> String.replace("ReductionBounds.Fixtures.IntegerCostPrograms", "#{Fixture}")
-
-    [{Fixture, beam}] = Code.compile_string(source)
-    on_exit(fn -> unload(Fixture) end)
-    %{beam: beam}
+    assert result.upper_bound == bound.upper_bound
+    assert result.upper_bound_contract == :source
+    assert result.upper_bound_value == result.comparison.budget_values.larger
+    assert result.upper_bound_value > result.comparison.budget_values.smaller
+    assert result.bound_transfer == :checked
+    assert result.source_bound_rechecked
+    assert result.comparison_rechecked
+    assert result.contract_instantiation == :checked
+    assert result.runtime_correspondence == :not_checked
+    assert "SourceBound.integerCostSourceBound" in result.checked_theorems
+    assert "Comparison.operationOrdering" in result.checked_theorems
+    assert "transferredCostChain" in result.checked_theorems
+    assert "transferredSourceBound" in result.checked_theorems
+    assert "transferredTotal" in result.checked_theorems
+    assert Enum.all?(result.reports, &(&1.status == :ok))
   end
 
-  test "rechecks and transfers arithmetic, branches, CRC expressions, and finite recursion", %{
-    beam: beam
-  } do
-    for {name, inputs} <- [
-          {:product, [size(-4, 4, 3)]},
-          {:guarded, [size(-4, 4, 3)]},
-          {:crc_step, [size(0, 255, 8)]},
-          {:crc64_step, [size(0, 255, 8)]},
-          {:sum, [size(0, 3, 2), IntegerSize.from_integer(0)]}
-        ] do
-      bound = original(name, inputs, beam)
+  def examples do
+    [
+      {:product, [size(-4, 4, 3)]},
+      {:guarded, [size(-4, 4, 3)]},
+      {:crc_step, [size(0, 255, 8)]},
+      {:crc64_step, [size(0, 255, 8)]},
+      {:sum, [size(0, 3, 2), IntegerSize.from_integer(0)]}
+    ]
+  end
 
-      assert {:ok, result} =
-               ReductionBounds.transfer_integer_bound(bound, contract(:destination, 1),
-                 beam_binaries: [beam]
-               )
+  def original(name, inputs, beam, options \\ []) do
+    target = {Fixture, name, length(inputs)}
 
-      assert result.upper_bound == bound.upper_bound
-      assert result.upper_bound_contract == :source
-      assert result.upper_bound_value == result.comparison.budget_values.larger
-      assert result.upper_bound_value > result.comparison.budget_values.smaller
-      assert result.bound_transfer == :checked
-      assert result.source_bound_rechecked
-      assert result.comparison_rechecked
-      assert result.contract_instantiation == :checked
-      assert result.runtime_correspondence == :not_checked
-      assert "SourceBound.integerCostSourceBound" in result.checked_theorems
-      assert "Comparison.operationOrdering" in result.checked_theorems
-      assert "transferredCostChain" in result.checked_theorems
-      assert "transferredSourceBound" in result.checked_theorems
-      assert "transferredTotal" in result.checked_theorems
-      assert Enum.all?(result.reports, &(&1.status == :ok))
-    end
+    assert {:ok, bound} =
+             ReductionBounds.infer_integer_cost_bound(
+               target,
+               [input_sizes: inputs, beam_binaries: [beam], cost_contract: contract(:source, 2)] ++
+                 options
+             )
+
+    bound
+  end
+
+  def contract(id, base, auxiliary \\ %{}) do
+    names = CostContract.operations() ++ Map.keys(auxiliary)
+    functions = Map.new(names, &{&1, {:add, base, {:max, :left, :right}}})
+
+    {:ok, result} =
+      CostContract.new(id: id, functions: functions, auxiliary_parameters: auxiliary)
+
+    result
+  end
+
+  def size(lower, upper, bits),
+    do: %IntegerSize{lower: lower, upper: upper, magnitude_bits: bits}
+end
+
+defmodule ReductionBounds.BoundTransferTest do
+  use ExUnit.Case, async: true
+
+  alias ReductionBounds.{BoundTransfer, CostContract, IntegerSize, ProofInput}
+  alias ReductionBounds.Fixtures.IntegerCostPrograms, as: Fixture
+
+  import ReductionBounds.BoundTransferSupport,
+    only: [original: 3, original: 4, contract: 2, contract: 3, size: 3]
+
+  @moduletag timeout: 300_000
+
+  setup_all do
+    {Fixture, beam} = ReductionBounds.TestFixtures.integer_cost_programs()
+    %{beam: beam}
   end
 
   test "retains a recursive size invariant during transfer", %{beam: beam} do
@@ -276,19 +305,6 @@ defmodule ReductionBounds.BoundTransferTest do
              )
   end
 
-  defp original(name, inputs, beam, options \\ []) do
-    target = {Fixture, name, length(inputs)}
-
-    assert {:ok, bound} =
-             ReductionBounds.infer_integer_cost_bound(
-               target,
-               [input_sizes: inputs, beam_binaries: [beam], cost_contract: contract(:source, 2)] ++
-                 options
-             )
-
-    bound
-  end
-
   defp call_bound(beam) do
     size = size(0, 4, 3)
     source = contract(:source, 2, %{absolute: {:argument_bits, :unused}})
@@ -308,16 +324,6 @@ defmodule ReductionBounds.BoundTransferTest do
              )
 
     bound
-  end
-
-  defp contract(id, base, auxiliary \\ %{}) do
-    names = CostContract.operations() ++ Map.keys(auxiliary)
-    functions = Map.new(names, &{&1, {:add, base, {:max, :left, :right}}})
-
-    {:ok, result} =
-      CostContract.new(id: id, functions: functions, auxiliary_parameters: auxiliary)
-
-    result
   end
 
   defp callee_proof(small, large, difference) do
@@ -345,12 +351,28 @@ defmodule ReductionBounds.BoundTransferTest do
     ReductionBounds.Verification.verify!(translation)
   end
 
-  defp size(lower, upper, bits),
-    do: %IntegerSize{lower: lower, upper: upper, magnitude_bits: bits}
-
   defp unload(module) do
     :code.purge(module)
     :code.delete(module)
     :code.purge(module)
+  end
+end
+
+defmodule ReductionBounds.BoundTransferScenarioTest do
+  use ExUnit.Case,
+    async: true,
+    parameterize:
+      for(
+        {name, _inputs} <- ReductionBounds.BoundTransferSupport.examples(),
+        do: %{program: name}
+      )
+
+  @moduletag timeout: 300_000
+  setup :label_scenario
+  defp label_scenario(context), do: ReductionBounds.TestFixtures.label_scenario(context)
+
+  test "rechecks and transfers a compiled program", %{program: program} do
+    {_module, beam} = ReductionBounds.TestFixtures.integer_cost_programs()
+    ReductionBounds.BoundTransferSupport.assert_transfer(program, beam)
   end
 end

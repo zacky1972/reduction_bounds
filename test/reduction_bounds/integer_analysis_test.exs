@@ -1,18 +1,12 @@
 defmodule ReductionBounds.IntegerAnalysisTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
   alias ReductionBounds.{IntegerAnalysis, IntegerSize}
   alias ReductionBounds.Fixtures.IntegerPrograms, as: Fixture
 
+  @moduletag timeout: 300_000
+
   setup_all do
-    path = Path.expand("../fixtures/integer_programs.ex", __DIR__)
-    [{Fixture, beam}] = Code.compile_file(path)
-
-    on_exit(fn ->
-      :code.purge(Fixture)
-      :code.delete(Fixture)
-      :code.purge(Fixture)
-    end)
-
+    {Fixture, beam} = ReductionBounds.TestFixtures.integer_programs()
     %{beam: beam}
   end
 

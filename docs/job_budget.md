@@ -132,3 +132,6 @@ of full-suite speedup. Keep cache state, Lean threads and machine settings fixed
 
 The [recorded suite profile and job comparison](baselines/issue8-job-budget.md)
 identify expensive tests and the measured memory/wall-time trade-off.
+
+See [fixture isolation and selected concurrent tests](test_concurrency.md) for
+immutable fixture ownership, parameterized scenarios and selected-suite comparisons.

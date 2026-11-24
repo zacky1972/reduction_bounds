@@ -1,5 +1,6 @@
 defmodule ReductionBounds.PortSourceProofTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
+  @moduletag timeout: 300_000
 
   alias ReductionBounds.{PortProtocol, PortSourceProof, ProofInput, ProtocolCost, ProtocolSize}
   alias ReductionBounds.Fixtures.{PortClient, PortHelpers}

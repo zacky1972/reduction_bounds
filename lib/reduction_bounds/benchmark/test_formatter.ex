@@ -7,7 +7,7 @@ defmodule ReductionBounds.Benchmark.TestFormatter do
 
   @impl true
   def handle_cast({:test_finished, test}, state) do
-    ReductionBounds.Profile.emit_to(state, %{
+    event = %{
       event: :test_finished,
       module: inspect(test.module),
       test: Atom.to_string(test.name),
@@ -16,8 +16,14 @@ defmodule ReductionBounds.Benchmark.TestFormatter do
       async: test.tags[:async] == true,
       wall_ms: test.time / 1000,
       state: inspect(test.state)
-    })
+    }
 
+    event =
+      if test.parameters == %{},
+        do: event,
+        else: Map.put(event, :parameters, inspect(test.parameters))
+
+    ReductionBounds.Profile.emit_to(state, event)
     {:noreply, state}
   end
 

@@ -1,49 +1,11 @@
-defmodule ReductionBounds.ContractWorkflowTest do
-  use ExUnit.Case, async: false
-
+defmodule ReductionBounds.ContractWorkflowSupport do
+  import ExUnit.Assertions
   alias ReductionBounds.{CostContract, IntegerSize}
-  alias __MODULE__.{Cases, Programs}
+  alias ReductionBounds.Fixtures.IntegerCostPrograms, as: Programs
+  alias ReductionBounds.Fixtures.IntegerCostCases, as: Cases
 
-  @moduletag :cost_contract_workflow
-  @moduletag timeout: 180_000
-
-  setup_all do
-    fixtures = [
-      {Programs, "integer_cost_programs.ex", "ReductionBounds.Fixtures.IntegerCostPrograms"},
-      {Cases, "integer_cost_cases.ex", "ReductionBounds.Fixtures.IntegerCostCases"}
-    ]
-
-    beams =
-      Enum.map(fixtures, fn {module, file, original} ->
-        source =
-          __DIR__
-          |> Path.join("../fixtures/#{file}")
-          |> File.read!()
-          |> String.replace(original, "#{module}")
-
-        [{^module, beam}] = Code.compile_string(source)
-        beam
-      end)
-
-    on_exit(fn ->
-      for {module, _file, _original} <- fixtures do
-        :code.purge(module)
-        :code.delete(module)
-        :code.purge(module)
-      end
-    end)
-
-    %{beams: beams}
-  end
-
-  test "public workflows report checked bounds and their assumptions for representative programs",
-       %{
-         beams: beams
-       } do
-    source = contract(:source, 2)
-    destination = contract(:destination, 1)
-
-    examples = [
+  def examples do
+    [
       {Programs, :product, [size(-4, 4, 3)]},
       {Programs, :guarded, [size(-4, 4, 3)]},
       {Programs, :sum, [size(0, 3, 2), IntegerSize.from_integer(0)]},
@@ -51,48 +13,100 @@ defmodule ReductionBounds.ContractWorkflowTest do
       {Cases, :crc64_update, [size(0, 255, 8), size(0, 255, 8)]},
       {Cases, :crc64_reflected_index, [size(0, Integer.pow(2, 64) - 1, 64), size(0, 255, 8)]}
     ]
+  end
 
-    for {module, name, inputs} <- examples do
-      target = {module, name, length(inputs)}
+  def assert_workflow(program, beams) do
+    source = contract(:source, 2)
+    destination = contract(:destination, 1)
+    {module, name, inputs} = Enum.find(examples(), fn {_, name, _} -> name == program end)
+    target = {module, name, length(inputs)}
 
-      assert {:ok, original} =
-               ReductionBounds.infer_integer_cost_bound(target,
-                 input_sizes: inputs,
-                 cost_contract: source,
-                 beam_binaries: beams
-               )
+    assert {:ok, original} =
+             ReductionBounds.infer_integer_cost_bound(target,
+               input_sizes: inputs,
+               cost_contract: source,
+               beam_binaries: beams
+             )
 
-      assert {:ok, comparison} =
-               ReductionBounds.compare_cost_contracts(destination, source,
-                 budget: original.upper_bound
-               )
+    assert {:ok, comparison} =
+             ReductionBounds.compare_cost_contracts(destination, source,
+               budget: original.upper_bound
+             )
 
-      assert comparison.verification_scope.contracts == %{smaller: :destination, larger: :source}
-      assert :conditional_execution_order in comparison.verification_scope.checked
-      assert :target_applicability in comparison.verification_scope.unverified
-      conditions = comparison.verification_scope.assumptions.execution_conditions
-      assert :callee_value_agreement in conditions
-      assert comparison.bound_transfer == :not_checked
+    assert comparison.verification_scope.contracts == %{smaller: :destination, larger: :source}
+    assert :conditional_execution_order in comparison.verification_scope.checked
+    assert :target_applicability in comparison.verification_scope.unverified
+    conditions = comparison.verification_scope.assumptions.execution_conditions
+    assert :callee_value_agreement in conditions
+    assert comparison.bound_transfer == :not_checked
 
-      assert {:ok, transferred} =
-               ReductionBounds.transfer_integer_bound(original, destination, beam_binaries: beams)
+    assert {:ok, transferred} =
+             ReductionBounds.transfer_integer_bound(original, destination, beam_binaries: beams)
 
-      scope = transferred.verification_scope
-      assert scope.contracts == %{from: :source, to: :destination}
-      assert :bound_transfer in scope.checked
-      assert :termination_under_source_call_contracts in scope.checked
-      assert :wall_clock_time in scope.unverified
-      assert :runtime_correspondence in scope.unverified
-      assert scope.assumptions.source_call_contracts == []
-      assert transferred.upper_bound_value == comparison.budget_values.larger
-      assert transferred.upper_bound_value >= comparison.budget_values.smaller
-      assert transferred.upper_bound == original.upper_bound
-      assert transferred.upper_bound_contract == :source
-      assert transferred.runtime_correspondence == :not_checked
-      assert "transferredCostChain" in transferred.checked_theorems
-      assert "transferredTotal" in transferred.checked_theorems
-      report(name, transferred)
+    scope = transferred.verification_scope
+    assert scope.contracts == %{from: :source, to: :destination}
+    assert :bound_transfer in scope.checked
+    assert :termination_under_source_call_contracts in scope.checked
+    assert :wall_clock_time in scope.unverified
+    assert :runtime_correspondence in scope.unverified
+    assert scope.assumptions.source_call_contracts == []
+    assert transferred.upper_bound_value == comparison.budget_values.larger
+    assert transferred.upper_bound_value >= comparison.budget_values.smaller
+    assert transferred.upper_bound == original.upper_bound
+    assert transferred.upper_bound_contract == :source
+    assert transferred.runtime_correspondence == :not_checked
+    assert "transferredCostChain" in transferred.checked_theorems
+    assert "transferredTotal" in transferred.checked_theorems
+    report(name, transferred)
+  end
+
+  def contract(id, base) do
+    expression = {:add, base, {:mul, :left, :right}}
+    functions = Map.new(CostContract.operations(), &{&1, expression})
+    {:ok, result} = CostContract.new(id: id, functions: functions)
+    result
+  end
+
+  def size(lower, upper, bits),
+    do: %IntegerSize{lower: lower, upper: upper, magnitude_bits: bits}
+
+  def report(name, result) do
+    if System.get_env("REDUCTION_BOUNDS_REPORT") == "1" do
+      snapshot =
+        Map.take(result, [
+          :target,
+          :input_sizes,
+          :source_contract,
+          :destination_contract,
+          :upper_bound,
+          :upper_bound_contract,
+          :upper_bound_value,
+          :verification_scope,
+          :checked_theorems
+        ])
+
+      IO.inspect(snapshot,
+        label: "#{name}",
+        pretty: true,
+        limit: :infinity,
+        printable_limit: :infinity
+      )
     end
+  end
+end
+
+defmodule ReductionBounds.ContractWorkflowTest do
+  use ExUnit.Case, async: true
+
+  alias ReductionBounds.CostContract
+  alias ReductionBounds.Fixtures.IntegerCostPrograms, as: Programs
+  import ReductionBounds.ContractWorkflowSupport, only: [contract: 2, size: 3, report: 2]
+
+  @moduletag :cost_contract_workflow
+  @moduletag timeout: 300_000
+
+  setup_all do
+    %{beams: ReductionBounds.TestFixtures.integer_cost_beams()}
   end
 
   test "call contracts remain visible in the public transfer report", %{beams: beams} do
@@ -211,38 +225,27 @@ defmodule ReductionBounds.ContractWorkflowTest do
                | functions: Map.delete(source.functions, :addition)
              })
   end
+end
 
-  defp contract(id, base) do
-    expression = {:add, base, {:mul, :left, :right}}
-    functions = Map.new(CostContract.operations(), &{&1, expression})
-    {:ok, result} = CostContract.new(id: id, functions: functions)
-    result
-  end
-
-  defp size(lower, upper, bits),
-    do: %IntegerSize{lower: lower, upper: upper, magnitude_bits: bits}
-
-  defp report(name, result) do
-    if System.get_env("REDUCTION_BOUNDS_REPORT") == "1" do
-      snapshot =
-        Map.take(result, [
-          :target,
-          :input_sizes,
-          :source_contract,
-          :destination_contract,
-          :upper_bound,
-          :upper_bound_contract,
-          :upper_bound_value,
-          :verification_scope,
-          :checked_theorems
-        ])
-
-      IO.inspect(snapshot,
-        label: "#{name}",
-        pretty: true,
-        limit: :infinity,
-        printable_limit: :infinity
+defmodule ReductionBounds.ContractWorkflowScenarioTest do
+  use ExUnit.Case,
+    async: true,
+    parameterize:
+      for(
+        {_module, name, _inputs} <- ReductionBounds.ContractWorkflowSupport.examples(),
+        do: %{program: name}
       )
-    end
+
+  @moduletag :cost_contract_workflow
+  @moduletag timeout: 300_000
+  setup :label_scenario
+
+  defp label_scenario(context), do: ReductionBounds.TestFixtures.label_scenario(context)
+
+  test "public workflows report checked bounds and their assumptions", %{program: program} do
+    ReductionBounds.ContractWorkflowSupport.assert_workflow(
+      program,
+      ReductionBounds.TestFixtures.integer_cost_beams()
+    )
   end
 end

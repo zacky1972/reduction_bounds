@@ -1,5 +1,6 @@
 defmodule ReductionBounds.PeriodicBoundTest do
   use ExUnit.Case, async: true
+  @moduletag timeout: 300_000
 
   import Lynx.Lean
 

@@ -1,5 +1,6 @@
 defmodule ReductionBounds.NormalizeTest do
   use ExUnit.Case, async: true
+  @moduletag timeout: 300_000
 
   alias ReductionBounds.{CoreFragment, CoreSource, Normalize, ProofInput, SearchBound}
   alias ReductionBounds.TestFixtures

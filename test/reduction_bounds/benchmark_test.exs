@@ -77,6 +77,37 @@ defmodule ReductionBounds.BenchmarkTest do
     assert hd(summary.tests.slowest)["test"] == "first"
   end
 
+  test "attributes parameterized instances independently" do
+    events =
+      for program <- ["first", "second"], event <- ["completed", "test_finished"] do
+        identity = %{
+          "module" => "ScenarioTest",
+          "test" => "one workflow",
+          "parameters" => program
+        }
+
+        case event do
+          "completed" ->
+            %{
+              "event" => event,
+              "context" => identity,
+              "assembly_ms" => 0,
+              "runner_wall_ms" => 2,
+              "runner_non_module_wall_ms" => 2,
+              "reports" => []
+            }
+
+          "test_finished" ->
+            Map.merge(identity, %{"event" => event, "async" => true, "wall_ms" => 3})
+        end
+      end
+
+    tests = Benchmark.summarize(events).tests.slowest
+    assert length(tests) == 2
+    assert Enum.all?(tests, &(&1["verification_requests"] == 1))
+    assert Enum.sort(Enum.map(tests, & &1["parameters"])) == ["first", "second"]
+  end
+
   test "rejects invalid benchmark options before preparing any build" do
     for args <- [
           ["--repetitions", "0"],
@@ -85,7 +116,11 @@ defmodule ReductionBounds.BenchmarkTest do
           ["--workloads", ",,"],
           ["--trace"],
           ["--suite-only", "--no-suite"],
-          ["--suite-repetitions", "-1"]
+          ["--suite-repetitions", "-1"],
+          ["--suite-only", "--test-files", "missing_test.exs"],
+          ["--suite-only", "--test-files", "mix.exs"],
+          ["--suite-only", "--test-files", ",,"],
+          ["--test-files", "test/reduction_bounds/benchmark_test.exs"]
         ] do
       assert_raise Mix.Error, fn -> Mix.Tasks.ReductionBounds.Bench.run(args) end
     end

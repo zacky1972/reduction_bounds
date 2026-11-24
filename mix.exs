@@ -43,10 +43,12 @@ defmodule ReductionBounds.MixProject do
         "docs/benchmarking.md",
         "docs/shared_proofs.md",
         "docs/job_budget.md",
+        "docs/test_concurrency.md",
         "docs/baselines/issue8-linux-otp29.md",
         "docs/baselines/issue8-integer-cache.md",
         "docs/baselines/issue8-all-proofs.md",
         "docs/baselines/issue8-job-budget.md",
+        "docs/baselines/issue8-fixture-concurrency.md",
         "LICENSE.md"
       ]
     ]

@@ -1,5 +1,6 @@
 defmodule ReductionBounds.ExecutionBoundTest do
   use ExUnit.Case, async: true
+  @moduletag timeout: 300_000
 
   alias ReductionBounds.{ExecutionBound, ProofInput}
   alias ReductionBounds.ExecutionBoundTest.{Callee, Fixture}

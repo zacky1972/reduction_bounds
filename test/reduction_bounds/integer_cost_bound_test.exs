@@ -1,19 +1,11 @@
 defmodule ReductionBounds.IntegerCostBoundTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
   alias ReductionBounds.{CostContract, IntegerCostBound, IntegerSize, ProofInput, SearchBound}
   alias ReductionBounds.Fixtures.IntegerCostPrograms, as: Fixture
-  @moduletag timeout: 120_000
+  @moduletag timeout: 300_000
 
   setup_all do
-    [{Fixture, beam}] =
-      Code.compile_file(Path.expand("../fixtures/integer_cost_programs.ex", __DIR__))
-
-    on_exit(fn ->
-      :code.purge(Fixture)
-      :code.delete(Fixture)
-      :code.purge(Fixture)
-    end)
-
+    {Fixture, beam} = ReductionBounds.TestFixtures.integer_cost_programs()
     %{beam: beam}
   end
 
