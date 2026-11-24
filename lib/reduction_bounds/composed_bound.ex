@@ -386,13 +386,11 @@ defmodule ReductionBounds.ComposedBound do
   def buffer_cost_proof(paths) do
     combined = paths |> Keyword.values() |> maximum() |> render_cost(:upper)
 
-    primitive_proof("Reverse", @reverse) <>
-      enum_reverse_proof() <>
-      """
-      def bufferUpperBound (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
-          (n : Nat) : Nat := #{combined}
+    """
+    def bufferUpperBound (reverseCharge : Nat → Nat → Nat) (bufferCharge : Nat → Nat)
+        (n : Nat) : Nat := #{combined}
 
-      """ <> buffer_path_proofs(paths)
+    """ <> buffer_path_proofs(paths)
   end
 
   defp buffer_path_proofs(paths) do
@@ -479,17 +477,25 @@ defmodule ReductionBounds.ComposedBound do
       file: "generated_composed_bound.lean",
       span: {1, 1},
       indentation: 0,
-      source:
-        primitive_proof("Member", @member) <>
-          primitive_proof("Reverse", @reverse) <>
-          primitive_lemmas() <>
-          program_proof(target, tree)
+      source: program_proof(target, tree)
     }
   end
 
+  @spec shared_source(atom()) :: String.t()
+  def shared_source(:list_member), do: primitive_proof("Member", @member)
+  def shared_source(:list_reverse), do: primitive_proof("Reverse", @reverse)
+  def shared_source(:list_primitives), do: primitive_lemmas()
+  def shared_source(:enum_reverse), do: enum_reverse_proof()
+
+  def shared_source(:buffer_paths),
+    do: buffer_cost_proof(ReductionBounds.CircularBufferBound.path_costs(:n))
+
   defp primitive_proof(namespace, target) do
     {:ok, candidate} = ListBound.infer(target, [])
-    "namespace #{namespace}\n" <> ListBound.proof(candidate).source <> "\nend #{namespace}\n\n"
+
+    "namespace #{namespace}\n" <>
+      "export _root_ (CostExpr CostExpr.eval CostExpr.calls CostExpr.paid CostExpr.seq CostExpr.tail ListCost ListCost.nil ListCost.stop ListCost.step costComposition listRulesSound listPathBounds)\n" <>
+      ListBound.proof(candidate).source <> "\nend #{namespace}\n\n"
   end
 
   defp primitive_lemmas() do

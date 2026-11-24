@@ -20,9 +20,10 @@ defmodule ReductionBounds.StructBoundTest do
               upper_bound: upper_bound,
               opaque_paths: [_, _] = opaque_paths,
               normalization: %{certificates: [], program: %{expression: expression}},
-              reports: [%{module: "Erlang.postlude", status: :ok}]
+              reports: reports
             }} = ReductionBounds.infer_struct_bound(target, beam_binaries: [beam])
 
+    assert_verified(reports)
     assert {:case_map_guarded, _, _, _, _, _} = expression
     charges = charges(upper_bound)
 
@@ -34,11 +35,12 @@ defmodule ReductionBounds.StructBoundTest do
   end
 
   test "composes a bound for a different field with the same rules", %{beam: beam} do
-    assert {:ok, %{upper_bound: upper_bound, reports: [%{status: :ok}]}} =
+    assert {:ok, %{upper_bound: upper_bound, reports: reports}} =
              ReductionBounds.infer_struct_bound({BoundedCounter, :set_limit, 2},
                beam_binaries: [beam]
              )
 
+    assert_verified(reports)
     charges = charges(upper_bound)
     assert {:operation_cost, :update} in charges
     refute {:operation_cost, :sub} in charges
@@ -52,12 +54,13 @@ defmodule ReductionBounds.StructBoundTest do
               upper_bound: upper_bound,
               value_agreement: :checked,
               normalization: %{certificates: [%{path: [:matched, :body], normalized: read}]},
-              reports: [%{status: :ok}]
+              reports: reports
             }} =
              ReductionBounds.infer_struct_bound({BoundedCounter, :read_checked, 1},
                beam_binaries: [beam]
              )
 
+    assert_verified(reports)
     assert {:field, _, "balance"} = read
     assert {:operation_cost, :map_match} in charges(upper_bound)
     refute {:operation_cost, :field} in charges(upper_bound)
@@ -77,10 +80,17 @@ defmodule ReductionBounds.StructBoundTest do
     assert {:ok, postludes} = ProofInput.postludes(proof)
     translation = Lynx.Translation.new(postludes: postludes)
 
-    assert [%{module: "Erlang.postlude", status: :ok}] =
-             ReductionBounds.Verification.verify!(translation,
-               postlude_imports: ["Erlang.erlang", "Erlang.maps"]
-             )
+    reports =
+      ReductionBounds.Verification.verify!(translation,
+        postlude_imports: ["Erlang.erlang", "Erlang.maps"]
+      )
+
+    assert_verified(reports)
+  end
+
+  defp assert_verified(reports) do
+    assert Enum.all?(reports, &(&1.status == :ok))
+    assert List.last(reports).module == "Erlang.postlude"
   end
 
   defp charges({operation, left, right}) when operation in [:add, :max],

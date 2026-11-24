@@ -12,9 +12,9 @@ defmodule Mix.Tasks.ReductionBounds.Bench do
 
   Logs and per-request events are saved beside the JSON report. Each workload has
   one cold-cache run followed by warm attempts in fresh VMs. The full suite
-  runs once when enabled. Integer workflows reuse checked shared modules and
-  target artifacts. Other families remain uncached. Set
-  REDUCTION_BOUNDS_PROOF_CACHE=off to recheck all integer modules, or
+  runs once when enabled. Packaged proof families reuse checked shared modules
+  and target artifacts; overlapping cold preparation is coalesced in each VM. Set
+  REDUCTION_BOUNDS_PROOF_CACHE=off to recheck all modules, or
   REDUCTION_BOUNDS_PROOF_MODE=embedded to compare the original embedded-source path.
   See `docs/benchmarking.md` for timing and memory interpretation.
   """

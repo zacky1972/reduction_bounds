@@ -76,10 +76,17 @@ defmodule ReductionBounds.Benchmark do
       runner_wall_ms_sum: Enum.sum(Enum.map(completed, & &1["runner_wall_ms"])),
       runner_non_module_wall_ms_sum:
         Enum.sum(Enum.map(completed, & &1["runner_non_module_wall_ms"])),
+      coordination_wall_ms_sum: coordination_time(completed),
       cached_modules: Enum.count(reports, & &1["cached"]),
       module_reports: reports,
       theorem_timings_available: Enum.any?(reports, &(&1["theorems"] != []))
     }
+  end
+
+  defp coordination_time(completed) do
+    if completed != [] and Enum.all?(completed, &is_map(&1["coordination"])) do
+      Enum.sum(Enum.map(completed, & &1["coordination"]["wall_ms"]))
+    end
   end
 
   defp workloads(opts, env, build, artifacts) do
@@ -205,9 +212,10 @@ defmodule ReductionBounds.Benchmark do
           Path.join(ReductionBounds.Verification.project_dir(), ".lake/build/bin/Lynx-Runner")
         ),
       verification_cache_policy: %{
-        integer_mode: System.get_env("REDUCTION_BOUNDS_PROOF_MODE", "named"),
-        integer_cache: System.get_env("REDUCTION_BOUNDS_PROOF_CACHE", "on"),
-        other_families: "uncached",
+        module_mode: System.get_env("REDUCTION_BOUNDS_PROOF_MODE", "named"),
+        verification_cache: System.get_env("REDUCTION_BOUNDS_PROOF_CACHE", "on"),
+        families: "all packaged families and reusable generated models",
+        preparation: "coalesced by finalized dependency keys and compiled runtime context",
         untracked_external_imports: "uncached with dependents"
       },
       timing_scope:

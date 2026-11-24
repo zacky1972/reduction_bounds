@@ -3,18 +3,11 @@ defmodule ReductionBounds.PeriodicBound do
 
   alias ReductionBounds.SearchBound
 
-  @proof_path Path.expand("../../priv/lean/reduction_bounds/Periodic.lean", __DIR__)
-  @external_resource @proof_path
-  @proof_source File.read!(@proof_path)
-
   @type formula ::
           non_neg_integer()
           | atom()
           | {:measure, :periodic_measure}
           | {:add | :sub | :mul | :div, formula(), formula()}
-
-  @spec rules_source() :: String.t()
-  def rules_source(), do: @proof_source
 
   @spec event_count(formula(), formula(), formula(), formula(), formula()) :: formula()
   def event_count(period, stride, origin, initial, steps) do
@@ -151,7 +144,7 @@ defmodule ReductionBounds.PeriodicBound do
       file: "generated_periodic_bound.lean",
       span: {1, 1},
       indentation: 0,
-      source: @proof_source <> target_source(candidate) <> contract_source(candidate, contract)
+      source: target_source(candidate) <> contract_source(candidate, contract)
     }
   end
 

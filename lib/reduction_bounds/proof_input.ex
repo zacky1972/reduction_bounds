@@ -122,6 +122,15 @@ defmodule ReductionBounds.ProofInput do
     ])
   end
 
+  @spec generated_postludes(Lynx.Lean.t()) :: {:ok, [Lynx.Lean.t()]} | {:error, read_error()}
+  def generated_postludes(proof) do
+    {:ok,
+     ReductionBounds.ProofModules.load(ReductionBounds.ProofModules.generated_roots(proof)) ++
+       [proof]}
+  rescue
+    error in File.Error -> {:error, {:read_lean, error.path, error.reason}}
+  end
+
   defp packaged_postludes(proof, sources) do
     case :code.priv_dir(:reduction_bounds) do
       {:error, reason} -> {:error, {:priv_dir, reason}}

@@ -44,15 +44,16 @@ initial compilation needed to load this Mix task are outside the measured scope.
   `time_ms`, `cached`, status, and available theorem timings. The runner's module
   durations cover rendering, imports, elaboration, auditing, and artifact writes.
 - `runner_non_module_wall_ms` is the remaining runner-call wall time. It includes
-  Lake/process startup, shared-runtime initialization, protocol, and teardown.
+  preparation coordination, Lake/process startup, shared-runtime initialization,
+  protocol, and teardown.
   The pinned Lynx API cannot isolate these components individually. The
   `runner_empty` and `runner_runtime` workloads provide startup-only and trivial
   runtime-loading probes; differences between separate runs are estimates,
   rather than exact initialization timings.
 - Empty theorem-timing arrays mean timings are unavailable (or no elaboration
   occurred on a cache hit), not that proof cost was zero.
-- Integer analysis and cost workflows now reuse checked named theories and
-  target modules. Other proof families remain on the embedded, uncached path.
+- All packaged proof families reuse checked named theories and target modules.
+  Ad-hoc raw proofs without shared theories remain uncached.
   Cold/warm labels describe the verification-cache lifecycle; inspect each
   module's `cached` flag rather than assuming a hit. Stage 1 deliberately disabled
   all verification caching, so its warm attempts had no hits.
@@ -73,16 +74,17 @@ comparing revisions. Do not infer a speedup from a single noisy run.
 The internal verification boundary finalizes imports and cache keys before
 invoking the existing Lynx runner. Production APIs and proof-test helpers use the
 same boundary. Result/error formats, target ordering, and timeouts are retained.
-Integer verification reports now include the shared modules before
+Verification reports include the shared modules before
 `Erlang.postlude`; every report must succeed for the request to be accepted.
 Optional event recording is enabled only in benchmark child processes. It is
 observational: an unavailable event destination cannot change verification.
-The integer pilot splits packaged `IntegerSize.lean`, `IntegerAnalysis.lean`,
-`IntegerCost.lean`, and `IntegerCostSource.lean` into named modules. Existing
-namespaces and diagnostic source locations are retained. Contract comparison and
-bound transfer also reuse these integer prerequisites; their own packaged rules
-remain embedded in the target. Protocol workflows retain their original path.
-The runner still checks input modules in dependency order within one request.
+All packaged proof families now use shared modules, including Core/struct rules,
+normalization and execution, integer analysis and contracts, protocol/Port,
+list/composed proofs, and buffer/periodic models. Existing namespaces and source
+locations are retained. A supervised coordinator coalesces overlapping cold
+preparation in one application. See [shared proof modules](shared_proofs.md)
+for dependency handling, readiness, failure and cancellation behavior.
+The pinned runner still processes its dependency-ordered inputs sequentially.
 
 Keys cover the complete finalized module input, ordered dependency keys, and
 effective Lean options. Lynx additionally partitions artifacts by Lean version,
@@ -106,7 +108,7 @@ REDUCTION_BOUNDS_PROOF_MODE=embedded mix test
 
 Use the same variables with `mix reduction_bounds.bench`. Setting
 `REDUCTION_BOUNDS_PROOF_CACHE=shared` caches only shared theories and rechecks
-all targets. Defaults are named integer modules and caching enabled. These
+all targets. Defaults are named shared modules and caching enabled. These
 switches do not clear the caller's cache. Focused cache regression tests explicitly
 exercise all modes regardless of these defaults. No persistent runner pool is added.
 
@@ -116,3 +118,6 @@ measurement command, raw reports, and full-suite result.
 The [integer pilot measurements](baselines/issue8-integer-cache.md) compare the
 embedded path, shared-theory caching, and shared plus target caching on the same
 source revision and machine.
+
+See the [all-family reuse measurements](baselines/issue8-all-proofs.md) for
+controlled embedded, shared-only and default-cache comparisons.

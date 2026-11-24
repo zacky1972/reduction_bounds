@@ -12,7 +12,7 @@ defmodule ReductionBounds.ProofCache do
     if length(names) != MapSet.size(MapSet.new(names)),
       do: raise(ArgumentError, "duplicate verification module identity")
 
-    pilot? = Enum.any?(names, &String.starts_with?(&1, "ReductionBounds.Proofs."))
+    shared? = Enum.any?(names, &String.starts_with?(&1, "ReductionBounds.Proofs."))
     options = Map.new(options)
 
     {files, _keys} =
@@ -21,7 +21,7 @@ defmodule ReductionBounds.ProofCache do
         dependencies = Enum.map(file["imports"], &dependency(&1, file["module"], names, keys))
 
         enabled? =
-          pilot? and policy != false and
+          shared? and policy != false and
             (policy != :shared or String.starts_with?(file["module"], "ReductionBounds.Proofs."))
 
         # Lynx partitions by Lean version, compiled Lynx runtime hashes, and
@@ -41,6 +41,38 @@ defmodule ReductionBounds.ProofCache do
       end)
 
     files
+  end
+
+  @spec preparation_context(String.t()) :: term()
+  def preparation_context(project) do
+    cache_root = Mix.Project.build_path() |> Path.join("lynx") |> Path.expand()
+    File.mkdir_p!(cache_root)
+    stat = File.stat!(cache_root, time: :posix)
+    compiled = Path.join(project, ".lake/build/lib/lean")
+
+    identities =
+      compiled
+      |> Path.join("**/*.hash")
+      |> Path.wildcard()
+      |> Enum.sort()
+      |> Enum.map(&{&1, File.read!(&1)})
+
+    toolchains =
+      Enum.map(
+        ["lean-toolchain", Path.join(project, "lean-toolchain")],
+        &{Path.expand(&1), File.read(&1)}
+      )
+
+    environment = System.get_env() |> Map.take(~w(ELAN_TOOLCHAIN LEAN_SYSROOT PATH))
+    lean = System.cmd("lean", ["--version"], stderr_to_stdout: true)
+
+    digest =
+      :crypto.hash(
+        :sha256,
+        :erlang.term_to_binary({identities, toolchains, environment, lean}, [:deterministic])
+      )
+
+    {Path.expand(project), cache_root, stat.major_device, stat.inode, digest}
   end
 
   defp dependency(name, current, names, keys) do

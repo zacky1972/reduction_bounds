@@ -48,25 +48,27 @@ defmodule ReductionBounds.ExecutionBoundTest do
               termination: :under_call_contracts,
               call_contracts: %{^callee => 5},
               upper_bound: %{zero: {:add, {:charge, :branch}, 0}, successor: equation},
-              reports: [%{status: :ok}]
+              reports: reports
             }} =
              ReductionBounds.infer_verified_bound({Fixture, :run, 1},
                beam_binaries: [beam],
                call_contracts: %{callee => 5}
              )
 
+    target_report(reports, :ok)
     assert {:contract, callee} in terms(equation)
     assert :previous in terms(equation)
     assert apply(Fixture, :run, [3]) == 9
   end
 
   test "checks a zero test after a static call", %{beam: beam} do
-    assert {:ok, %{upper_bound: %{successor: equation}, reports: [%{status: :ok}]}} =
+    assert {:ok, %{upper_bound: %{successor: equation}, reports: reports}} =
              ReductionBounds.infer_verified_bound({Fixture, :choose, 1},
                beam_binaries: [beam],
                call_contracts: %{{Callee, :step, 1} => 5}
              )
 
+    target_report(reports, :ok)
     assert :max in terms(equation)
   end
 
@@ -84,10 +86,12 @@ defmodule ReductionBounds.ExecutionBoundTest do
   end
 
   test "Lean rejects a recursive call with an unchanged input", %{beam: beam} do
-    assert {:error, {:verification_failed, [%{status: :error, diagnostics: diagnostics}]}} =
+    assert {:error, {:verification_failed, reports}} =
              ReductionBounds.infer_verified_bound({Fixture, :nondecreasing, 1},
                beam_binaries: [beam]
              )
+
+    %{diagnostics: diagnostics} = target_report(reports, :error)
 
     assert Enum.any?(
              diagnostics,
@@ -104,12 +108,19 @@ defmodule ReductionBounds.ExecutionBoundTest do
     assert {:ok, postludes} = ProofInput.execution_postludes(%{proof | source: source})
     translation = Lynx.Translation.new(postludes: postludes)
 
-    assert [%{status: :error, diagnostics: diagnostics}] =
-             ReductionBounds.Verification.verify!(translation,
-               postlude_imports: ["Erlang.erlang", "Erlang.maps"]
-             )
+    reports =
+      ReductionBounds.Verification.verify!(translation,
+        postlude_imports: ["Erlang.erlang", "Erlang.maps"]
+      )
 
+    %{diagnostics: diagnostics} = target_report(reports, :error)
     assert Enum.any?(diagnostics, &(&1.severity == :error and &1.message =~ "targetUpper"))
+  end
+
+  defp target_report(reports, status) do
+    assert Enum.all?(Enum.drop(reports, -1), &(&1.status == :ok))
+    assert %{module: "Erlang.postlude", status: ^status} = target = List.last(reports)
+    target
   end
 
   defp terms({operation, left, right}) when operation in [:add, :max],

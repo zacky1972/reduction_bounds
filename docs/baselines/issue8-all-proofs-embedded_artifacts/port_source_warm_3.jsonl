@@ -1,0 +1,2 @@
+{"id":"2378-1","target":"{ReductionBounds.Benchmark.Workloads.Program, :request, 2}","event":"started"}
+{"id":"2378-1","event":"completed","reports":[{"module":"Elixir.ReductionBounds.Benchmark.Workloads.Program","status":"ok","cached":false,"time_ms":3,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7590,"theorems":[]}],"assembly_ms":2.201,"coordination":{"mode":"bypassed","wall_ms":0.0},"module_wall_ms":7593,"runner_non_module_wall_ms":629.5949999999993,"runner_wall_ms":8222.595}

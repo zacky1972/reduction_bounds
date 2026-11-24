@@ -1,0 +1,20 @@
+Compiling 1 file (.ex)
+Running ExUnit with seed: 0, max_cases: 4
+
+.........................................................................................................................................................................................................................
+
+  1) test independent VMs publish complete checked artifacts atomically (ReductionBounds.ProofFamiliesTest)
+     test/reduction_bounds/proof_families_test.exs:66
+     ** (JSON.DecodeError) invalid byte 27 at position (byte offset) 0
+     code: for {:ok, {output, status}} <- runs do
+     stacktrace:
+       (elixir 1.20.5) lib/json.ex:482: JSON.decode!/1
+       test/reduction_bounds/proof_families_test.exs:95: anonymous fn/2 in ReductionBounds.ProofFamiliesTest."test independent VMs publish complete checked artifacts atomically"/1
+       (elixir 1.20.5) lib/enum.ex:2622: Enum."-reduce/3-lists^foldl/2-0-"/3
+       test/reduction_bounds/proof_families_test.exs:93: (test)
+
+......................................................................................
+Finished in 837.7 seconds (15.7s async, 822.0s sync)
+
+Result: 303/304 passed (18/18 doctests, 285/286 tests)
+Failed: 1 test

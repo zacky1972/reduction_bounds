@@ -178,11 +178,13 @@ defmodule ReductionBounds.NormalizeTest do
     assert {:ok, postludes} = ProofInput.postludes(proof)
     translation = Lynx.Translation.new(postludes: postludes)
 
-    assert [%{module: "Erlang.postlude"} = report] =
-             ReductionBounds.Verification.verify!(translation,
-               postlude_imports: ["Erlang.erlang", "Erlang.maps"]
-             )
+    reports =
+      ReductionBounds.Verification.verify!(translation,
+        postlude_imports: ["Erlang.erlang", "Erlang.maps"]
+      )
 
+    assert Enum.all?(Enum.drop(reports, -1), &(&1.status == :ok))
+    assert %{module: "Erlang.postlude"} = report = List.last(reports)
     report
   end
 

@@ -21,6 +21,7 @@ defmodule ReductionBounds.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
+      mod: {ReductionBounds.Application, []},
       extra_applications: [:logger]
     ]
   end
@@ -40,8 +41,10 @@ defmodule ReductionBounds.MixProject do
         "docs/roadmap.md",
         "docs/toolchains.md",
         "docs/benchmarking.md",
+        "docs/shared_proofs.md",
         "docs/baselines/issue8-linux-otp29.md",
         "docs/baselines/issue8-integer-cache.md",
+        "docs/baselines/issue8-all-proofs.md",
         "LICENSE.md"
       ]
     ]

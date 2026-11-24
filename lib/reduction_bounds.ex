@@ -1178,7 +1178,8 @@ defmodule ReductionBounds do
   defp proof_postludes(proof, :execution_fragment),
     do: ReductionBounds.ProofInput.execution_postludes(proof)
 
-  defp proof_postludes(proof, _definition), do: {:ok, [proof]}
+  defp proof_postludes(proof, _definition),
+    do: ReductionBounds.ProofInput.generated_postludes(proof)
 
   defp resolve_proof(:inline, options) do
     case Keyword.pop(options, :postlude) do

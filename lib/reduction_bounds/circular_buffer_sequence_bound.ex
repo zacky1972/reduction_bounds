@@ -5,9 +5,6 @@ defmodule ReductionBounds.CircularBufferSequenceBound do
   alias ReductionBounds.{CircularBufferBound, CoreFragment, PeriodicBound, SearchBound}
 
   @initializer {CircularBuffer, :new, 1}
-  @proof_path Path.expand("../../priv/lean/reduction_bounds/CircularBufferSequence.lean", __DIR__)
-  @external_resource @proof_path
-  @proof_source File.read!(@proof_path)
 
   @spec infer([binary()]) :: {:ok, map()} | {:error, term()}
   def infer(beams) do
@@ -111,7 +108,7 @@ defmodule ReductionBounds.CircularBufferSequenceBound do
     %{
       proof
       | file: "generated_circular_buffer_sequence_bound.lean",
-        source: proof.source <> "\n" <> PeriodicBound.rules_source() <> "\n" <> @proof_source
+        source: ""
     }
   end
 end

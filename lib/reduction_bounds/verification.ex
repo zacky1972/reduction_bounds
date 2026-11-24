@@ -2,7 +2,7 @@
 defmodule ReductionBounds.Verification do
   @moduledoc false
 
-  alias ReductionBounds.{ProofCache, ProofModules}
+  alias ReductionBounds.{ProofCache, ProofModules, ProofPreparation}
 
   @typep translation :: %Lynx.Translation{}
 
@@ -11,6 +11,7 @@ defmodule ReductionBounds.Verification do
   @spec assemble(translation(), keyword()) :: [map()]
   def assemble(translation, opts \\ []) do
     {translation, imports} = prepare(translation, opts)
+    imports = Enum.uniq(imports ++ ProofModules.runtime_imports(translation.postludes))
 
     {translation, shared} =
       if embedded?(opts),
@@ -81,7 +82,16 @@ defmodule ReductionBounds.Verification do
     do: ProofCache.finalize(files, Keyword.get(opts, :options, []), cache_policy(opts))
 
   defp invoke(files, opts) do
-    Lynx.Commands.verify!(project_dir(), files, options: Keyword.get(opts, :options, []))
+    {reports, _coordination} = invoke_coordinated(files, opts)
+    reports
+  end
+
+  defp invoke_coordinated(files, opts) do
+    project = project_dir()
+
+    ProofPreparation.run(files, project, fn ->
+      Lynx.Commands.verify!(project, files, options: Keyword.get(opts, :options, []))
+    end)
   end
 
   defp prepare(translation, opts) do
@@ -122,7 +132,7 @@ defmodule ReductionBounds.Verification do
     try do
       files = files(input, opts)
       assembled = now()
-      reports = invoke(files, opts)
+      {reports, coordination} = invoke_coordinated(files, opts)
       finished = now()
       runner_ms = milliseconds(finished - assembled)
       module_ms = Enum.sum(Enum.map(reports, & &1.time_ms))
@@ -132,6 +142,7 @@ defmodule ReductionBounds.Verification do
         event: :completed,
         assembly_ms: milliseconds(assembled - started),
         runner_wall_ms: runner_ms,
+        coordination: coordination,
         module_wall_ms: module_ms,
         runner_non_module_wall_ms: max(0, runner_ms - module_ms),
         reports:

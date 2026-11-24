@@ -1,0 +1,2 @@
+{"id":"2536-1","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2536-1","reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":3601,"theorems":[]}],"event":"completed","assembly_ms":1.902,"coordination":{"mode":"bypassed","wall_ms":0.0},"module_wall_ms":3601,"runner_non_module_wall_ms":831.3239999999996,"runner_wall_ms":4432.324}

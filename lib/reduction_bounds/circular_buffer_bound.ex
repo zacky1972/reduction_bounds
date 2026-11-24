@@ -8,9 +8,6 @@ defmodule ReductionBounds.CircularBufferBound do
   @paths [:consume, :fill, :rotate, :zero]
   @fields [:a, :b, :count, :max_size]
   @field_names Map.new(@fields, &{Atom.to_string(&1), &1})
-  @proof_path Path.expand("../../priv/lean/reduction_bounds/CircularBuffer.lean", __DIR__)
-  @external_resource @proof_path
-  @proof_source File.read!(@proof_path)
 
   @spec infer([binary()]) :: {:ok, map()} | {:error, term()}
   @spec infer([binary()], :n | :m) :: {:ok, map()} | {:error, term()}
@@ -99,7 +96,8 @@ defmodule ReductionBounds.CircularBufferBound do
     })
   end
 
-  defp path_costs(capacity), do: Enum.map(@paths, &{&1, path_cost(&1, capacity)})
+  @spec path_costs(:n | :m) :: [{atom(), term()}]
+  def path_costs(capacity), do: Enum.map(@paths, &{&1, path_cost(&1, capacity)})
 
   defp path_cost(:rotate, capacity),
     do: {:add, {:buffer_charge, :rotate}, {:enum_reverse, "a", capacity}}
@@ -265,7 +263,7 @@ defmodule ReductionBounds.CircularBufferBound do
       file: "generated_circular_buffer_bound.lean",
       span: {1, 1},
       indentation: 0,
-      source: ComposedBound.buffer_cost_proof(path_costs(:n)) <> @proof_source
+      source: ""
     }
   end
 end
