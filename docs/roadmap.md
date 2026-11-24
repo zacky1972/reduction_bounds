@@ -23,11 +23,44 @@ The original evaluation targets now have model-level analyses:
   theorems from source correspondence and unresolved completion obligations.
 - The public proof workflow records assumptions, checked theorem names,
   trusted processing, and unverified runtime claims.
+- An initial RPC model checks supplied single-attempt protocol traces and
+  request/monitor correlation on the shared communication foundation. It does
+  not itself analyze mailbox behavior or derive RPC cost/completion bounds.
+- A separate RPC mailbox layer replays ordinary-message matching, queue
+  retention, cursor behavior, timeout eligibility and explicit size/count
+  conditions. It supplies mailbox semantics for the separate cost and completion
+  layers; source/runtime correspondence remains later work.
+
+- Conditional RPC cost safety now separates client and server budgets and
+  replays unary integer handler contracts with an independent server frame.
+  Cost envelopes, future count bounds and runtime work correspondence remain
+  explicit assumptions; see the [cost guide](examples/rpc_cost.md).
+
+- Conditional RPC model completion now uses a mailbox/control rank and explicit
+  progress premises over all admitted continuations. Success separately excludes
+  timeout, peer termination and decoding failure. Suspended cost safety does not
+  require progress; see the [completion guide](examples/rpc_completion.md).
+
+- A restricted RPC source client now constructs and sends one request, then
+  dispatches a contracted reply/timeout helper result. Its finite normal-execution
+  theorem connects to correlated protocol traces; mailbox/data association and
+  helper implementation/totality obligations remain explicit. It is not native
+  receive analysis; see the [source guide](examples/rpc_source.md).
+
+- Public RPC APIs now submit model, conditions-only and restricted source proofs
+  through the shared verification boundary and report checked facts, conditional
+  completion, assumptions, unsupported features and unresolved obligations.
 
 These descriptions refer to the checked models and supported fragments;
 see the proof reference for the remaining correspondence obligations.
 
 ## Further model development
+
+- Extend RPC applicability reporting and supported source forms while preserving
+  the [public workflow](examples/rpc_workflow.md) and its model/source boundaries.
+  Extend source coverage beyond the [contracted fragment](examples/rpc_source.md)
+  only with corresponding semantic evidence.
+  Repeated RPC attempts require explicit retry and duplicate-execution contracts.
 
 - Extend the supported program fragments and reusable contracts while
   continuing to report unsupported operations and unresolved obligations.

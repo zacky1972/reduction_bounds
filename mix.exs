@@ -14,7 +14,7 @@ defmodule ReductionBounds.MixProject do
       package: package(),
       aliases: aliases(),
       dialyzer: dialyzer(),
-      test_ignore_filters: [&String.starts_with?(&1, "test/fixtures/")]
+      test_ignore_filters: [&String.starts_with?(&1, ["test/fixtures/", "test/support/"])]
     ]
   end
 
@@ -37,6 +37,12 @@ defmodule ReductionBounds.MixProject do
         "docs/examples/cost_contracts.md",
         "docs/examples/list_bounds.md",
         "docs/examples/ports.md",
+        "docs/examples/rpc.md",
+        "docs/examples/rpc_mailbox.md",
+        "docs/examples/rpc_cost.md",
+        "docs/examples/rpc_completion.md",
+        "docs/examples/rpc_source.md",
+        "docs/examples/rpc_workflow.md",
         "docs/proof.md",
         "docs/roadmap.md",
         "docs/toolchains.md",

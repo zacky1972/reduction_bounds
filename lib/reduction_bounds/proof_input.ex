@@ -39,6 +39,67 @@ defmodule ReductionBounds.ProofInput do
     packaged_postludes(proof, ["Protocol.lean"])
   end
 
+  @spec rpc_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def rpc_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, ["Protocol.lean", "RpcProtocol.lean"])
+  end
+
+  @spec mailbox_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def mailbox_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, ["RpcTerm.lean", "Mailbox.lean"])
+  end
+
+  @spec rpc_mailbox_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def rpc_mailbox_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, [
+      "Protocol.lean",
+      "RpcProtocol.lean",
+      "RpcTerm.lean",
+      "Mailbox.lean",
+      "RpcMailbox.lean"
+    ])
+  end
+
+  @spec rpc_cost_postludes(Lynx.Lean.t(), keyword()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error()}
+  def rpc_cost_postludes(proof, options \\ []) do
+    roots =
+      [:rpc_cost] ++
+        if(options[:handler] == :replay, do: [:integer_cost_source, :bound_transfer], else: [])
+
+    {:ok, ReductionBounds.ProofModules.load(roots) ++ [proof]}
+  rescue
+    error in File.Error -> {:error, {:read_lean, error.path, error.reason}}
+  end
+
+  @spec rpc_completion_postludes(Lynx.Lean.t(), keyword()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error()}
+  def rpc_completion_postludes(proof, options \\ []) do
+    roots =
+      [:rpc_completion] ++
+        if(options[:cost], do: [:rpc_cost], else: []) ++
+        if(options[:handler] == :replay, do: [:integer_cost_source, :bound_transfer], else: [])
+
+    {:ok, ReductionBounds.ProofModules.load(roots) ++ [proof]}
+  rescue
+    error in File.Error -> {:error, {:read_lean, error.path, error.reason}}
+  end
+
+  @spec rpc_source_postludes(Lynx.Lean.t(), keyword()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error()}
+  def rpc_source_postludes(proof, options \\ []) do
+    roots =
+      [:rpc_source] ++
+        if(options[:handler] == :replay, do: [:integer_cost_source, :bound_transfer], else: [])
+
+    {:ok, ReductionBounds.ProofModules.load(roots) ++ [proof]}
+  rescue
+    error in File.Error -> {:error, {:read_lean, error.path, error.reason}}
+  end
+
   @spec protocol_condition_postludes(Lynx.Lean.t()) ::
           {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
   def protocol_condition_postludes(%Lynx.Lean{} = proof) do
@@ -262,6 +323,90 @@ defmodule ReductionBounds.ProofInput do
 
   def scope_evidence(_candidate), do: %{}
 
+  defp case_study_theorems(%{source: :rpc_source, handler: handler}) do
+    case_study_theorems(%{source: :rpc_cost, handler: handler}) ++
+      ~w(ReductionBounds.RpcSource.localBound ReductionBounds.RpcSource.sourceAgreement
+        ReductionBounds.RpcSource.modelSafe ReductionBounds.RpcSource.emptyContracts
+        ReductionBounds.RpcSource.suppliedContractsWithoutNormalReturn ReductionBounds.RpcSource.canonicalDeterministic
+        ReductionBounds.RpcSource.finalUnique ReductionBounds.RpcSource.connectedCostBound
+        ReductionBounds.RpcSource.suppliedRegistryValid ReductionBounds.RpcSource.suppliedTimeoutMatches
+        ReductionBounds.RpcSource.suppliedConnection ReductionBounds.RpcSource.suppliedLocalBudget
+        ReductionBounds.RpcSource.suppliedSourceFormulaMatches
+        ReductionBounds.RpcSource.suppliedRequestConstruction ReductionBounds.RpcSource.suppliedCorrelation
+        ReductionBounds.RpcSource.suppliedSendArguments ReductionBounds.RpcSource.suppliedReplyArguments
+        ReductionBounds.RpcSource.suppliedSourceAgreement
+        ReductionBounds.RpcSource.suppliedSourceMailboxBridge ReductionBounds.RpcSource.suppliedSourceBound)
+  end
+
+  defp case_study_theorems(%{source: :rpc_completion} = c) do
+    base =
+      if c.handler do
+        case_study_theorems(%{source: :rpc_cost, handler: c.handler})
+      else
+        case_study_theorems(%{source: :rpc_mailbox})
+      end
+
+    base ++
+      ~w(ReductionBounds.RpcCompletion.canonicalRanking
+      ReductionBounds.RpcCompletion.advanceDecreases ReductionBounds.RpcCompletion.executeSound
+      ReductionBounds.RpcCompletion.Moves.erased ReductionBounds.RpcCompletion.Moves.bounded
+      ReductionBounds.RpcCompletion.conditionalCompletion ReductionBounds.RpcCompletion.eventCountBound
+      ReductionBounds.RpcCompletion.successfulCompletion ReductionBounds.RpcCompletion.stalledNotComplete
+      ReductionBounds.RpcCompletion.stalledNoProgress ReductionBounds.RpcCompletion.suppliedRanking
+      ReductionBounds.RpcCompletion.suppliedMovesCertificate ReductionBounds.RpcCompletion.suppliedMoves
+      ReductionBounds.RpcCompletion.suppliedMailboxAgreement ReductionBounds.RpcCompletion.suppliedTraceRank
+      ReductionBounds.RpcCompletion.suppliedActiveBudget ReductionBounds.RpcCompletion.suppliedPendingCounterexample) ++
+      rpc_completion_theorems(c)
+  end
+
+  defp case_study_theorems(%{source: :rpc_cost, handler: handler}) do
+    case_study_theorems(%{source: :rpc_mailbox}) ++
+      ~w(ReductionBounds.RpcCost.participantSafety ReductionBounds.RpcCost.prefixSafety
+        ReductionBounds.RpcCost.composeServer ReductionBounds.RpcCost.composeServerCalls
+        ReductionBounds.RpcCost.suppliedServerRequestSize ReductionBounds.RpcCost.suppliedCountsMatch
+        ReductionBounds.RpcCost.suppliedCountsFit ReductionBounds.RpcCost.suppliedClientBudget
+        ReductionBounds.RpcCost.suppliedServerBudget ReductionBounds.RpcCost.suppliedCostSafety
+        ReductionBounds.RpcCost.suppliedPrefixSafety ReductionBounds.RpcCost.admittedCostSafety) ++
+      if handler == :replay do
+        ~w(RpcHandler.transferredNumericBound RpcHandler.transferredSourceBound
+          RpcHandler.requestArgumentMatches RpcHandler.requestInputCovered
+          RpcHandler.composedServerBound RpcHandler.replayedCoverage
+          RpcHandler.replayedCostSafety RpcHandler.replayedPrefixSafety)
+      else
+        ~w(ReductionBounds.RpcCost.suppliedServerComposition)
+      end
+  end
+
+  defp case_study_theorems(%{source: :rpc_mailbox}) do
+    case_study_theorems(%{source: :rpc_trace}) ++
+      case_study_theorems(%{source: :mailbox}) ++
+      ~w(ReductionBounds.RpcMailbox.walkSound ReductionBounds.RpcMailbox.runSound
+        ReductionBounds.RpcMailbox.suppliedTimelineCertificate
+        ReductionBounds.RpcMailbox.suppliedTimelineSound
+        ReductionBounds.RpcMailbox.suppliedProtocolProjection
+        ReductionBounds.RpcMailbox.suppliedFinalAgreement
+        ReductionBounds.RpcMailbox.suppliedMailboxActions)
+  end
+
+  defp case_study_theorems(%{source: :mailbox}) do
+    ~w(ReductionBounds.Mailbox.executeSound ReductionBounds.Mailbox.checkSound
+      ReductionBounds.Mailbox.rejectedPrefixSound ReductionBounds.Mailbox.removalRetainsOrder
+      ReductionBounds.Mailbox.suppliedMailboxCertificate ReductionBounds.Mailbox.suppliedMailboxRun
+      ReductionBounds.Mailbox.suppliedMailboxLimits)
+  end
+
+  defp case_study_theorems(%{source: :rpc_trace}) do
+    case_study_theorems(%{source: :protocol_trace}) ++
+      ~w(ReductionBounds.RpcProtocol.checkTraceSound
+        ReductionBounds.RpcProtocol.ValidTrace.requestCorrelation
+        ReductionBounds.RpcProtocol.ValidTrace.monitorCorrelation
+        ReductionBounds.RpcProtocol.suppliedContractMatches
+        ReductionBounds.RpcProtocol.suppliedErasure
+        ReductionBounds.RpcProtocol.suppliedRpcCertificate
+        ReductionBounds.RpcProtocol.suppliedRpcTraceSound
+        ReductionBounds.RpcProtocol.suppliedOutcomeMatches)
+  end
+
   defp case_study_theorems(%{source: :protocol_trace}) do
     ~w(ReductionBounds.Protocol.checkFromSound ReductionBounds.Protocol.checkTraceSound
       ReductionBounds.Protocol.Runs.preserves ReductionBounds.Protocol.Runs.eventsValid
@@ -402,6 +547,15 @@ defmodule ReductionBounds.ProofInput do
   end
 
   defp port_trace_theorems(_candidate), do: []
+
+  defp rpc_completion_theorems(%{completion_status: :conditional, goal: :success}),
+    do:
+      ~w(ReductionBounds.RpcCompletion.suppliedConditionalCompletion ReductionBounds.RpcCompletion.suppliedSuccessfulCompletion)
+
+  defp rpc_completion_theorems(%{completion_status: :conditional}),
+    do: ~w(ReductionBounds.RpcCompletion.suppliedConditionalCompletion)
+
+  defp rpc_completion_theorems(_candidate), do: []
 
   defp port_completion_theorems(%{completion_status: :conditional, goal: :success}) do
     ~w(ReductionBounds.PortCompletion.suppliedConditionalCompletion

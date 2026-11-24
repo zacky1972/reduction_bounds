@@ -1,8 +1,12 @@
 ExUnit.start()
+Code.require_file("support/mailbox_support.ex", __DIR__)
 
 defmodule ReductionBounds.TestFixtures do
   [{module, beam}] = Code.compile_file(Path.expand("fixtures/bounded_counter.ex", __DIR__))
   @bounded_counter {module, beam}
+
+  @rpc_modules Code.compile_file(Path.expand("fixtures/rpc_client.ex", __DIR__))
+  def rpc_client_beams(), do: Enum.map(@rpc_modules, &elem(&1, 1))
 
   @port_modules Code.compile_file(Path.expand("fixtures/port_client.ex", __DIR__))
   @port_beams Enum.map(@port_modules, &elem(&1, 1))
@@ -40,3 +44,5 @@ if System.get_env("REDUCTION_BOUNDS_BENCH_EVENTS") do
       Enum.uniq(ExUnit.configuration()[:formatters] ++ [ReductionBounds.Benchmark.TestFormatter])
   )
 end
+
+Code.require_file("support/rpc_cost_support.ex", __DIR__)

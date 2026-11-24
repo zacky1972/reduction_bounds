@@ -9,6 +9,12 @@ Start with one of these guides after completing the installation in the
 | [Verify Lean declarations](examples/verification.md) | Supply a proof for a translated function, including a module compiled in IEx |
 | [Compare cost contracts and reuse a verified bound](examples/cost_contracts.md) | Derive an integer cost bound, compare contracts, and transfer the bound |
 | [Port models and supported clients](examples/ports.md) | Check finite traces, conditional model completion, and a supported Core Erlang client |
+| [Public RPC verification workflow](examples/rpc_workflow.md) | Verify RPC models, conditional completion and restricted source bounds through the shared boundary |
+| [Restricted RPC source connection](examples/rpc_source.md) | Connect a helper-contracted Core client to finite normal-execution and conditional cost theorems |
+| [Conditional RPC completion](examples/rpc_completion.md) | Prove termination or success under explicit continuation progress, separately from cost safety |
+| [RPC participant cost safety](examples/rpc_cost.md) | Prove conditional participant bounds and replay unary integer server contracts |
+| [RPC mailbox and conditions](examples/rpc_mailbox.md) | Check selective receive, ordered matching, queue retention and explicit message/count conditions |
+| [Initial RPC model](examples/rpc.md) | Check a supplied single-attempt protocol and correlation tokens without claiming mailbox semantics or cost bounds |
 | [Symbolic list bounds](examples/list_bounds.md) | Understand traversal bounds and find list, input-contract, and composition examples |
 
 The module documentation contains additional API examples. The

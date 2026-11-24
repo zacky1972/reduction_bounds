@@ -61,6 +61,48 @@ defmodule ReductionBounds.ProofModules do
       imports: []
     },
     %{
+      id: :rpc_protocol,
+      module: "ReductionBounds.Proofs.RpcProtocol",
+      source: "RpcProtocol.lean",
+      imports: [:protocol]
+    },
+    %{
+      id: :rpc_term,
+      module: "ReductionBounds.Proofs.RpcTerm",
+      source: "RpcTerm.lean",
+      imports: []
+    },
+    %{
+      id: :mailbox,
+      module: "ReductionBounds.Proofs.Mailbox",
+      source: "Mailbox.lean",
+      imports: [:rpc_term]
+    },
+    %{
+      id: :rpc_mailbox,
+      module: "ReductionBounds.Proofs.RpcMailbox",
+      source: "RpcMailbox.lean",
+      imports: [:rpc_protocol, :mailbox]
+    },
+    %{
+      id: :rpc_completion,
+      module: "ReductionBounds.Proofs.RpcCompletion",
+      source: "RpcCompletion.lean",
+      imports: [:rpc_mailbox]
+    },
+    %{
+      id: :rpc_cost,
+      module: "ReductionBounds.Proofs.RpcCost",
+      source: "RpcCost.lean",
+      imports: [:rpc_mailbox]
+    },
+    %{
+      id: :rpc_source,
+      module: "ReductionBounds.Proofs.RpcSource",
+      source: "RpcSource.lean",
+      imports: [:rpc_cost]
+    },
+    %{
       id: :protocol_conditions,
       module: "ReductionBounds.Proofs.ProtocolConditions",
       source: "ProtocolConditions.lean",

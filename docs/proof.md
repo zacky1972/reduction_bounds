@@ -2399,3 +2399,215 @@ retry and receive inspection paths, missing progress, conflicting completion
 conditions, unsupported target routing and source/model scope separation.
 It does not execute an external Port program, validate actual helper contracts,
 connect arbitrary Core receive code, or establish runtime/time correspondence.
+
+## Initial RPC model
+
+The first Issue 4 milestone reuses `Protocol` for a single-attempt same-node
+client/server protocol with one outstanding request. It adds independent abstract
+request and optional process-monitor identifiers. Work ownership stays separate
+for client and server; request/reply arrival, timeout and peer-down events are
+unowned observations. Sending does not imply delivery. Peer-down paths require
+an explicit monitor setup event. Retries and second sends are not admitted.
+
+`RpcProtocol.check_trace/2` validates a supplied model in Elixir, including direct
+struct construction and canonical contract equality. Its candidate always retains
+`lean_status: :not_checked`; merely building a proof does not establish a checked
+result. It distinguishes a pending prefix, successful reply processing, timeout,
+observed peer termination and decode failure. These classify a supplied trace,
+not eventual outcomes of arbitrary executions.
+
+`RpcProtocol.lean` fixes the monitored and unmonitored transition declarations.
+The generic `checkTraceSound` theorem connects the RPC Boolean certificate to
+`Protocol.Runs` plus a correlation predicate for every annotated event.
+`ValidTrace.requestCorrelation` and `ValidTrace.monitorCorrelation` recover the
+request token and the nonempty declared monitor token for the relevant events.
+The existing protocol soundness, invariant and exclusive-owner rules remain in
+use; they are not copied into a separate RPC runner.
+
+The generated target also checks:
+
+- `suppliedContractMatches`: serialized protocol declarations equal the canonical
+  RPC contract for that session, rather than an arbitrary supplied transition graph.
+- `suppliedErasure`: the annotated RPC events erase to the generic protocol events.
+- `suppliedRpcCertificate` and `suppliedRpcTraceSound`: the concrete trace satisfies
+  the canonical protocol and correlation predicate.
+- `suppliedOutcomeMatches`: its reported outcome agrees with the checked final state.
+
+All selected theorems and named-module dependencies retain the existing axiom
+allowlist. The RPC shared module depends on `Protocol`, using the existing
+verification boundary, preparation coordinator and artifact cache. Its source
+and dependency changes affect finalized keys. The embedded path uses the same
+packaged definitions. Tests check both paths, shared reuse across request IDs,
+transitive invalidation and independent Lean rejection of altered tokens, units,
+outcomes and unfinished certificates.
+
+This milestone does not prove mailbox contents, unmatched-message retention,
+ordered clause/guard selection, inspection bounds or the actual association of
+an observation with an Erlang message. The token model does not establish fresh
+reference generation or compiler receive optimization. There are no RPC size,
+cost, progress, source-code, runtime-reduction or wall-clock claims. Timeout ends
+the modeled client trace without asserting cancellation of server work or removal
+of late replies. The [RPC guide](examples/rpc.md) gives construction and low-level
+verification commands, supported outcomes and the remaining milestones.
+
+## RPC mailbox, matching and size/count conditions
+
+The next layer adds independent `RpcTerm`, `MailboxMatch`, `Mailbox` and
+`RpcConditions` models. Port iodata size definitions and Port semantics are
+unchanged. Supported terms and patterns have a finite explicit grammar. The
+whole-message measure records structural nodes, binary bytes and maximum integer
+magnitude bits, including unrelated messages. Encoding, concrete representation
+and actual PID/reference association remain unverified.
+
+The Lean mailbox step function implements ordered pattern and guard attempts,
+retained misses, arrival at the tail, a search cursor, selection of the first
+eligible message and timeout after an exhausted unsuccessful search. Restarting
+a receive resets the cursor; waiting in the same receive does not. A logical
+rejected-prefix condition ensures that selection cannot skip an earlier eligible
+message. This certificate validation is not counted as client scanning work.
+
+`executeSound` connects executable replay to the inductive `Runs` relation.
+`checkSound` additionally establishes well-formed matching declarations, initial
+message conditions and the total counter limits. `rejectedPrefixSound` states
+that earlier messages do not match any eligible clause, including guards;
+`removalRetainsOrder` identifies the retained prefix and suffix. Every arriving
+message must satisfy the separate mailbox message cap. Exact inspections,
+pattern attempts and guard attempts are computed from execution, not supplied
+as unchecked annotations.
+
+`RpcMailbox.runSound` checks the connected timeline against canonical correlated
+reply and process-monitor clauses. Request size is checked independently from
+selected-response and mailbox-message size. The proof builder connects the
+computed RPC events and final state to the existing RPC trace certificate, and
+checks that its mailbox actions equal those independently replayed by the generic
+mailbox checker. It rejects free protocol receive/timeout annotations, broadened
+matching clauses, false counters, wrong response tokens and altered queue output.
+Late arrivals after return are retained without advancing the terminal RPC.
+Generic mailbox runs can model repeated receives and their cumulative inspections;
+the connected RPC protocol remains single-attempt and does not establish retries.
+
+New shared theories import through the existing verification boundary. Term theory
+changes invalidate dependent mailbox and RPC artifacts; named and embedded paths
+retain the same sources and transitive axiom audits. Building a candidate keeps
+its Lean status unchecked. Only successful reports for its exact proof input
+validate the supplied-model claims. Future size/arrival/count conditions are
+assumptions, not facts inferred from one successful run. Cost formulas, universal
+cost safety, server mailbox behavior, reply provenance, progress and source/runtime
+correspondence remain subsequent work. See the
+[mailbox guide](examples/rpc_mailbox.md) for the grammar, supported guards,
+conditions, counters, timeline and reproduction commands.
+
+
+## RPC participant-specific cost safety
+
+The shared `RpcCost.lean` theory extracts disjoint operation counts from the
+connected RPC/mailbox state. Its fixed owner mapping keeps client and server
+units separate; coarse receive/inspection observations add no second charge.
+`participantSafety` and `prefixSafety` quantify over arbitrary natural work
+ledgers satisfying explicit count and cost-envelope contracts. They apply to
+finite pending prefixes without a progress premise. They do not infer future
+arrival limits or establish a runtime ledger correspondence.
+
+The generated proof checks operation-count equality, count caps and both numeric
+budget identities. Its admitted-run theorem applies to arbitrary modeled runs
+under the same count and envelope conditions. A server handler is either an
+explicit assumed bound or a replayed unary integer derivation under a declarative
+`:server_work` contract. Replay recovers current Core and checks the original
+source, derivation and contract through bound transfer. The request payload's
+input coverage is kernel-checked; each ledger handler execution can discharge
+its envelope from the replayed theorem. Server receiving/sending still requires
+an independent frame contract. All final theorems undergo the existing
+transitive axiom audit, named-module caching and global job budget.
+
+See the [cost guide](examples/rpc_cost.md) for the exact assumptions, proof workflow
+and deferred source/completion work. In particular, atomic modeled handler costs
+do not establish costs for arbitrary unfinished server source prefixes.
+
+
+## RPC conditional completion, separately from cost safety
+
+`RpcCompletion.lean` depends on the checked RPC/mailbox layer, independently of
+cost theory and Port-specific completion. A configuration contains the actual
+mailbox/protocol state and a remaining mailbox-action allowance. Every advance
+checks `RpcMailbox.step`, count caps, known control states, canonical protocol
+edges and the balance between remaining allowance and consumed mailbox steps.
+`Moves.erased` yields an original `RpcMailbox.Runs` proof.
+
+The natural rank is `12 * remaining + phase`, with canonical RPC phase at most
+11. Mailbox arrivals, setup, inspections and timeout consume allowance; explicit
+protocol actions decrease phase. `none` represents suspension with unchanged
+configuration. `advanceDecreases`, `Moves.bounded` and `eventCountBound` prove
+finite active work without assuming eventual completion. The conservative
+active-action bound is `11 + 12 * mailbox.limits.steps`; it counts timeline items,
+not elapsed time or cost charges.
+
+`conditionalCompletion` adds client/request/server/response progress at every
+nonterminal point of every admitted behavior, respecting remaining limits. Its
+strong-induction argument establishes eventual model termination, not bounded
+waiting time. `successfulCompletion` additionally excludes failure observations
+and outcomes through a universal `NoFailure` hypothesis. `stalledNotComplete`
+and `stalledNoProgress` show why finite budgets or timeout numerals alone cannot
+establish termination.
+
+The proof builder checks a supplied instrumented trace and its rank/erasure even
+when progress is missing. It emits instantiated completion claims only for a
+compatible goal with all required declarations. The optional cost workflow
+retains participant budgets and their own theorems when completion premises are
+insufficient. A completed example, a replayed handler bound and successful Lean
+reports do not prove external scheduling or delivery assumptions. Builders keep
+`:not_checked`; source termination and runtime correspondence remain unresolved.
+See the [completion guide](examples/rpc_completion.md) for the declarations,
+statuses, exact semantic boundary and verification workflow.
+
+
+## Restricted RPC source correspondence
+
+`RpcSource` reifies the pinned compiler's accepted Core blocks for a four-argument
+client: direct request tuple construction, one sequenced `:erlang.send/2`, a static
+contracted reply case and a decoding tail call or literal timeout return. The
+connection checks argument identities, clause order, timeout association and
+terminal handling. Unsupported native receive, monitoring, loops, guards,
+exceptions and dynamic calls produce target/structural-path diagnostics.
+
+`RpcSource.lean` defines finite normal source evaluation and its connected RPC
+program. `sourceAgreement` preserves values, calls and local work; `modelSafe`
+constructs correlated canonical protocol segments under explicit helper/primitive
+contracts. The generated request, send-argument and reply-argument theorems check
+how abstract input preconditions are carried through request construction.
+These preconditions identify the supplied request, not all values of a similar
+size. The fallback case failure is excluded by helper result contracts, not
+assigned zero work.
+
+The mailbox bridge additionally requires a checked mailbox execution, event-name
+association, reply-payload/timeout data association and a checked protocol
+projection ending at that state. Canonical transition determinism establishes
+final-state agreement. These association certificates remain explicit obligations;
+the source builder does not infer runtime helper/mailbox correspondence.
+`connectedCostBound` and the generated source bound combine structural source
+nodes with covered model work under compatible, disjoint accounting, preserving
+the server's separate budget and any replayed handler assumptions.
+
+The source theory reuses the RPC cost closure and central verification/cache/audit
+boundary. It does not import completion to manufacture source termination.
+Helpers' native receive implementations, totality, exceptions and unfinished
+source prefixes remain unverified. Extraction, reification, abstraction and
+serialization remain trusted. See the [source guide](examples/rpc_source.md) for
+the exact accepted fragment, conditional formula and proof workflow.
+
+
+## Public RPC verification boundary
+
+The public model, conditions-only and restricted source entry points build the
+existing certificates, load their ordered shared dependencies and use the same
+target verification/timeout and central `Verification` path as other analyses.
+They preserve coalesced preparation, dependency keys, final axiom audits and the
+per-VM job budget. No RPC-specific runner or limiter is added.
+
+RPC result construction requires nonempty all-successful reports including the
+final target. Builders still return unchecked candidates. Checked model costs do
+not discharge progress; only compatible completion declarations enable a
+conditional theorem status. Assumed server bounds stay assumed and replayed
+handler evidence is reported as checked under its retained contracts. Restricted
+source correspondence is explicitly checked under contracts, with mailbox/data
+association, helper implementation and source totality obligations retained.
+See the [public workflow](examples/rpc_workflow.md) for the result schema and APIs.
