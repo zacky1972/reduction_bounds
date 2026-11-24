@@ -13,7 +13,9 @@ defmodule ReductionBounds.ProofPreparationIntegrationTest do
       [first, second]
       |> Task.async_stream(&Verification.verify!(&1, cache: true, shared_modules: true),
         max_concurrency: 2,
-        timeout: 60_000
+        # Shared preparation and job admission can wait behind other async tests.
+        # The ExUnit module timeout bounds this coordination test as a whole.
+        timeout: :infinity
       )
       |> Enum.map(fn {:ok, reports} -> reports end)
 
