@@ -43,6 +43,7 @@ defmodule ReductionBounds.MixProject do
         "docs/benchmarking.md",
         "docs/shared_proofs.md",
         "docs/job_budget.md",
+        "docs/job_calibration.md",
         "docs/test_concurrency.md",
         "docs/baselines/issue8-linux-otp29.md",
         "docs/baselines/issue8-integer-cache.md",
@@ -88,7 +89,11 @@ defmodule ReductionBounds.MixProject do
 
   def cli do
     [
-      preferred_envs: [precommit: :test, "reduction_bounds.bench": :test]
+      preferred_envs: [
+        precommit: :test,
+        "reduction_bounds.bench": :test,
+        "reduction_bounds.calibrate": :test
+      ]
     ]
   end
 

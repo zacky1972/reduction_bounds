@@ -1,7 +1,7 @@
 # Profiling and the Lean job budget
 
 All production verification goes through one per-VM job budget. The default is
-**2 admitted jobs**, independent of ExUnit's `max_cases` and each API call's
+**2 admitted jobs** (provisional and not a measured optimum), independent of ExUnit's `max_cases` and each API call's
 `max_concurrency`. This stage does not change synchronous test modules to run
 asynchronously, batch requests or introduce persistent Lean sessions.
 
@@ -135,3 +135,6 @@ identify expensive tests and the measured memory/wall-time trade-off.
 
 See [fixture isolation and selected concurrent tests](test_concurrency.md) for
 immutable fixture ownership, parameterized scenarios and selected-suite comparisons.
+
+See [controlled job-budget calibration](job_calibration.md) for a sequential
+cold/warm full-suite comparison of job limits on the target machine.

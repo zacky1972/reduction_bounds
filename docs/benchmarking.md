@@ -124,3 +124,6 @@ controlled embedded, shared-only and default-cache comparisons.
 
 See [profiling and the job budget](job_budget.md) for ordinary suite/test attribution,
 CPU sampling, suite-only runs and the process-wide Lean concurrency limit.
+
+For a controlled sequential comparison of global job budgets, use
+`mix reduction_bounds.calibrate`; see [job-budget calibration](job_calibration.md).

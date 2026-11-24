@@ -1,7 +1,7 @@
 # Fixture isolation and selected concurrent tests
 
 The selected proof tests now run asynchronously under the existing per-VM Lean
-job budget. The default budget remains 2. ExUnit `max_cases` controls test-case
+job budget. The provisional default budget remains 2; it has not been calibrated as an optimum. ExUnit `max_cases` controls test-case
 scheduling, while the job budget controls aggregate verification invocations.
 Neither setting changes Lean's own thread count.
 

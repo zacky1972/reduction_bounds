@@ -1,0 +1,5 @@
+Preparing an isolated Mix build (logs: /workspace/scratch/9624e53852b3/calibration-measurements/issue8-calibration_artifacts/trial-1-jobs-2_artifacts)
+Measuring suite: cold
+Measuring suite: warm_1
+Benchmark report: /workspace/scratch/9624e53852b3/calibration-measurements/issue8-calibration_artifacts/trial-1-jobs-2.json
+** (Mix) a benchmark failed; see /workspace/scratch/9624e53852b3/calibration-measurements/issue8-calibration_artifacts/trial-1-jobs-2.json

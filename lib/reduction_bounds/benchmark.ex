@@ -306,7 +306,7 @@ defmodule ReductionBounds.Benchmark do
       timing_scope:
         "preparation is an isolated Mix build; existing dependency Lean build artifacts may be reused",
       overhead_scope:
-        "runner non-module wall time includes Lake/process startup, shared runtime loading, protocol and teardown; not individually observable through the pinned API",
+        "runner non-module wall time includes preparation/admission waiting, Lake/process startup, imports, artifact loading, protocol and teardown; job.runner_call_wall_ms excludes preparation/admission waiting",
       memory_scope:
         "100 ms samples of summed process-tree RSS; shared pages may be counted more than once; null if unavailable",
       aggregation_scope:
