@@ -64,5 +64,4 @@ backends as implemented or infer their expected savings from aggregate residuals
 The maintainer has updated the [issue body](https://github.com/zacky1972/reduction_bounds/issues/8)
 and posted the [measured policy comment](https://github.com/zacky1972/reduction_bounds/issues/8#issuecomment-7128848077).
 The initial findings are preserved as history and the issue remains open for
-startup/import attribution. `scripts/update_issue8_status.sh` is the archived
-publication script; it does not need to be run again.
+startup/import attribution.

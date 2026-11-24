@@ -103,7 +103,7 @@ installed cspell@9.4.0 with binaries:
 84/87 lib/reduction_bounds/verification.ex 6.84ms
 85/87 LICENSE.md 8.76ms
 86/87 README.md 5.99ms
-87/87 scripts/update_issue8_status.sh 31.47ms
+[1 local tooling entry omitted]
 CSpell: Files checked: 87, Issues found: 0 in 0 files.
 Spellcheck passed.
 Finding suitable PLTs

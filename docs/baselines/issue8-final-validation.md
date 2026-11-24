@@ -44,7 +44,7 @@ or warm benchmark and not a comparison with the Mac timings. See the
 - `mix check` passed: dependency audit, compilation with warnings as errors,
   formatting, strict Credo, unused-lock checks, spelling and Dialyzer.
 - `mix docs --warnings-as-errors` passed.
-- `bash -n scripts/update_issue8_status.sh` and `git diff --check` passed.
+- `git diff --check` passed.
 
 The [static-check log](issue8-final-check.log) records the required alias run.
 Only validation records and documentation links were added after the tested
