@@ -37,8 +37,13 @@ defmodule ReductionBounds.VerificationTest do
     assert Enum.map(reports, &Map.drop(&1, [:time_ms])) ==
              Enum.map(original, &Map.drop(&1, [:time_ms]))
 
-    [started, completed] = events(path)
+    [started, job_started, completed] = events(path)
+    assert job_started["event"] == "runner_started"
+    assert completed["job"]["limit"] >= 1
+    assert completed["job"]["runner_call_wall_ms"] >= completed["module_wall_ms"]
     assert started["event"] == "started"
+    assert started["context"]["module"] == inspect(__MODULE__)
+    assert job_started["context"] == started["context"]
     assert completed["event"] == "completed"
     assert completed["id"] == started["id"]
     assert completed["runner_wall_ms"] >= completed["module_wall_ms"]

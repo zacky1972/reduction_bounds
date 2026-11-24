@@ -2,7 +2,7 @@
 defmodule ReductionBounds.Verification do
   @moduledoc false
 
-  alias ReductionBounds.{ProofCache, ProofModules, ProofPreparation}
+  alias ReductionBounds.{ProofCache, ProofModules, ProofPreparation, VerificationJobs}
 
   @typep translation :: %Lynx.Translation{}
 
@@ -82,16 +82,27 @@ defmodule ReductionBounds.Verification do
     do: ProofCache.finalize(files, Keyword.get(opts, :options, []), cache_policy(opts))
 
   defp invoke(files, opts) do
-    {reports, _coordination} = invoke_coordinated(files, opts)
+    {reports, _coordination, _job} = invoke_coordinated(files, opts)
     reports
   end
 
   defp invoke_coordinated(files, opts) do
     project = project_dir()
 
-    ProofPreparation.run(files, project, fn ->
-      Lynx.Commands.verify!(project, files, options: Keyword.get(opts, :options, []))
-    end)
+    {{reports, job}, coordination} =
+      ProofPreparation.run(files, project, fn ->
+        VerificationJobs.run(fn metadata ->
+          ReductionBounds.Profile.emit(%{
+            event: :runner_started,
+            target: inspect(opts[:target]),
+            job: metadata
+          })
+
+          Lynx.Commands.verify!(project, files, options: Keyword.get(opts, :options, []))
+        end)
+      end)
+
+    {reports, coordination, job}
   end
 
   defp prepare(translation, opts) do
@@ -132,17 +143,19 @@ defmodule ReductionBounds.Verification do
     try do
       files = files(input, opts)
       assembled = now()
-      {reports, coordination} = invoke_coordinated(files, opts)
+      {reports, coordination, job} = invoke_coordinated(files, opts)
       finished = now()
       runner_ms = milliseconds(finished - assembled)
       module_ms = Enum.sum(Enum.map(reports, & &1.time_ms))
 
       emit(path, %{
         id: id,
+        target: inspect(opts[:target]),
         event: :completed,
         assembly_ms: milliseconds(assembled - started),
         runner_wall_ms: runner_ms,
         coordination: coordination,
+        job: job,
         module_wall_ms: module_ms,
         runner_non_module_wall_ms: max(0, runner_ms - module_ms),
         reports:
@@ -169,12 +182,5 @@ defmodule ReductionBounds.Verification do
   defp milliseconds(duration),
     do: System.convert_time_unit(duration, :native, :microsecond) / 1000
 
-  # Measurement must never turn an accepted/rejected proof into a different result.
-  defp emit(path, event) do
-    :global.trans({{__MODULE__, path}, self()}, fn ->
-      File.write(path, [JSON.encode!(event), "\n"], [:append])
-    end)
-  rescue
-    _error -> :ok
-  end
+  defp emit(path, event), do: ReductionBounds.Profile.emit_to(path, event)
 end

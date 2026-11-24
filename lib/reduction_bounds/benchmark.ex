@@ -29,7 +29,7 @@ defmodule ReductionBounds.Benchmark do
       preparation = Command.run("mix", ["compile"], env, Path.join(artifacts, "prepare.log"))
 
       report = %{
-        schema_version: 1,
+        schema_version: 2,
         metadata: metadata,
         preparation: preparation,
         runs: [],
@@ -41,6 +41,22 @@ defmodule ReductionBounds.Benchmark do
       if preparation.exit_status != 0,
         do: Mix.raise("benchmark preparation failed; see #{preparation.log}")
 
+      warmup =
+        Command.run(
+          "mix",
+          [
+            "run",
+            "--no-compile",
+            "-e",
+            "{0, _} = Lynx.Commands.lake(ReductionBounds.Verification.project_dir(), [\"--quiet\", \"build\", \"Lynx/Lynx.Runner\"] )"
+          ],
+          env,
+          Path.join(artifacts, "runner-build.log")
+        )
+
+      if warmup.exit_status != 0, do: Mix.raise("runner preparation failed; see #{warmup.log}")
+      report = Map.put(report, :runner_preparation, warmup)
+      write_report(output, report)
       runs = workloads(opts, env, build, artifacts) ++ suite(opts, env, build, artifacts)
 
       report = %{
@@ -66,6 +82,16 @@ defmodule ReductionBounds.Benchmark do
     completed = Enum.filter(events, &(&1["event"] == "completed"))
     reports = Enum.flat_map(completed, & &1["reports"])
     terminal = Enum.count(events, &(&1["event"] in ["completed", "failed"]))
+    jobs = for %{"event" => "runner_started", "job" => job} <- events, do: job
+
+    job_data? =
+      Enum.any?(
+        events,
+        &(&1["schema_version"] == 2 or &1["event"] == "runner_started" or is_map(&1["job"]))
+      )
+
+    tests = Enum.filter(events, &(&1["event"] == "test_finished"))
+    phases = for %{"event" => "phase"} = event <- events, do: event
 
     %{
       started_requests: Enum.count(events, &(&1["event"] == "started")),
@@ -77,9 +103,64 @@ defmodule ReductionBounds.Benchmark do
       runner_non_module_wall_ms_sum:
         Enum.sum(Enum.map(completed, & &1["runner_non_module_wall_ms"])),
       coordination_wall_ms_sum: coordination_time(completed),
+      job_queue_ms_sum: if(job_data?, do: Enum.sum(Enum.map(jobs, & &1["queue_ms"]))),
+      runner_calls_started: if(job_data?, do: length(jobs)),
+      runner_calls_completed: if(job_data?, do: Enum.count(completed, &is_map(&1["job"]))),
+      runner_call_wall_ms_sum: optional_job_time(completed),
+      peak_active_jobs: jobs |> Enum.map(& &1["active_at_start"]) |> Enum.max(fn -> nil end),
+      phase_wall_ms_sums:
+        phases
+        |> Enum.group_by(& &1["stage"], & &1["wall_ms"])
+        |> Map.new(fn {k, times} -> {k, Enum.sum(times)} end),
+      slowest_requests: Enum.sort_by(completed, & &1["runner_wall_ms"], :desc) |> Enum.take(20),
+      tests: test_summary(tests, events),
+      suite: Enum.find(events, &(&1["event"] == "suite_finished")),
       cached_modules: Enum.count(reports, & &1["cached"]),
       module_reports: reports,
       theorem_timings_available: Enum.any?(reports, &(&1["theorems"] != []))
+    }
+  end
+
+  defp optional_job_time(completed) do
+    if completed != [] and Enum.all?(completed, &is_map(&1["job"])) do
+      Enum.sum(Enum.map(completed, & &1["job"]["runner_call_wall_ms"]))
+    end
+  end
+
+  defp test_summary(tests, events) do
+    grouped = events |> Enum.filter(&is_map(&1["context"])) |> Enum.group_by(& &1["context"])
+
+    tests =
+      Enum.map(tests, fn test ->
+        related = Map.get(grouped, Map.take(test, ["module", "test"]), [])
+        completed = Enum.filter(related, &(&1["event"] == "completed"))
+        phases = for %{"event" => "phase"} = event <- related, do: event
+
+        Map.merge(test, %{
+          "verification_requests" => length(completed),
+          "runner_wall_ms_sum" => Enum.sum(Enum.map(completed, & &1["runner_wall_ms"])),
+          "phase_wall_ms_sums" =>
+            phases
+            |> Enum.group_by(& &1["stage"], & &1["wall_ms"])
+            |> Map.new(fn {k, values} -> {k, Enum.sum(values)} end)
+        })
+      end)
+
+    %{
+      count: length(tests),
+      slowest: Enum.sort_by(tests, & &1["wall_ms"], :desc) |> Enum.take(20),
+      modules:
+        tests
+        |> Enum.group_by(& &1["module"])
+        |> Enum.map(fn {name, cases} ->
+          %{
+            module: name,
+            async: Enum.all?(cases, & &1["async"]),
+            tests: length(cases),
+            test_wall_ms_sum: Enum.sum(Enum.map(cases, & &1["wall_ms"]))
+          }
+        end)
+        |> Enum.sort_by(& &1.test_wall_ms_sum, :desc)
     }
   end
 
@@ -115,16 +196,16 @@ defmodule ReductionBounds.Benchmark do
     if opts[:suite] do
       clear_cache(build)
 
-      [
+      for repetition <- 0..Keyword.get(opts, :suite_repetitions, 0) do
         run(
           "suite",
-          "cold",
+          phase(repetition),
           ["test", "--seed", to_string(opts[:seed]), "--max-cases", to_string(opts[:max_cases])],
           env,
           artifacts,
           opts[:output]
         )
-      ]
+      end
     else
       []
     end
@@ -195,14 +276,15 @@ defmodule ReductionBounds.Benchmark do
       container_cpu_max: read_resource("/sys/fs/cgroup/cpu.max"),
       environment:
         Map.new(
-          ~w(ERL_FLAGS ELIXIR_ERL_OPTIONS LEAN_NUM_THREADS ELAN_TOOLCHAIN REDUCTION_BOUNDS_PROOF_CACHE REDUCTION_BOUNDS_PROOF_MODE),
+          ~w(ERL_FLAGS ELIXIR_ERL_OPTIONS LEAN_NUM_THREADS ELAN_TOOLCHAIN REDUCTION_BOUNDS_PROOF_CACHE REDUCTION_BOUNDS_PROOF_MODE REDUCTION_BOUNDS_LEAN_JOBS),
           &{&1, System.get_env(&1)}
         ),
       suite_max_cases: opts[:max_cases],
+      global_lean_jobs: ReductionBounds.VerificationJobs.configured_limit(),
       target_max_concurrency: 2,
       target_timeout_ms: 60_000,
       suite_seed: opts[:seed],
-      suite_runs: if(opts[:suite], do: 1, else: 0),
+      suite_runs: if(opts[:suite], do: 1 + Keyword.get(opts, :suite_repetitions, 0), else: 0),
       warm_repetitions: opts[:repetitions],
       workloads: opts[:workloads],
       workspace: workspace,

@@ -44,7 +44,7 @@ initial compilation needed to load this Mix task are outside the measured scope.
   `time_ms`, `cached`, status, and available theorem timings. The runner's module
   durations cover rendering, imports, elaboration, auditing, and artifact writes.
 - `runner_non_module_wall_ms` is the remaining runner-call wall time. It includes
-  preparation coordination, Lake/process startup, shared-runtime initialization,
+  preparation coordination, job admission queueing, Lake/process startup, shared-runtime initialization,
   protocol, and teardown.
   The pinned Lynx API cannot isolate these components individually. The
   `runner_empty` and `runner_runtime` workloads provide startup-only and trivial
@@ -121,3 +121,6 @@ source revision and machine.
 
 See the [all-family reuse measurements](baselines/issue8-all-proofs.md) for
 controlled embedded, shared-only and default-cache comparisons.
+
+See [profiling and the job budget](job_budget.md) for ordinary suite/test attribution,
+CPU sampling, suite-only runs and the process-wide Lean concurrency limit.

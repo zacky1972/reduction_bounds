@@ -10,3 +10,10 @@ defmodule ReductionBounds.TestFixtures do
   def bounded_counter, do: @bounded_counter
   def port_client_beams, do: @port_beams
 end
+
+if System.get_env("REDUCTION_BOUNDS_BENCH_EVENTS") do
+  ExUnit.configure(
+    formatters:
+      Enum.uniq(ExUnit.configuration()[:formatters] ++ [ReductionBounds.Benchmark.TestFormatter])
+  )
+end

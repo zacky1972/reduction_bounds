@@ -13,9 +13,37 @@ defmodule ReductionBounds.Benchmark.Workloads do
   @spec names() :: [String.t()]
   def names(),
     do:
-      ~w(integer_analysis integer_cost bound_transfer contract_comparison search list composed circular_buffer circular_buffer_sequence struct execution periodic port port_source runner_empty runner_runtime)
+      ~w(integer_analysis integer_cost bound_transfer contract_comparison search list composed circular_buffer circular_buffer_sequence struct execution periodic port port_source concurrent_integer runner_empty runner_runtime)
 
   @spec run(String.t()) :: :ok
+  def run("concurrent_integer") do
+    verify = fn n ->
+      proof = %Lynx.Lean{
+        source: "theorem concurrentProof#{n} : True := by trivial",
+        file: "concurrent_integer_#{n}.lean",
+        span: {1, 1},
+        indentation: 0
+      }
+
+      {:ok, postludes} = ReductionBounds.ProofInput.integer_postludes(proof)
+
+      reports =
+        ReductionBounds.Verification.verify!(Lynx.Translation.new(postludes: postludes),
+          target: {__MODULE__, :concurrent_integer, n}
+        )
+
+      true = reports != [] and Enum.all?(reports, &(&1.status == :ok))
+    end
+
+    verify.(0)
+
+    results =
+      Task.async_stream(1..4, verify, max_concurrency: 4, timeout: 120_000) |> Enum.to_list()
+
+    true = Enum.all?(results, &match?({:ok, true}, &1))
+    :ok
+  end
+
   def run("runner_empty") do
     [] = ReductionBounds.Verification.verify!([])
     :ok

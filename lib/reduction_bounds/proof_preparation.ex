@@ -7,7 +7,7 @@ defmodule ReductionBounds.ProofPreparation do
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
-  @spec run([map()], String.t(), (-> [map()])) :: {[map()], map()}
+  @spec run([map()], String.t(), (-> {[map()], map()})) :: {{[map()], map()}, map()}
   def run(files, project, verify) do
     started = System.monotonic_time(:microsecond)
 
@@ -64,6 +64,8 @@ defmodule ReductionBounds.ProofPreparation do
       finish({:invalidate, Map.values(keys)})
       :erlang.raise(kind, reason, __STACKTRACE__)
   end
+
+  defp classify(keys, {reports, _metadata}), do: classify(keys, reports)
 
   defp classify(keys, reports) do
     ready = for %{module: name, status: :ok} <- reports, Map.has_key?(keys, name), do: keys[name]

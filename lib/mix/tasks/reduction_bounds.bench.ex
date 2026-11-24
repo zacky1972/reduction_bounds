@@ -9,6 +9,9 @@ defmodule Mix.Tasks.ReductionBounds.Bench do
   Options: `--output PATH`, `--workloads NAMES` (comma-separated),
   `--repetitions N` (warm workload runs, default 3), `--[no-]suite` (default true),
   `--max-cases N`, `--seed N`, and `--keep-workspace`.
+  Use `--suite-only` to profile just the ordinary suite; `--suite-repetitions N`
+  adds N warm suite runs after the cold run. Test timings are recorded without
+  enabling trace mode. REDUCTION_BOUNDS_LEAN_JOBS sets the per-VM job limit (default 2).
 
   Logs and per-request events are saved beside the JSON report. Each workload has
   one cold-cache run followed by warm attempts in fresh VMs. The full suite
@@ -33,6 +36,8 @@ defmodule Mix.Tasks.ReductionBounds.Bench do
           workloads: :string,
           repetitions: :integer,
           suite: :boolean,
+          suite_only: :boolean,
+          suite_repetitions: :integer,
           max_cases: :integer,
           seed: :integer,
           keep_workspace: :boolean
@@ -46,6 +51,8 @@ defmodule Mix.Tasks.ReductionBounds.Bench do
       output: Path.join(Mix.Project.build_path(), "reduction_bounds_bench/report.json"),
       repetitions: 3,
       suite: true,
+      suite_only: false,
+      suite_repetitions: 0,
       max_cases: System.schedulers_online() * 2,
       seed: 0,
       keep_workspace: false
@@ -53,17 +60,35 @@ defmodule Mix.Tasks.ReductionBounds.Bench do
 
     opts = Keyword.merge(defaults, opts)
 
-    names =
-      if opts[:workloads],
-        do: String.split(opts[:workloads], ",", trim: true),
-        else: Workloads.names()
+    validate_suite!(opts)
+    validate_numbers!(opts)
+    names = if opts[:suite_only], do: [], else: selected_workloads(opts)
 
-    unless names != [] and Enum.all?(names, &(&1 in Workloads.names())),
-      do: Mix.raise("workloads must be selected from #{Enum.join(Workloads.names(), ",")}")
-
-    unless opts[:repetitions] >= 1 and opts[:max_cases] >= 1 and opts[:seed] >= 0,
-      do: Mix.raise("repetitions and max-cases must be positive; seed must be nonnegative")
+    unless (names != [] or opts[:suite_only]) and Enum.all?(names, &(&1 in Workloads.names())),
+      do: Mix.raise("invalid workload selection")
 
     Benchmark.run(Keyword.put(opts, :workloads, Enum.uniq(names)))
+  end
+
+  defp validate_suite!(opts) do
+    if opts[:suite_only] and (not opts[:suite] or opts[:workloads]),
+      do: Mix.raise("suite-only requires suite and cannot select workloads")
+
+    if opts[:workloads] == "", do: Mix.raise("workloads cannot be empty")
+  end
+
+  defp validate_numbers!(opts) do
+    unless opts[:repetitions] >= 1 and opts[:max_cases] >= 1 and opts[:seed] >= 0 and
+             opts[:suite_repetitions] >= 0,
+           do:
+             Mix.raise(
+               "repetitions and max-cases must be positive; seed and suite-repetitions must be nonnegative"
+             )
+  end
+
+  defp selected_workloads(opts) do
+    if opts[:workloads],
+      do: String.split(opts[:workloads], ",", trim: true),
+      else: Workloads.names()
   end
 end

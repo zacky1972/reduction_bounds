@@ -50,8 +50,9 @@ Readiness is recorded only for successful shared reports. A target failure does
 not discard successfully checked theories. Shared failures and exceptions clear
 failed readiness, and monitored owner death releases in-flight keys so another
 caller can retry. A cancelled waiter is removed and cannot later start a runner.
-The caller continues to own the actual runner port, retaining the existing task
-cancellation and timeout behavior. Waiting is included in the caller's deadline.
+A supervised task owns the runner port under the [global job budget](job_budget.md).
+Caller cancellation terminates that task. Waiting is included in the existing
+per-target deadline.
 
 Readiness is advisory. Every request still supplies its dependency-ordered
 closure to the pinned runner, which loads the matching checked artifacts and
@@ -62,7 +63,8 @@ callers in one VM and publication from independent VMs.
 
 The runner processes modules sequentially inside one request. This stage reuses
 checked dependency closures and coalesces overlapping cold work. It does not
-change test concurrency defaults or introduce a global verification job limit.
+change test concurrency defaults. A separate global verification job budget
+now limits concurrent runner calls after preparation coordination.
 
 ## Controls and measurements
 
