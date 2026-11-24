@@ -2522,3 +2522,39 @@ transitive axiom audit, named-module caching and global job budget.
 See the [cost guide](examples/rpc_cost.md) for the exact assumptions, proof workflow
 and deferred source/completion work. In particular, atomic modeled handler costs
 do not establish costs for arbitrary unfinished server source prefixes.
+
+
+## RPC conditional completion, separately from cost safety
+
+`RpcCompletion.lean` depends on the checked RPC/mailbox layer, independently of
+cost theory and Port-specific completion. A configuration contains the actual
+mailbox/protocol state and a remaining mailbox-action allowance. Every advance
+checks `RpcMailbox.step`, count caps, known control states, canonical protocol
+edges and the balance between remaining allowance and consumed mailbox steps.
+`Moves.erased` yields an original `RpcMailbox.Runs` proof.
+
+The natural rank is `12 * remaining + phase`, with canonical RPC phase at most
+11. Mailbox arrivals, setup, inspections and timeout consume allowance; explicit
+protocol actions decrease phase. `none` represents suspension with unchanged
+configuration. `advanceDecreases`, `Moves.bounded` and `eventCountBound` prove
+finite active work without assuming eventual completion. The conservative
+active-action bound is `11 + 12 * mailbox.limits.steps`; it counts timeline items,
+not elapsed time or cost charges.
+
+`conditionalCompletion` adds client/request/server/response progress at every
+nonterminal point of every admitted behavior, respecting remaining limits. Its
+strong-induction argument establishes eventual model termination, not bounded
+waiting time. `successfulCompletion` additionally excludes failure observations
+and outcomes through a universal `NoFailure` hypothesis. `stalledNotComplete`
+and `stalledNoProgress` show why finite budgets or timeout numerals alone cannot
+establish termination.
+
+The proof builder checks a supplied instrumented trace and its rank/erasure even
+when progress is missing. It emits instantiated completion claims only for a
+compatible goal with all required declarations. The optional cost workflow
+retains participant budgets and their own theorems when completion premises are
+insufficient. A completed example, a replayed handler bound and successful Lean
+reports do not prove external scheduling or delivery assumptions. Builders keep
+`:not_checked`; source termination and runtime correspondence remain unresolved.
+See the [completion guide](examples/rpc_completion.md) for the declarations,
+statuses, exact semantic boundary and verification workflow.

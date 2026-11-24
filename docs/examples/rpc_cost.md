@@ -170,4 +170,5 @@ These model costs treat the handler event atomically. Cost of arbitrary
 unfinished server source executions, late server work after client return,
 source-level exception paths and actual server mailbox scanning are not proved.
 Cost safety does not establish arrival, fairness, scheduling, successful reply,
-or deadline completion. Conditional completion is the next Issue #4 milestone.
+or deadline completion. The [conditional completion layer](rpc_completion.md) adds explicit progress
+premises independently of these cost theorems.

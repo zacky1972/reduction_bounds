@@ -28,21 +28,26 @@ The original evaluation targets now have model-level analyses:
   not itself analyze mailbox behavior or derive RPC cost/completion bounds.
 - A separate RPC mailbox layer replays ordinary-message matching, queue
   retention, cursor behavior, timeout eligibility and explicit size/count
-  conditions. It remains a supplied model, with progress/source proofs
-  left to later milestones.
+  conditions. It supplies mailbox semantics for the separate cost and completion
+  layers; source/runtime correspondence remains later work.
 
 - Conditional RPC cost safety now separates client and server budgets and
   replays unary integer handler contracts with an independent server frame.
   Cost envelopes, future count bounds and runtime work correspondence remain
   explicit assumptions; see the [cost guide](examples/rpc_cost.md).
 
+- Conditional RPC model completion now uses a mailbox/control rank and explicit
+  progress premises over all admitted continuations. Success separately excludes
+  timeout, peer termination and decoding failure. Suspended cost safety does not
+  require progress; see the [completion guide](examples/rpc_completion.md).
+
 These descriptions refer to the checked models and supported fragments;
 see the proof reference for the remaining correspondence obligations.
 
 ## Further model development
 
-- Build conditional RPC completion and a supported source connection on the
-  [mailbox conditions](examples/rpc_mailbox.md).
+- Build a supported RPC source connection on the checked
+  [mailbox conditions](examples/rpc_mailbox.md) and conditional model theorems.
   Repeated RPC attempts require explicit retry and duplicate-execution contracts.
 
 - Extend the supported program fragments and reusable contracts while

@@ -96,3 +96,9 @@ connected RPC/mailbox theory. Handler replay additionally loads the existing
 integer source and bound-transfer closure. Neither path introduces a separate
 runner or admission budget. Changed mailbox dependencies invalidate downstream
 cost artifacts through the same dependency-aware cache.
+
+
+`ReductionBounds.Proofs.RpcCompletion` imports the RPC/mailbox closure, without
+importing RPC cost or Port completion. Optional cost composition loads the
+existing cost/handler dependencies alongside it. Both workflows use the same
+verification, dependency keys, axiom audits and job admission boundary.
