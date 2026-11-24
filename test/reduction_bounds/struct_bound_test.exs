@@ -1,5 +1,6 @@
 defmodule ReductionBounds.StructBoundTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
+  @moduletag timeout: 300_000
 
   alias ReductionBounds.{CoreFragment, ProofInput, SearchBound, TestFixtures}
   alias ReductionBounds.Fixtures.BoundedCounter

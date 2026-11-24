@@ -50,6 +50,7 @@ defmodule ReductionBounds.MixProject do
         "docs/baselines/issue8-all-proofs.md",
         "docs/baselines/issue8-job-budget.md",
         "docs/baselines/issue8-fixture-concurrency.md",
+        "docs/baselines/issue8-remaining-proof-concurrency.md",
         "LICENSE.md"
       ]
     ]

@@ -1,5 +1,5 @@
 defmodule ReductionBounds.ExecutionComparisonTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias ReductionBounds.{ContractComparison, CostContract, ProofInput}
 

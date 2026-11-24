@@ -1,5 +1,6 @@
 defmodule ReductionBounds.IntegerSizeProofTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
+  @moduletag timeout: 300_000
 
   alias ReductionBounds.IntegerSize
 

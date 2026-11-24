@@ -25,6 +25,11 @@ defmodule ReductionBounds.TestFixtures do
     :ok
   end
 
+  def label_scenario(%{module: module, test: test, scenario: scenario}) do
+    Process.set_label({module, test, %{scenario: scenario}})
+    :ok
+  end
+
   def bounded_counter, do: @bounded_counter
   def port_client_beams, do: @port_beams
 end

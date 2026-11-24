@@ -99,3 +99,61 @@ See [profiling and the job budget](job_budget.md) for timing and sampling limits
 
 The [recorded measurements](baselines/issue8-fixture-concurrency.md) include
 a same-source serial/parallel comparison and two ordinary full-suite validations.
+
+## Remaining independent proof families
+
+The following additional modules now run asynchronously under the same per-VM
+verification job budget:
+
+| Module | Isolation audit |
+| --- | --- |
+| `ProtocolProofTest` | Builds request-local contracts, traces and proof strings; no fixture or environment mutation. |
+| `ProtocolConditionsProofTest` | Builds request-local observations, sizes and bounds; altered evidence is a separate immutable proof value. |
+| `ProtocolCostProofTest` | Builds request-local participant budgets and rules; no shared mutable model state. |
+| `IntegerSizeProofTest` | Reads packaged Lean sources and generates one local proof per check; axiom audits remain intact. |
+| `ExecutionComparisonTest` | Builds local contracts and proof declarations, retaining the bound audit before verification. |
+| `StructBoundTest` | Reads the canonical bounded-counter module and immutable BEAM compiled once by `test_helper.exs`; never recompiles or purges it. |
+
+All verification still uses the shared boundary and isolated one-shot runner
+request environments. Logical Lean filenames and declaration names are not
+shared writable files; artifact keys include the final source and dependencies.
+All positive, changed-evidence, incorrect-bound and unfinished-proof assertions
+are retained. No production Lean source or verification semantics changed.
+
+Three Protocol-family loops that previously submitted independent proofs
+sequentially are now eleven native parameterized cases: five protocol traces,
+three condition traces and three cost traces. Each case has a stable scenario
+identity in the profiler, matching ExUnit's parameter map. Scenario data has one
+source of truth in each file's support module, shared by parameter selection and
+proof construction. These eleven instances replace three monolithic tests,
+adding eight reported tests without changing the inputs or verification count.
+The selected six-file cohort has 40 tests and 47 runner invocations.
+
+The loops inside integer-size tests still construct a single combined proof;
+negative tests still check all their deliberately altered variants. They are not
+split merely because they contain a `for` expression. Scenario-local proof
+construction and checks remain ordered.
+
+Protocol, integer-size and struct cases use the same five-minute ExUnit
+scheduling allowance as the earlier asynchronous proof families. Execution
+comparison retains its existing two-minute allowance. These are test-level
+allowances for queueing and, where present, multiple requests. Public API target
+deadlines, Lean options, the provisional default job budget of 2, and deliberate
+timeout checks are unchanged. Raising runnable test counts can still exhaust a
+public deadline; a timed-out configuration is a failure, not a speedup.
+
+Cache-policy, environment/recorder mutation, worker/preparation coordination,
+supervisor restart, and independent-VM publication tests remain synchronous.
+Their isolation requires a separate audit. Recheck promising job-budget settings
+after changing the asynchronous workload; the interrupted earlier calibration
+has not established an optimum.
+
+For a same-source serial/parallel comparison, select these six files with
+`--test-files`, hold the job budget and Lean threads fixed, and change only
+`--max-cases 1` versus `--max-cases 4`. Use different outputs and isolated cold
+caches. Validate another seed/case limit separately. Ordinary full-suite command
+wall time, memory and failures remain the throughput and correctness checks;
+parallel per-test duration sums overlap.
+
+See the [remaining proof-family measurements](baselines/issue8-remaining-proof-concurrency.md)
+for the controlled cohort comparison, isolation audit and full-suite validation.
