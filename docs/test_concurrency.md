@@ -37,7 +37,7 @@ The selected Port consumers read immutable fixtures compiled by the helper.
 Their optional report flag is read only; these tests do not change environment
 variables, cache configuration or global supervisors.
 
-Cache-policy tests, recorder/environment mutation tests, shared-preparation tests,
+Recorder/environment mutation tests, shared-preparation unit tests,
 worker-budget/restart tests, and independent-VM publication tests retain their
 existing synchronous execution. The job budget does not isolate fixture names or
 mutable global state, and does not impose a machine-wide limit on separate VMs.
@@ -142,9 +142,9 @@ deadlines, Lean options, the provisional default job budget of 2, and deliberate
 timeout checks are unchanged. Raising runnable test counts can still exhaust a
 public deadline; a timed-out configuration is a failure, not a speedup.
 
-Cache-policy, environment/recorder mutation, worker/preparation coordination,
+Environment/recorder mutation, worker/preparation unit coordination,
 supervisor restart, and independent-VM publication tests remain synchronous.
-Their isolation requires a separate audit. Recheck promising job-budget settings
+Their shared state keeps them synchronous. Recheck promising job-budget settings
 after changing the asynchronous workload; the interrupted earlier calibration
 has not established an optimum.
 
@@ -157,3 +157,6 @@ parallel per-test duration sums overlap.
 
 See the [remaining proof-family measurements](baselines/issue8-remaining-proof-concurrency.md)
 for the controlled cohort comparison, isolation audit and full-suite validation.
+
+See [heavy regression isolation](regression_isolation.md) for the separate
+cache-policy, family, environment-mutation and independent-VM groups.

@@ -1,14 +1,17 @@
-defmodule ReductionBounds.ProofCacheTest do
-  use ExUnit.Case, async: false
+defmodule ReductionBounds.ProofCacheSupport do
+  import ExUnit.Assertions
   alias ReductionBounds.{ProofInput, Verification}
 
-  test "different proofs reuse theories, targets reuse checked artifacts, and bypass rechecks" do
-    first = input("theorem cachePilotOne : True := by trivial")
-    second = input("theorem cachePilotTwo : True := by trivial")
-    assert_ok(verify(first))
+  def scenarios, do: [:reuse, :invalidation, :invalid_target, :invalid_shared]
+
+  def run(:reuse, nonce) do
+    first = input("theorem cachePilotOne : True := by trivial", nonce)
+    second = input("theorem cachePilotTwo : True := by trivial", nonce)
+    assert_cold(verify(first))
     reports = verify(second)
     assert_ok(reports)
     assert Enum.all?(Enum.drop(reports, -1), & &1.cached)
+    refute List.last(reports).cached
     warm = verify(second)
     assert_ok(warm)
     assert Enum.all?(warm, & &1.cached)
@@ -24,9 +27,9 @@ defmodule ReductionBounds.ProofCacheTest do
     assert length(embedded) == 1
   end
 
-  test "options and successful theory changes recheck their complete dependent closure" do
-    files = assemble(input("theorem cachePilotOptions : True := by trivial"))
-    assert_ok(verify(files))
+  def run(:invalidation, nonce) do
+    files = assemble(input("theorem cachePilotOptions : True := by trivial", nonce))
+    assert_cold(verify(files))
     [size | rest] = files
     salt = :binary.decode_unsigned(:crypto.strong_rand_bytes(4))
 
@@ -49,15 +52,15 @@ defmodule ReductionBounds.ProofCacheTest do
     assert Enum.all?(verify(files, options: options), & &1.cached)
   end
 
-  test "invalid and unfinished proofs cannot reuse a warm successful target" do
-    assert_ok(verify(input("theorem cachePilotInvalid : True := by trivial")))
+  def run(:invalid_target, nonce) do
+    assert_cold(verify(input("theorem cachePilotInvalid : True := by trivial", nonce)))
 
     for source <- [
           "theorem cachePilotInvalid : False := by trivial",
           "theorem cachePilotInvalid : False := by sorry"
         ] do
       for _attempt <- 1..2 do
-        reports = verify(input(source))
+        reports = verify(input(source, nonce))
         target = List.last(reports)
         assert target.status == :error
         refute target.cached
@@ -66,9 +69,9 @@ defmodule ReductionBounds.ProofCacheTest do
     end
   end
 
-  test "a changed failed shared theory invalidates downstream modules and preserves source locations" do
-    files = assemble(input("theorem cachePilotDependency : True := by trivial"))
-    assert_ok(verify(files))
+  def run(:invalid_shared, nonce) do
+    files = assemble(input("theorem cachePilotDependency : True := by trivial", nonce))
+    assert_cold(verify(files))
     [size | rest] = files
 
     broken =
@@ -98,46 +101,6 @@ defmodule ReductionBounds.ProofCacheTest do
     assert Enum.any?(report.diagnostics, &(&1.file == size["file"] and &1.severity == :error))
   end
 
-  test "public integer claims, assumptions, and audited theorem names match the embedded path" do
-    [{module, beam}] =
-      Code.compile_string("""
-      defmodule ReductionBounds.ProofCacheTest.Program do
-        @compile :debug_info
-        def product(x), do: x * x + 1
-      end
-      """)
-
-    previous = System.get_env("REDUCTION_BOUNDS_PROOF_MODE")
-
-    on_exit(fn ->
-      :code.purge(module)
-      :code.delete(module)
-    end)
-
-    try do
-      for function <- [:infer_integer_sizes, :infer_integer_cost_bound] do
-        options = [
-          beam_binaries: [beam],
-          input_sizes: [%ReductionBounds.IntegerSize{lower: -4, upper: 4, magnitude_bits: 3}]
-        ]
-
-        System.put_env("REDUCTION_BOUNDS_PROOF_MODE", "embedded")
-
-        assert {:ok, original} =
-                 apply(ReductionBounds, function, [{module, :product, 1}, options])
-
-        System.put_env("REDUCTION_BOUNDS_PROOF_MODE", "named")
-        assert {:ok, named} = apply(ReductionBounds, function, [{module, :product, 1}, options])
-        assert Map.delete(named, :reports) == Map.delete(original, :reports)
-        assert Enum.all?(original.reports ++ named.reports, &(&1.status == :ok))
-      end
-    after
-      if previous,
-        do: System.put_env("REDUCTION_BOUNDS_PROOF_MODE", previous),
-        else: System.delete_env("REDUCTION_BOUNDS_PROOF_MODE")
-    end
-  end
-
   defp assemble(input, opts \\ []) do
     Verification.assemble(input, Keyword.merge([cache: true, shared_modules: true], opts))
   end
@@ -146,15 +109,42 @@ defmodule ReductionBounds.ProofCacheTest do
     Verification.verify!(input, Keyword.merge([cache: true, shared_modules: true], opts))
   end
 
-  defp input(source) do
+  defp input(source, nonce) do
     proof = %Lynx.Lean{source: source, file: "cache_pilot.lean", span: {1, 1}, indentation: 0}
-    {:ok, postludes} = ProofInput.integer_postludes(proof)
-    Lynx.Translation.new(postludes: postludes)
+    {:ok, [size | rest]} = ProofInput.integer_postludes(proof)
+    size = %{size | source: size.source <> "\n-- isolated cache scenario #{nonce}\n"}
+    Lynx.Translation.new(postludes: [size | rest])
   end
 
   defp assert_ok(reports) do
     assert reports != []
     assert Enum.all?(reports, &(&1.status == :ok))
     assert List.last(reports).module == "Erlang.postlude"
+  end
+
+  defp assert_cold(reports) do
+    assert_ok(reports)
+    refute Enum.any?(reports, & &1.cached)
+  end
+end
+
+defmodule ReductionBounds.ProofCacheTest do
+  use ExUnit.Case,
+    async: true,
+    parameterize:
+      for(scenario <- ReductionBounds.ProofCacheSupport.scenarios(), do: %{scenario: scenario})
+
+  @moduletag timeout: 300_000
+
+  setup context do
+    :ok = ReductionBounds.TestFixtures.label_scenario(context)
+    {:ok, nonce: Base.encode16(:crypto.strong_rand_bytes(12))}
+  end
+
+  test "isolated cache policy preserves checked artifacts and rejection", %{
+    scenario: scenario,
+    nonce: nonce
+  } do
+    ReductionBounds.ProofCacheSupport.run(scenario, nonce)
   end
 end

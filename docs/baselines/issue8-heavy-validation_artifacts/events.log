@@ -1,0 +1,5 @@
+serial {'wall_s': 203.08, 'rss_gib': 2.425, 'cpu': 106.4, 'peak_per_vm': 1, 'calls': 49, 'cached_modules': 68, 'tests': 13, 'suite': {'async': 178329711, 'load': None, 'run': 202118522}, 'child_VMs': 3}
+parallel {'wall_s': 120.047, 'rss_gib': 2.43, 'cpu': 189.9, 'peak_per_vm': 2, 'calls': 49, 'cached_modules': 68, 'tests': 13, 'suite': {'async': 96042677, 'load': None, 'run': 119318972}, 'child_VMs': 3}
+seed42 {'wall_s': 79.411, 'rss_gib': 4.51, 'cpu': 306.0, 'peak_per_vm': 4, 'calls': 49, 'cached_modules': 68, 'tests': 13, 'suite': {'async': 55610888, 'load': None, 'run': 78619007}, 'child_VMs': 3}
+full {'wall_s': 628.623, 'rss_gib': 2.512, 'cpu': 164.6, 'peak_per_vm': 2, 'calls': 299, 'cached_modules': 1050, 'tests': 336, 'suite': {'async': 544887771, 'load': None, 'run': 627755396}, 'child_VMs': 3}
+shorter_percent 40.88684262359662

@@ -45,12 +45,14 @@ defmodule ReductionBounds.MixProject do
         "docs/job_budget.md",
         "docs/job_calibration.md",
         "docs/test_concurrency.md",
+        "docs/regression_isolation.md",
         "docs/baselines/issue8-linux-otp29.md",
         "docs/baselines/issue8-integer-cache.md",
         "docs/baselines/issue8-all-proofs.md",
         "docs/baselines/issue8-job-budget.md",
         "docs/baselines/issue8-fixture-concurrency.md",
         "docs/baselines/issue8-remaining-proof-concurrency.md",
+        "docs/baselines/issue8-heavy-regression-isolation.md",
         "LICENSE.md"
       ]
     ]
