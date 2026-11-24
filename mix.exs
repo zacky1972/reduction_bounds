@@ -47,6 +47,8 @@ defmodule ReductionBounds.MixProject do
         "docs/test_concurrency.md",
         "docs/regression_isolation.md",
         "docs/runner_optimization_review.md",
+        "docs/verification_defaults.md",
+        "docs/issue8_status.md",
         "docs/baselines/issue8-linux-otp29.md",
         "docs/baselines/issue8-integer-cache.md",
         "docs/baselines/issue8-all-proofs.md",
@@ -55,6 +57,8 @@ defmodule ReductionBounds.MixProject do
         "docs/baselines/issue8-remaining-proof-concurrency.md",
         "docs/baselines/issue8-heavy-regression-isolation.md",
         "docs/baselines/issue8-conditional-runner-review.md",
+        "docs/baselines/issue8-mac-job-calibration.md",
+        "docs/baselines/issue8-final-validation.md",
         "LICENSE.md"
       ]
     ]

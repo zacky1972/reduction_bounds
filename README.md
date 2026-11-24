@@ -44,6 +44,16 @@ The [proof reference](docs/proof.md) explains the checked theorems,
 assumptions, and reproduction commands. Future directions are in the
 [roadmap](docs/roadmap.md).
 
+## Verification performance and configuration
+
+Shared Lean theories and target artifacts are reused when their sources,
+dependencies and options match. Independent verification runs under a per-VM
+job budget. The fallback is 2 jobs; it has not been calibrated as an optimum.
+See [verification defaults](docs/verification_defaults.md) for controls, measured
+trade-offs and deadlines. The reference M2 Max profile is 4 jobs with 2 Lean
+threads, supported by a successful cold/warm full-suite comparison. Benchmark,
+calibration and log-assessment tasks are described in that guide.
+
 ## Limitations
 
 - Analysis requires Core Erlang recoverable from BEAM debug information.

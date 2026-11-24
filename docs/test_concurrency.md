@@ -5,6 +5,10 @@ job budget. The provisional default budget remains 2; it has not been calibrated
 scheduling, while the job budget controls aggregate verification invocations.
 Neither setting changes Lean's own thread count.
 
+The later [reference-Mac calibration](baselines/issue8-mac-job-calibration.md)
+supports an initial profile of 4 jobs with 2 Lean threads on the measured M2 Max.
+This does not change the portable fallback or establish a universal optimum.
+
 ## Immutable and mutable fixtures
 
 `test_helper.exs` compiles the integer analysis, integer-cost and arithmetic-case

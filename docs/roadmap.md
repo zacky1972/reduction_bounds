@@ -62,3 +62,8 @@ conditional follow-ups. The current backend uses one-shot calls and sequential
 dependency-ordered module processing. See the
 [runner optimization review](runner_optimization_review.md) for the measurements,
 supported-API and correctness gates required before changing that backend.
+
+The [Issue 8 status](issue8_status.md) records completed concurrency/cache work
+and the successful reference-Mac calibration. The [retained defaults](verification_defaults.md)
+distinguish the initial Mac profile (4 jobs, 2 Lean threads) from the portable
+fallback; neither is claimed to be universally optimal.

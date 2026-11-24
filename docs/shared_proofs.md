@@ -85,3 +85,7 @@ See [benchmarking](benchmarking.md) for the timing and memory limitations.
 
 The [all-family measurements](baselines/issue8-all-proofs.md) record both warm
 benefits and overhead in smaller workflows.
+
+Named and embedded paths share source providers; both remain supported for
+comparison and audits. See [verification defaults](verification_defaults.md)
+for the retained policy and mixed workload measurements.

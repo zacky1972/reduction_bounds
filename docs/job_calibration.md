@@ -86,9 +86,26 @@ runner-related overhead. Use `job.runner_call_wall_ms` to isolate the runner cal
 from those waits. That call still includes import/artifact loading, protocol and
 teardown costs: its non-module remainder is not a pure startup measurement.
 
-One trial is exploratory. Repeat promising configurations before documenting a
-machine-specific recommendation or changing the portable default. Consider both
+One trial is exploratory. A successful comparison can support an initial
+machine-specific profile with that limitation stated. Repeat promising
+configurations before calling them calibrated defaults or changing the portable default. Consider both
 cold and warm workloads, memory and deadline failures, not only the fastest warm
 sample. The task does not change configuration defaults automatically. Recheck
 promising settings after expanding asynchronous tests, since that changes the
 workload presented to the budget.
+
+The [retained default policy](verification_defaults.md) distinguishes the
+provisional job fallback from settings justified for a particular machine.
+
+## Reference M2 Max result
+
+The [2026-11-24 full-suite comparison](baselines/issue8-mac-job-calibration.md)
+passed all four runs (345 tests each). Jobs 4 with Lean threads 2 is the initial
+recommended profile on that machine: 36.6% shorter cold and 33.9% shorter warm
+command wall time than jobs 2. This does not change the portable fallback or
+establish an optimum across untested settings.
+
+The isolated build copies packaged `priv` resources before measured runs, avoiding
+relative symlinks through macOS temporary-directory aliases. Shared-preparation
+integration uses its ExUnit 300-second bound instead of an additional nested
+60-second stream limit; public target deadlines and their tests remain intact.

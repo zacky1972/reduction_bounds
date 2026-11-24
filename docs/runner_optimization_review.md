@@ -116,8 +116,11 @@ request residuals, many runner launches, many cold modules, or a static graph wi
 independent nodes does not by itself satisfy either gate. Current evidence does
 not isolate startup, measure a cold critical path or demonstrate either backend's
 throughput benefit. Keep the simpler backend while those requirements remain
-unmet. Target-machine calibration remains incomplete; the default of 2 is still
-provisional. Do not change defaults or deadlines to make an experiment pass.
+unmet. The [reference-Mac comparison](baselines/issue8-mac-job-calibration.md)
+now passes all four full-suite commands and supports an initial profile of
+4 jobs with 2 Lean threads. It does not measure either proposed backend's
+benefit. The portable fallback of 2 remains provisional on unmeasured machines;
+public deadlines are unchanged. See [verification defaults](verification_defaults.md).
 
 If a supported session prototype is justified, preserve separate environments,
 artifact maps, target association, ordered results, diagnostics and transitive

@@ -95,3 +95,8 @@ or introduce persistent runners.
 
 See the [recorded regression measurements](baselines/issue8-heavy-regression-isolation.md)
 for the controlled cohort comparison, resource samples and full-suite validation.
+
+The later [reference-Mac calibration](baselines/issue8-mac-job-calibration.md)
+records the full-suite job comparison. Its initial 4-job, 2-thread profile is
+machine-specific; the portable fallback remains 2. See
+[verification defaults](verification_defaults.md) for the final policy snapshot.

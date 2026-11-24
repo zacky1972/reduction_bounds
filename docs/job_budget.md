@@ -2,8 +2,8 @@
 
 All production verification goes through one per-VM job budget. The default is
 **2 admitted jobs** (provisional and not a measured optimum), independent of ExUnit's `max_cases` and each API call's
-`max_concurrency`. This stage does not change synchronous test modules to run
-asynchronously, batch requests or introduce persistent Lean sessions.
+`max_concurrency`. Audited independent tests run asynchronously; global-state
+and independent-VM cases retain serialization. The backend remains one-shot.
 
 Set the limit before starting the application:
 
@@ -142,3 +142,6 @@ cold/warm full-suite comparison of job limits on the target machine.
 The [conditional optimization review](runner_optimization_review.md) separates
 actual-call residuals from waiting and keeps runner reuse and cold scheduling
 subject to controlled evidence and a supported upstream API.
+
+See the [retained defaults and reference Mac calibration](verification_defaults.md) for
+the current policy and its measurement limits.
