@@ -1,0 +1,2 @@
+{"id":"4603-1","target":"{ReductionBounds.Benchmark.Workloads.Program, :product, 1}","event":"started"}
+{"id":"4603-1","reports":[{"module":"ReductionBounds.Proofs.IntegerSize","status":"ok","cached":false,"time_ms":2255,"theorems":[]},{"module":"ReductionBounds.Proofs.IntegerAnalysis","status":"ok","cached":false,"time_ms":1345,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":992,"theorems":[]}],"event":"completed","assembly_ms":1.516,"module_wall_ms":4592,"runner_non_module_wall_ms":862.4359999999997,"runner_wall_ms":5454.436}

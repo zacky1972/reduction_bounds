@@ -1,5 +1,6 @@
 defmodule ReductionBounds.NormalizeTest do
   use ExUnit.Case, async: true
+  @moduletag timeout: 300_000
 
   alias ReductionBounds.{CoreFragment, CoreSource, Normalize, ProofInput, SearchBound}
   alias ReductionBounds.TestFixtures
@@ -177,11 +178,14 @@ defmodule ReductionBounds.NormalizeTest do
 
     assert {:ok, postludes} = ProofInput.postludes(proof)
     translation = Lynx.Translation.new(postludes: postludes)
-    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
 
-    assert [%{module: "Erlang.postlude"} = report] =
-             Lynx.Commands.verify!(project, ProofInput.assemble(translation))
+    reports =
+      ReductionBounds.Verification.verify!(translation,
+        postlude_imports: ["Erlang.erlang", "Erlang.maps"]
+      )
 
+    assert Enum.all?(Enum.drop(reports, -1), &(&1.status == :ok))
+    assert %{module: "Erlang.postlude"} = report = List.last(reports)
     report
   end
 

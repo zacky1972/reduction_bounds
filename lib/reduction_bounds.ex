@@ -508,8 +508,18 @@ defmodule ReductionBounds do
           {:ok, map()} | {:error, term()}
   def infer_search_bound(target, options \\ []) do
     with {:ok, options} <- validate_options(options, :search),
-         {:ok, candidate} <- ReductionBounds.SearchBound.infer(target, options[:beam_binaries]) do
-      verify_bound(target, candidate, ReductionBounds.SearchBound.proof(), options)
+         {:ok, candidate} <-
+           ReductionBounds.Profile.measure(:source_generation, "SearchBound.infer", fn ->
+             ReductionBounds.SearchBound.infer(target, options[:beam_binaries])
+           end) do
+      verify_bound(
+        target,
+        candidate,
+        ReductionBounds.Profile.measure(:source_generation, "SearchBound.proof", fn ->
+          ReductionBounds.SearchBound.proof()
+        end),
+        options
+      )
     end
   end
 
@@ -559,7 +569,10 @@ defmodule ReductionBounds do
   @spec infer_list_bound(target(), [list_inference_option()]) :: {:ok, map()} | {:error, term()}
   def infer_list_bound(target, options \\ []) do
     with {:ok, options} <- validate_options(options, :list_bound),
-         {:ok, candidate} <- ReductionBounds.ListBound.infer(target, options[:beam_binaries]) do
+         {:ok, candidate} <-
+           ReductionBounds.Profile.measure(:source_generation, "ListBound.infer", fn ->
+             ReductionBounds.ListBound.infer(target, options[:beam_binaries])
+           end) do
       {contract, options} = Keyword.pop(options, :input_contract)
       verify_list_candidate(target, candidate, contract, options)
     end
@@ -576,11 +589,16 @@ defmodule ReductionBounds do
   @spec infer_circular_buffer_bound([verification_option()]) :: {:ok, map()} | {:error, term()}
   def infer_circular_buffer_bound(options \\ []) do
     with {:ok, options} <- validate_options(options, :search),
-         {:ok, candidate} <- ReductionBounds.CircularBufferBound.infer(options[:beam_binaries]) do
+         {:ok, candidate} <-
+           ReductionBounds.Profile.measure(:source_generation, "CircularBufferBound.infer", fn ->
+             ReductionBounds.CircularBufferBound.infer(options[:beam_binaries])
+           end) do
       verify_bound(
         candidate.target,
         candidate,
-        ReductionBounds.CircularBufferBound.proof(),
+        ReductionBounds.Profile.measure(:source_generation, "CircularBufferBound.proof", fn ->
+          ReductionBounds.CircularBufferBound.proof()
+        end),
         options
       )
     end
@@ -598,11 +616,19 @@ defmodule ReductionBounds do
   def infer_circular_buffer_sequence_bound(options \\ []) do
     with {:ok, options} <- validate_options(options, :search),
          {:ok, candidate} <-
-           ReductionBounds.CircularBufferSequenceBound.infer(options[:beam_binaries]) do
+           ReductionBounds.Profile.measure(
+             :source_generation,
+             "CircularBufferSequenceBound.infer",
+             fn -> ReductionBounds.CircularBufferSequenceBound.infer(options[:beam_binaries]) end
+           ) do
       verify_bound(
         candidate.target,
         candidate,
-        ReductionBounds.CircularBufferSequenceBound.proof(),
+        ReductionBounds.Profile.measure(
+          :source_generation,
+          "CircularBufferSequenceBound.proof",
+          fn -> ReductionBounds.CircularBufferSequenceBound.proof() end
+        ),
         options
       )
     end
@@ -631,7 +657,9 @@ defmodule ReductionBounds do
          {:ok, options} <- validate_options(options, :periodic_bound),
          {contract, options} = Keyword.pop(options, :periodic_contract),
          {:ok, candidate, proof} <-
-           ReductionBounds.PeriodicBound.infer(target, options[:beam_binaries], contract) do
+           ReductionBounds.Profile.measure(:source_generation, "PeriodicBound.infer", fn ->
+             ReductionBounds.PeriodicBound.infer(target, options[:beam_binaries], contract)
+           end) do
       verify_bound(target, candidate, proof, Keyword.delete(options, :beam_binaries))
     end
   end
@@ -650,15 +678,24 @@ defmodule ReductionBounds do
   def infer_list_call_bound(caller, callee, options \\ []) do
     with {:ok, options} <- validate_options(options, :list_bound),
          :ok <-
-           ReductionBounds.ListBound.check_forwarding_call(
-             caller,
-             callee,
-             options[:beam_binaries]
+           ReductionBounds.Profile.measure(
+             :source_generation,
+             "ListBound.check_forwarding_call",
+             fn ->
+               ReductionBounds.ListBound.check_forwarding_call(
+                 caller,
+                 callee,
+                 options[:beam_binaries]
+               )
+             end
            ),
-         {:ok, candidate} <- ReductionBounds.ListBound.infer(callee, options[:beam_binaries]) do
+         {:ok, candidate} <-
+           ReductionBounds.Profile.measure(:source_generation, "ListBound.infer", fn ->
+             ReductionBounds.ListBound.infer(callee, options[:beam_binaries])
+           end) do
       {contract, options} = Keyword.pop(options, :input_contract)
 
-      with {:ok, proof} <- ReductionBounds.ListBound.forwarding_proof(caller, candidate, contract) do
+      with {:ok, proof} <- forwarding_proof(caller, candidate, contract) do
         result = %{
           target: caller,
           callee: callee,
@@ -672,8 +709,17 @@ defmodule ReductionBounds do
     end
   end
 
+  defp forwarding_proof(caller, candidate, contract) do
+    ReductionBounds.Profile.measure(:source_generation, "ListBound.forwarding_proof", fn ->
+      ReductionBounds.ListBound.forwarding_proof(caller, candidate, contract)
+    end)
+  end
+
   defp verify_list_candidate(target, candidate, contract, options) do
-    with {:ok, proof} <- ReductionBounds.ListBound.input_proof(candidate, contract) do
+    with {:ok, proof} <-
+           ReductionBounds.Profile.measure(:source_generation, "ListBound.input_proof", fn ->
+             ReductionBounds.ListBound.input_proof(candidate, contract)
+           end) do
       result =
         candidate |> Map.delete(:program) |> Map.put(:size_measure, list_size_measure(contract))
 
@@ -705,7 +751,9 @@ defmodule ReductionBounds do
     with :ok <- validate_targets([target]),
          {:ok, options} <- validate_options(options, :struct_bound),
          {:ok, candidate, proof} <-
-           ReductionBounds.ComposedBound.infer_struct(target, options[:beam_binaries]) do
+           ReductionBounds.Profile.measure(:source_generation, "ComposedBound.infer_struct", fn ->
+             ReductionBounds.ComposedBound.infer_struct(target, options[:beam_binaries])
+           end) do
       verify_bound(target, candidate, proof, Keyword.delete(options, :beam_binaries))
     end
   end
@@ -735,7 +783,9 @@ defmodule ReductionBounds do
          {:ok, options} <- validate_options(options, :execution_bound),
          {contracts, options} = Keyword.pop!(options, :call_contracts),
          {:ok, candidate, proof} <-
-           ReductionBounds.ExecutionBound.infer(target, options[:beam_binaries], contracts) do
+           ReductionBounds.Profile.measure(:source_generation, "ExecutionBound.infer", fn ->
+             ReductionBounds.ExecutionBound.infer(target, options[:beam_binaries], contracts)
+           end) do
       verify_bound(target, candidate, proof, Keyword.delete(options, :beam_binaries))
     end
   end
@@ -785,7 +835,9 @@ defmodule ReductionBounds do
          {:ok, options} <- validate_options(options, :integer_sizes),
          {inputs, options} = Keyword.pop!(options, :input_sizes),
          {:ok, candidate, proof} <-
-           ReductionBounds.IntegerAnalysis.infer(target, options[:beam_binaries], inputs) do
+           ReductionBounds.Profile.measure(:source_generation, "IntegerAnalysis.infer", fn ->
+             ReductionBounds.IntegerAnalysis.infer(target, options[:beam_binaries], inputs)
+           end) do
       verify_bound(target, candidate, proof, Keyword.delete(options, :beam_binaries))
     end
   end
@@ -865,7 +917,10 @@ defmodule ReductionBounds do
   def infer_integer_cost_bound(target, options \\ []) do
     with :ok <- validate_targets([target]),
          {:ok, options} <- validate_options(options, :integer_cost),
-         {:ok, candidate, proof} <- ReductionBounds.IntegerCostBound.infer(target, options) do
+         {:ok, candidate, proof} <-
+           ReductionBounds.Profile.measure(:source_generation, "IntegerCostBound.infer", fn ->
+             ReductionBounds.IntegerCostBound.infer(target, options)
+           end) do
       verification = Keyword.take(options, [:max_concurrency, :timeout, :lean_options])
       verify_bound(target, candidate, proof, verification)
     end
@@ -938,7 +993,9 @@ defmodule ReductionBounds do
   def compare_cost_contracts(smaller, larger, options \\ []) do
     with {:ok, options} <- validate_options(options, :cost_comparison),
          {:ok, candidate, proof} <-
-           ReductionBounds.ContractComparison.infer(smaller, larger, options[:budget]) do
+           ReductionBounds.Profile.measure(:source_generation, "ContractComparison.infer", fn ->
+             ReductionBounds.ContractComparison.infer(smaller, larger, options[:budget])
+           end) do
       verification = Keyword.take(options, [:max_concurrency, :timeout, :lean_options])
       verify_bound({__MODULE__, :compare_cost_contracts, 3}, candidate, proof, verification)
     end
@@ -1016,7 +1073,9 @@ defmodule ReductionBounds do
   def transfer_integer_bound(bound, destination, options \\ []) do
     with {:ok, options} <- validate_options(options, :bound_transfer),
          {:ok, candidate, proof} <-
-           ReductionBounds.BoundTransfer.infer(bound, destination, options) do
+           ReductionBounds.Profile.measure(:source_generation, "BoundTransfer.infer", fn ->
+             ReductionBounds.BoundTransfer.infer(bound, destination, options)
+           end) do
       verification = Keyword.take(options, [:max_concurrency, :timeout, :lean_options])
       verify_bound(candidate.target, candidate, proof, verification)
     end
@@ -1060,7 +1119,9 @@ defmodule ReductionBounds do
          {observations, options} = Keyword.pop!(options, :observations),
          {completion, options} = Keyword.pop!(options, :completion),
          {:ok, candidate, proof} <-
-           ReductionBounds.PortWorkflow.build(profile, events, observations, completion),
+           ReductionBounds.Profile.measure(:source_generation, "PortWorkflow.build", fn ->
+             ReductionBounds.PortWorkflow.build(profile, events, observations, completion)
+           end),
          {:ok, result} <-
            verify_bound({__MODULE__, :verify_port_model, 3}, candidate, proof, options) do
       ReductionBounds.PortResult.verified(result, result.reports)
@@ -1109,11 +1170,13 @@ defmodule ReductionBounds do
          {source_options, verify_options} = Keyword.split(options, [:calls]),
          {:ok, verify_options} <- validate_options(verify_options, :struct_bound),
          {:ok, candidate, proof} <-
-           ReductionBounds.PortSourceProof.build(
-             target,
-             profile,
-             source_options ++ Keyword.take(verify_options, [:beam_binaries])
-           ),
+           ReductionBounds.Profile.measure(:source_generation, "PortSourceProof.build", fn ->
+             ReductionBounds.PortSourceProof.build(
+               target,
+               profile,
+               source_options ++ Keyword.take(verify_options, [:beam_binaries])
+             )
+           end),
          {:ok, result} <- verify_bound(target, candidate, proof, verify_options) do
       ReductionBounds.PortResult.verified(result, result.reports)
     else
@@ -1124,7 +1187,11 @@ defmodule ReductionBounds do
 
   defp verify_bound(target, candidate, proof, options) do
     source = Map.get(candidate, :source, :translated)
-    {proof, evidence} = ReductionBounds.ProofInput.audit_bound(proof, candidate)
+
+    {proof, evidence} =
+      ReductionBounds.Profile.measure(:source_generation, "ProofInput.audit_bound", fn ->
+        ReductionBounds.ProofInput.audit_bound(proof, candidate)
+      end)
 
     case verify_source(:inline, [target], [postlude: proof] ++ options, source) do
       {:ok, [{^target, {:ok, reports}}]} ->
@@ -1149,8 +1216,14 @@ defmodule ReductionBounds do
          {:ok, proof, options} <- resolve_proof(source, options),
          {beams, options} = Keyword.pop!(options, :beam_binaries),
          {suffixes, options} = Keyword.pop!(options, :termination_suffixes),
-         {:ok, postludes} <- proof_postludes(proof, definition),
-         {:ok, translation} <- prepare_translation(postludes, beams, suffixes) do
+         {:ok, postludes} <-
+           ReductionBounds.Profile.measure(:proof_input, "postludes", fn ->
+             proof_postludes(proof, definition)
+           end),
+         {:ok, translation} <-
+           ReductionBounds.Profile.measure(:proof_input, "translation", fn ->
+             prepare_translation(postludes, beams, suffixes)
+           end) do
       {:ok, verify_targets(translation, Enum.uniq(targets), options, definition)}
     end
   end
@@ -1178,7 +1251,8 @@ defmodule ReductionBounds do
   defp proof_postludes(proof, :execution_fragment),
     do: ReductionBounds.ProofInput.execution_postludes(proof)
 
-  defp proof_postludes(proof, _definition), do: {:ok, [proof]}
+  defp proof_postludes(proof, _definition),
+    do: ReductionBounds.ProofInput.generated_postludes(proof)
 
   defp resolve_proof(:inline, options) do
     case Keyword.pop(options, :postlude) do
@@ -1397,7 +1471,6 @@ defmodule ReductionBounds do
   defp verify_targets(_translation, [], _options, _definition), do: []
 
   defp verify_targets(translation, targets, options, definition) do
-    project_dir = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
     {lean_options, task_options} = Keyword.pop!(options, :lean_options)
     {:ok, supervisor} = Task.Supervisor.start_link()
 
@@ -1406,7 +1479,7 @@ defmodule ReductionBounds do
       |> Task.Supervisor.async_stream_nolink(
         targets,
         fn target ->
-          {target, verify_target(target, translation, project_dir, lean_options, definition)}
+          {target, verify_target(target, translation, lean_options, definition)}
         end,
         task_options ++ [on_timeout: :kill_task, zip_input_on_exit: true]
       )
@@ -1420,9 +1493,13 @@ defmodule ReductionBounds do
     end
   end
 
-  defp verify_target(target, translation, project_dir, lean_options, definition) do
-    files = assemble_target(translation, target, definition)
-    reports = Lynx.Commands.verify!(project_dir, files, options: lean_options)
+  defp verify_target(target, translation, lean_options, definition) do
+    reports =
+      ReductionBounds.Verification.verify!(translation,
+        target: target,
+        definition: definition,
+        options: lean_options
+      )
 
     if reports != [] and Enum.all?(reports, &(&1.status == :ok)) do
       {:ok, reports}
@@ -1431,56 +1508,5 @@ defmodule ReductionBounds do
     end
   rescue
     error -> {:error, {:lynx, error}}
-  end
-
-  defp assemble_target(translation, {module, function, arity}, :translated) do
-    translation
-    |> Lynx.Translation.translate(module, [{function, arity}])
-    |> Lynx.Translation.assemble(cache: false)
-  end
-
-  defp assemble_target(translation, target, :composed) do
-    translation |> assemble_target(target, :translated) |> import_postlude("Erlang.lists")
-  end
-
-  defp assemble_target(translation, _target, :circular_buffer_model) do
-    translation |> Lynx.Translation.assemble(cache: false) |> import_postlude("Erlang.lists")
-  end
-
-  defp assemble_target(translation, _target, fragment)
-       when fragment in [
-              :port_completion,
-              :port_source,
-              :periodic_fragment,
-              :integer_fragment,
-              :integer_cost_fragment,
-              :integer_bound_transfer,
-              :cost_contract_comparison
-            ] do
-    Lynx.Translation.assemble(translation, cache: false)
-  end
-
-  defp assemble_target(translation, _target, fragment)
-       when fragment in [:struct_fragment, :execution_fragment] do
-    ReductionBounds.ProofInput.assemble(translation)
-  end
-
-  # cspell:words leanj
-  defp assemble_target(translation, {module, _, _}, :lynx_builtin) do
-    # Lynx's runner resolves this import to its bundled Erlang model.
-    import = :lynx_core_to_leanj.module_name(module)
-    translation |> Lynx.Translation.assemble(cache: false) |> import_postlude(import)
-  end
-
-  defp import_postlude(files, import) do
-    for file <- files do
-      case file do
-        %{"module" => "Erlang.postlude"} ->
-          Map.update!(file, "imports", &Enum.uniq([import | &1]))
-
-        _ ->
-          file
-      end
-    end
   end
 end

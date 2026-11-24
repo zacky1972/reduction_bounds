@@ -1,0 +1,99 @@
+No retired or security advisory packages found
+Compiling 40 files (.ex)
+Generated reduction_bounds app
+Checking 40 source files ...
+
+Please report incorrect results: https://github.com/rrrene/credo/issues
+
+Analysis took 0.8 seconds (0.03s to load, 0.8s running 71 checks on 40 files)
+1471 mods/funs, found no issues.
+
+Use `mix credo explain` to explain issues, `mix credo --help` for options.
+bun add v1.3.0 (b0a6feca)
+Saved lockfile
+
+installed cspell@9.4.0 with binaries:
+ - cspell
+ - cspell-esm
+
+[3.00ms] done
+ 1/57 CHANGELOG.md 1662.94ms
+ 2/57 docs/baselines/issue8-integer-cache.md 27.28ms
+ 3/57 docs/baselines/issue8-linux-otp29.md 16.41ms
+ 4/57 docs/benchmarking.md 14.86ms
+ 5/57 docs/examples.md 7.45ms
+ 6/57 docs/examples/cost_contracts.md 59.43ms
+ 7/57 docs/examples/list_bounds.md 11.41ms
+ 8/57 docs/examples/ports.md 13.35ms
+ 9/57 docs/examples/verification.md 16.70ms
+10/57 docs/proof.md 148.87ms
+11/57 docs/roadmap.md 10.67ms
+12/57 docs/toolchains.md 7.05ms
+13/57 lean-toolchain 5.56ms
+14/57 lean/identity.lean 4.69ms
+15/57 lean/timeout.lean 3.81ms
+16/57 lib/mix/tasks/reduction_bounds.bench.ex 12.08ms
+17/57 lib/reduction_bounds.ex 86.74ms
+18/57 lib/reduction_bounds/benchmark.ex 22.07ms
+19/57 lib/reduction_bounds/benchmark/command.ex 11.09ms
+20/57 lib/reduction_bounds/benchmark/workloads.ex 17.18ms
+21/57 lib/reduction_bounds/bound_transfer.ex 32.72ms
+22/57 lib/reduction_bounds/circular_buffer_bound.ex 16.43ms
+23/57 lib/reduction_bounds/circular_buffer_sequence_bound.ex 12.50ms
+24/57 lib/reduction_bounds/composed_bound.ex 41.10ms
+25/57 lib/reduction_bounds/contract_comparison.ex 21.29ms
+26/57 lib/reduction_bounds/core_fragment.ex 17.67ms
+27/57 lib/reduction_bounds/core_source.ex 7.32ms
+28/57 lib/reduction_bounds/cost_contract.ex 15.89ms
+29/57 lib/reduction_bounds/execution_bound.ex 24.08ms
+30/57 lib/reduction_bounds/integer_analysis.ex 23.97ms
+31/57 lib/reduction_bounds/integer_cost_bound.ex 37.69ms
+32/57 lib/reduction_bounds/integer_cost_source.ex 15.17ms
+33/57 lib/reduction_bounds/integer_size.ex 25.56ms
+34/57 lib/reduction_bounds/list_bound.ex 46.44ms
+35/57 lib/reduction_bounds/normalize.ex 9.72ms
+36/57 lib/reduction_bounds/periodic_bound.ex 15.91ms
+37/57 lib/reduction_bounds/port_completion_proof.ex 14.38ms
+38/57 lib/reduction_bounds/port_completion.ex 18.83ms
+39/57 lib/reduction_bounds/port_protocol.ex 6.54ms
+40/57 lib/reduction_bounds/port_result.ex 8.21ms
+41/57 lib/reduction_bounds/port_source_proof.ex 8.03ms
+42/57 lib/reduction_bounds/port_source.ex 14.41ms
+43/57 lib/reduction_bounds/port_workflow.ex 5.33ms
+44/57 lib/reduction_bounds/proof_cache.ex 5.20ms
+45/57 lib/reduction_bounds/proof_input.ex 20.21ms
+46/57 lib/reduction_bounds/proof_modules.ex 8.82ms
+47/57 lib/reduction_bounds/protocol_conditions_proof.ex 5.57ms
+48/57 lib/reduction_bounds/protocol_conditions.ex 7.86ms
+49/57 lib/reduction_bounds/protocol_cost_proof.ex 5.58ms
+50/57 lib/reduction_bounds/protocol_cost.ex 6.51ms
+51/57 lib/reduction_bounds/protocol_proof.ex 4.83ms
+52/57 lib/reduction_bounds/protocol_size.ex 4.61ms
+53/57 lib/reduction_bounds/protocol.ex 5.89ms
+54/57 lib/reduction_bounds/search_bound.ex 5.68ms
+55/57 lib/reduction_bounds/verification.ex 9.17ms
+56/57 LICENSE.md 11.25ms
+57/57 README.md 7.55ms
+CSpell: Files checked: 57, Issues found: 0 in 0 files.
+Spellcheck passed.
+Finding suitable PLTs
+Checking PLT...
+[:compiler, :crypto, :elixir, :kernel, :logger, :lynx, :mix, :reduction_bounds, :stdlib]
+PLT is up to date!
+ignore_warnings: .dialyzer_ignore.exs
+
+Starting Dialyzer
+[
+  check_plt: false,
+  init_plt: ~c"/workspace/scratch/9624e53852b3/integer-cache-pilot/_build/dev/dialyxir_erlang-29.1.2_elixir-1.20.5_deps-dev.plt",
+  files: [~c"/workspace/scratch/9624e53852b3/integer-cache-pilot/_build/dev/lib/reduction_bounds/ebin/Elixir.ReductionBounds.IntegerAnalysis.beam",
+   ~c"/workspace/scratch/9624e53852b3/integer-cache-pilot/_build/dev/lib/reduction_bounds/ebin/Elixir.ReductionBounds.CircularBufferSequenceBound.beam",
+   ~c"/workspace/scratch/9624e53852b3/integer-cache-pilot/_build/dev/lib/reduction_bounds/ebin/Elixir.Mix.Tasks.ReductionBounds.Bench.beam",
+   ~c"/workspace/scratch/9624e53852b3/integer-cache-pilot/_build/dev/lib/reduction_bounds/ebin/Elixir.ReductionBounds.ExecutionBound.beam",
+   ~c"/workspace/scratch/9624e53852b3/integer-cache-pilot/_build/dev/lib/reduction_bounds/ebin/Elixir.ReductionBounds.CostContract.beam",
+   ...],
+  ...
+]
+Total errors: 0, Skipped: 0, Unnecessary Skips: 0
+done in 0m12.3s
+done (passed successfully)

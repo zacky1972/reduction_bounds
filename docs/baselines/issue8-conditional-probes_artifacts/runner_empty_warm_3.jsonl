@@ -1,0 +1,3 @@
+{"id":"731-1","os_pid":"731","process":"#PID<0.95.0>","context":null,"target":"nil","event":"started","monotonic_us":-576460751458439,"schema_version":2}
+{"os_pid":"731","process":"#PID<0.206.0>","context":null,"target":"nil","event":"runner_started","job":{"limit":2,"active_at_start":1,"queue_ms":0.003},"monotonic_us":-576460751455447,"schema_version":2}
+{"id":"731-1","os_pid":"731","process":"#PID<0.95.0>","context":null,"target":"nil","event":"completed","assembly_ms":0.493,"coordination":{"mode":"bypassed","wall_ms":0.0},"job":{"limit":2,"active_at_start":1,"queue_ms":0.003,"runner_call_wall_ms":166.631},"module_wall_ms":0,"reports":[],"runner_non_module_wall_ms":170.131,"runner_wall_ms":170.131,"monotonic_us":-576460751285356,"schema_version":2}

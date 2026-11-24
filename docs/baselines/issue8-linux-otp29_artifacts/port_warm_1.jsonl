@@ -1,0 +1,2 @@
+{"id":"1669-1","target":"{ReductionBounds, :verify_port_model, 3}","event":"started"}
+{"id":"1669-1","event":"completed","reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7804,"theorems":[]}],"assembly_ms":0.034,"module_wall_ms":7804,"runner_non_module_wall_ms":818.1700000000001,"runner_wall_ms":8622.17}

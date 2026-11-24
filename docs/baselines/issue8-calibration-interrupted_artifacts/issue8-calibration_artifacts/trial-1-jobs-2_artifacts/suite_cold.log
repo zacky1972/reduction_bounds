@@ -1,0 +1,33 @@
+Running ExUnit with seed: 0, max_cases: 24
+
+...........................................................................................................................................
+
+  1) test public API checks request from compiled Core through the caller budget (ReductionBounds.PortSourceProofTest)
+     test/reduction_bounds/port_source_proof_test.exs:12
+     match (=) failed
+     code:  assert {:ok, bound} = ReductionBounds.infer_port_bound({PortClient, @function, 2}, profile(), options())
+     left:  {:ok, bound}
+     right: {:error, :timeout}
+     stacktrace:
+       test/reduction_bounds/port_source_proof_test.exs:13: (test)
+
+
+
+  2) test public model workflow verifies empty and reports its exact scope (ReductionBounds.PortWorkflowTest)
+     test/reduction_bounds/port_workflow_test.exs:35
+     match (=) failed
+     code:  assert {:ok, result} =
+              ReductionBounds.verify_port_model(profile(), @names,
+                observations: observations(@names),
+                completion: completion()
+              )
+     left:  {:ok, result}
+     right: {:error, :timeout}
+     stacktrace:
+       test/reduction_bounds/port_workflow_test.exs:36: (test)
+
+...........................................................................................................................................................................................
+Finished in 709.1 seconds (340.6s async, 368.5s sync)
+
+Result: 326/328 passed (18/18 doctests, 308/310 tests)
+Failed: 2 tests

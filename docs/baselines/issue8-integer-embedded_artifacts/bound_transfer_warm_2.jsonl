@@ -1,0 +1,4 @@
+{"id":"1802-1","target":"{ReductionBounds.Benchmark.Workloads.Program, :product, 1}","event":"started"}
+{"id":"1802-1","reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4414,"theorems":[]}],"event":"completed","assembly_ms":0.696,"module_wall_ms":4414,"runner_non_module_wall_ms":678.1189999999997,"runner_wall_ms":5092.119}
+{"id":"1802-2","target":"{ReductionBounds.Benchmark.Workloads.Program, :product, 1}","event":"started"}
+{"id":"1802-2","reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5725,"theorems":[]}],"event":"completed","assembly_ms":0.062,"module_wall_ms":5725,"runner_non_module_wall_ms":783.6589999999997,"runner_wall_ms":6508.659}

@@ -1,5 +1,6 @@
 defmodule ReductionBounds.PeriodicBoundTest do
   use ExUnit.Case, async: true
+  @moduletag timeout: 300_000
 
   import Lynx.Lean
 
@@ -43,9 +44,10 @@ defmodule ReductionBounds.PeriodicBoundTest do
               event_count: ^events,
               upper_bound: {:add, {:mul, :n, :base}, {:mul, ^events, :surcharge}},
               conditions: %{derived: derived, supplied: []},
-              reports: [%{status: :ok}]
+              reports: reports
             }} = ReductionBounds.infer_periodic_bound(target, beam_binaries: [beam])
 
+    assert Enum.all?(reports, &(&1.status == :ok))
     assert {:invariant, {:lt, :state, :period}} in derived
     assert {:stride_fits, {:le, 2, :period}} in derived
 
@@ -96,12 +98,14 @@ defmodule ReductionBounds.PeriodicBoundTest do
                   {:lean_source, ^source}
                 ]
               },
-              reports: [%{status: :ok}]
+              reports: reports
             }} =
              ReductionBounds.infer_periodic_bound({Batcher, :enqueue_pair, 2},
                beam_binaries: [beam],
                periodic_contract: contract
              )
+
+    assert Enum.all?(reports, &(&1.status == :ok))
   end
 
   test "rejects a reset that discards the remainder", %{beam: beam} do
@@ -126,12 +130,14 @@ defmodule ReductionBounds.PeriodicBoundTest do
       sorry
     """
 
-    assert {:error, {:verification_failed, [%{status: :error, diagnostics: diagnostics}]}} =
+    assert {:error, {:verification_failed, reports}} =
              ReductionBounds.infer_periodic_bound({Batcher, :enqueue_pair, 2},
                beam_binaries: [beam],
                periodic_contract: contract
              )
 
+    assert Enum.all?(Enum.drop(reports, -1), &(&1.status == :ok))
+    assert %{status: :error, diagnostics: diagnostics} = List.last(reports)
     assert Enum.any?(diagnostics, &(&1.severity == :error and &1.message =~ "sorryAx"))
   end
 end

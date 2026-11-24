@@ -1,0 +1,502 @@
+{"id":"2119-1","target":"{ReductionBounds.ExecutionBoundTest.Fixture, :run, 1}","event":"started"}
+{"id":"2119-2","target":"{ReductionBounds.PeriodicBoundTest.Batcher, :enqueue_pair, 2}","event":"started"}
+{"id":"2119-3","target":"nil","event":"started"}
+{"id":"2119-2","assembly_ms":0.024,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":312,"theorems":[]}],"event":"completed","module_wall_ms":312,"runner_non_module_wall_ms":1004.298,"runner_wall_ms":1316.298}
+{"id":"2119-4","target":"{ReductionBounds.PeriodicBoundTest.Batcher, :enqueue_pair, 2}","event":"started"}
+{"id":"2119-4","assembly_ms":0.033,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":451,"theorems":[]}],"event":"completed","module_wall_ms":451,"runner_non_module_wall_ms":848.2139999999999,"runner_wall_ms":1299.214}
+{"id":"2119-5","target":"{ReductionBounds.PeriodicBoundTest.Batcher, :enqueue_pair, 2}","event":"started"}
+{"id":"2119-3","assembly_ms":0.041,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":1899,"theorems":[]}],"event":"completed","module_wall_ms":1899,"runner_non_module_wall_ms":902.79,"runner_wall_ms":2801.79}
+{"id":"2119-6","target":"nil","event":"started"}
+{"id":"2119-1","assembly_ms":0.033,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2545,"theorems":[]}],"event":"completed","module_wall_ms":2545,"runner_non_module_wall_ms":885.962,"runner_wall_ms":3430.962}
+{"id":"2119-7","target":"{ReductionBounds.ExecutionBoundTest.Fixture, :choose, 1}","event":"started"}
+{"id":"2119-5","assembly_ms":0.103,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":345,"theorems":[]}],"event":"completed","module_wall_ms":345,"runner_non_module_wall_ms":804.6969999999999,"runner_wall_ms":1149.697}
+{"id":"2119-6","assembly_ms":0.03,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":1755,"theorems":[]}],"event":"completed","module_wall_ms":1755,"runner_non_module_wall_ms":762.7669999999998,"runner_wall_ms":2517.767}
+{"id":"2119-8","target":"nil","event":"started"}
+{"id":"2119-7","assembly_ms":0.027,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2319,"theorems":[]}],"event":"completed","module_wall_ms":2319,"runner_non_module_wall_ms":715.904,"runner_wall_ms":3034.904}
+{"id":"2119-9","target":"{ReductionBounds.ExecutionBoundTest.Fixture, :nondecreasing, 1}","event":"started"}
+{"id":"2119-8","assembly_ms":0.057,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":1594,"theorems":[]}],"event":"completed","module_wall_ms":1594,"runner_non_module_wall_ms":723.3200000000002,"runner_wall_ms":2317.32}
+{"id":"2119-9","assembly_ms":0.041,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":2078,"theorems":[]}],"event":"completed","module_wall_ms":2078,"runner_non_module_wall_ms":782.6089999999999,"runner_wall_ms":2860.609}
+{"id":"2119-10","target":"nil","event":"started"}
+{"id":"2119-10","assembly_ms":0.107,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":2094,"theorems":[]}],"event":"completed","module_wall_ms":2094,"runner_non_module_wall_ms":663.8209999999999,"runner_wall_ms":2757.821}
+{"id":"2119-11","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-11","assembly_ms":0.084,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4026,"theorems":[]}],"event":"completed","module_wall_ms":4026,"runner_non_module_wall_ms":681.0879999999997,"runner_wall_ms":4707.088}
+{"id":"2119-12","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-12","assembly_ms":0.061,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4350,"theorems":[]}],"event":"completed","module_wall_ms":4350,"runner_non_module_wall_ms":872.7449999999999,"runner_wall_ms":5222.745}
+{"id":"2119-13","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-13","assembly_ms":0.194,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4077,"theorems":[]}],"event":"completed","module_wall_ms":4077,"runner_non_module_wall_ms":812.9430000000002,"runner_wall_ms":4889.943}
+{"id":"2119-14","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-14","assembly_ms":0.07,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":3882,"theorems":[]}],"event":"completed","module_wall_ms":3882,"runner_non_module_wall_ms":726.5429999999997,"runner_wall_ms":4608.543}
+{"id":"2119-15","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-15","assembly_ms":0.057,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":3971,"theorems":[]}],"event":"completed","module_wall_ms":3971,"runner_non_module_wall_ms":714.424,"runner_wall_ms":4685.424}
+{"id":"2119-16","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-16","assembly_ms":0.039,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":3818,"theorems":[]}],"event":"completed","module_wall_ms":3818,"runner_non_module_wall_ms":743.0290000000005,"runner_wall_ms":4561.029}
+{"id":"2119-17","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-17","assembly_ms":0.19,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":3866,"theorems":[]}],"event":"completed","module_wall_ms":3866,"runner_non_module_wall_ms":711.5879999999997,"runner_wall_ms":4577.588}
+{"id":"2119-18","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-18","assembly_ms":0.054,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":3924,"theorems":[]}],"event":"completed","module_wall_ms":3924,"runner_non_module_wall_ms":776.1049999999996,"runner_wall_ms":4700.105}
+{"id":"2119-19","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-19","assembly_ms":0.055,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4065,"theorems":[]}],"event":"completed","module_wall_ms":4065,"runner_non_module_wall_ms":788.884,"runner_wall_ms":4853.884}
+{"id":"2119-20","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-20","assembly_ms":0.073,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4304,"theorems":[]}],"event":"completed","module_wall_ms":4304,"runner_non_module_wall_ms":719.3860000000004,"runner_wall_ms":5023.386}
+{"id":"2119-21","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-21","assembly_ms":0.042,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4002,"theorems":[]}],"event":"completed","module_wall_ms":4002,"runner_non_module_wall_ms":690.0429999999997,"runner_wall_ms":4692.043}
+{"id":"2119-22","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-22","assembly_ms":0.048,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":3736,"theorems":[]}],"event":"completed","module_wall_ms":3736,"runner_non_module_wall_ms":782.2240000000002,"runner_wall_ms":4518.224}
+{"id":"2119-23","target":"nil","event":"started"}
+{"id":"2119-23","assembly_ms":0.069,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3174,"theorems":[]}],"event":"completed","module_wall_ms":3174,"runner_non_module_wall_ms":698.6260000000002,"runner_wall_ms":3872.626}
+{"id":"2119-24","target":"nil","event":"started"}
+{"id":"2119-24","assembly_ms":0.081,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3238,"theorems":[]}],"event":"completed","module_wall_ms":3238,"runner_non_module_wall_ms":745.9969999999998,"runner_wall_ms":3983.997}
+{"id":"2119-25","target":"nil","event":"started"}
+{"id":"2119-25","assembly_ms":0.036,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3401,"theorems":[]}],"event":"completed","module_wall_ms":3401,"runner_non_module_wall_ms":916.9139999999998,"runner_wall_ms":4317.914}
+{"id":"2119-26","target":"{ReductionBounds.ContractWorkflowTest.Programs, :product, 1}","event":"started"}
+{"id":"2119-26","assembly_ms":0.032,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4331,"theorems":[]}],"event":"completed","module_wall_ms":4331,"runner_non_module_wall_ms":867.4300000000003,"runner_wall_ms":5198.43}
+{"id":"2119-27","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-27","assembly_ms":0.057,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4272,"theorems":[]}],"event":"completed","module_wall_ms":4272,"runner_non_module_wall_ms":713.7969999999996,"runner_wall_ms":4985.797}
+{"id":"2119-28","target":"{ReductionBounds.ContractWorkflowTest.Programs, :product, 1}","event":"started"}
+{"id":"2119-28","assembly_ms":0.079,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":6116,"theorems":[]}],"event":"completed","module_wall_ms":6116,"runner_non_module_wall_ms":955.9709999999995,"runner_wall_ms":7071.971}
+{"id":"2119-29","target":"{ReductionBounds.ContractWorkflowTest.Programs, :guarded, 1}","event":"started"}
+{"id":"2119-29","assembly_ms":0.026,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4506,"theorems":[]}],"event":"completed","module_wall_ms":4506,"runner_non_module_wall_ms":724.3419999999996,"runner_wall_ms":5230.342}
+{"id":"2119-30","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-30","assembly_ms":0.035,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4058,"theorems":[]}],"event":"completed","module_wall_ms":4058,"runner_non_module_wall_ms":787.1319999999996,"runner_wall_ms":4845.132}
+{"id":"2119-31","target":"{ReductionBounds.ContractWorkflowTest.Programs, :guarded, 1}","event":"started"}
+{"id":"2119-31","assembly_ms":0.061,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":6415,"theorems":[]}],"event":"completed","module_wall_ms":6415,"runner_non_module_wall_ms":748.2049999999999,"runner_wall_ms":7163.205}
+{"id":"2119-32","target":"{ReductionBounds.ContractWorkflowTest.Programs, :sum, 2}","event":"started"}
+{"id":"2119-32","assembly_ms":0.028,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5156,"theorems":[]}],"event":"completed","module_wall_ms":5156,"runner_non_module_wall_ms":768.6310000000003,"runner_wall_ms":5924.631}
+{"id":"2119-33","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-33","assembly_ms":0.048,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4094,"theorems":[]}],"event":"completed","module_wall_ms":4094,"runner_non_module_wall_ms":795.4949999999999,"runner_wall_ms":4889.495}
+{"id":"2119-34","target":"{ReductionBounds.ContractWorkflowTest.Programs, :sum, 2}","event":"started"}
+{"id":"2119-34","assembly_ms":0.085,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":6573,"theorems":[]}],"event":"completed","module_wall_ms":6573,"runner_non_module_wall_ms":760.1840000000002,"runner_wall_ms":7333.184}
+{"id":"2119-35","target":"{ReductionBounds.ContractWorkflowTest.Cases, :variance_numerator, 3}","event":"started"}
+{"id":"2119-35","assembly_ms":0.048,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4707,"theorems":[]}],"event":"completed","module_wall_ms":4707,"runner_non_module_wall_ms":747.076,"runner_wall_ms":5454.076}
+{"id":"2119-36","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-36","assembly_ms":0.035,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":3950,"theorems":[]}],"event":"completed","module_wall_ms":3950,"runner_non_module_wall_ms":752.7079999999996,"runner_wall_ms":4702.708}
+{"id":"2119-37","target":"{ReductionBounds.ContractWorkflowTest.Cases, :variance_numerator, 3}","event":"started"}
+{"id":"2119-37","assembly_ms":0.027,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5891,"theorems":[]}],"event":"completed","module_wall_ms":5891,"runner_non_module_wall_ms":720.5649999999996,"runner_wall_ms":6611.565}
+{"id":"2119-38","target":"{ReductionBounds.ContractWorkflowTest.Cases, :crc64_update, 2}","event":"started"}
+{"id":"2119-38","assembly_ms":0.055,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4492,"theorems":[]}],"event":"completed","module_wall_ms":4492,"runner_non_module_wall_ms":761.9480000000003,"runner_wall_ms":5253.948}
+{"id":"2119-39","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-39","assembly_ms":0.144,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":3894,"theorems":[]}],"event":"completed","module_wall_ms":3894,"runner_non_module_wall_ms":722.1490000000003,"runner_wall_ms":4616.149}
+{"id":"2119-40","target":"{ReductionBounds.ContractWorkflowTest.Cases, :crc64_update, 2}","event":"started"}
+{"id":"2119-40","assembly_ms":0.086,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":6209,"theorems":[]}],"event":"completed","module_wall_ms":6209,"runner_non_module_wall_ms":699.2070000000003,"runner_wall_ms":6908.207}
+{"id":"2119-41","target":"{ReductionBounds.ContractWorkflowTest.Cases, :crc64_reflected_index, 2}","event":"started"}
+{"id":"2119-41","assembly_ms":0.028,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4846,"theorems":[]}],"event":"completed","module_wall_ms":4846,"runner_non_module_wall_ms":723.6599999999999,"runner_wall_ms":5569.66}
+{"id":"2119-42","target":"{ReductionBounds, :compare_cost_contracts, 3}","event":"started"}
+{"id":"2119-42","assembly_ms":0.056,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4081,"theorems":[]}],"event":"completed","module_wall_ms":4081,"runner_non_module_wall_ms":762.6180000000004,"runner_wall_ms":4843.618}
+{"id":"2119-43","target":"{ReductionBounds.ContractWorkflowTest.Cases, :crc64_reflected_index, 2}","event":"started"}
+{"id":"2119-43","assembly_ms":0.072,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5748,"theorems":[]}],"event":"completed","module_wall_ms":5748,"runner_non_module_wall_ms":740.0519999999997,"runner_wall_ms":6488.052}
+{"id":"2119-44","target":"{ReductionBounds.ContractWorkflowTest.Programs, :helper, 1}","event":"started"}
+{"id":"2119-44","assembly_ms":0.111,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4993,"theorems":[]}],"event":"completed","module_wall_ms":4993,"runner_non_module_wall_ms":829.8339999999998,"runner_wall_ms":5822.834}
+{"id":"2119-45","target":"{ReductionBounds.ContractWorkflowTest.Programs, :caller, 1}","event":"started"}
+{"id":"2119-45","assembly_ms":0.048,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4811,"theorems":[]}],"event":"completed","module_wall_ms":4811,"runner_non_module_wall_ms":830.6239999999998,"runner_wall_ms":5641.624}
+{"id":"2119-46","target":"{ReductionBounds.ContractWorkflowTest.Programs, :caller, 1}","event":"started"}
+{"id":"2119-46","assembly_ms":0.066,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7174,"theorems":[]}],"event":"completed","module_wall_ms":7174,"runner_non_module_wall_ms":731.0950000000003,"runner_wall_ms":7905.095}
+{"id":"2119-47","target":"nil","event":"started"}
+{"id":"2119-47","assembly_ms":0.033,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4122,"theorems":[]}],"event":"completed","module_wall_ms":4122,"runner_non_module_wall_ms":769.1229999999996,"runner_wall_ms":4891.123}
+{"id":"2119-48","target":"nil","event":"started"}
+{"id":"2119-48","assembly_ms":0.03,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4220,"theorems":[]}],"event":"completed","module_wall_ms":4220,"runner_non_module_wall_ms":745.8779999999997,"runner_wall_ms":4965.878}
+{"id":"2119-49","target":"nil","event":"started"}
+{"id":"2119-49","assembly_ms":0.033,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":3935,"theorems":[]}],"event":"completed","module_wall_ms":3935,"runner_non_module_wall_ms":849.7640000000001,"runner_wall_ms":4784.764}
+{"id":"2119-50","target":"nil","event":"started"}
+{"id":"2119-50","assembly_ms":0.065,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3384,"theorems":[]}],"event":"completed","module_wall_ms":3384,"runner_non_module_wall_ms":746.7879999999996,"runner_wall_ms":4130.788}
+{"id":"2119-51","target":"nil","event":"started"}
+{"id":"2119-51","assembly_ms":0.059,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3320,"theorems":[]}],"event":"completed","module_wall_ms":3320,"runner_non_module_wall_ms":685.7179999999998,"runner_wall_ms":4005.718}
+{"id":"2119-52","target":"nil","event":"started"}
+{"id":"2119-52","assembly_ms":0.131,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3320,"theorems":[]}],"event":"completed","module_wall_ms":3320,"runner_non_module_wall_ms":762.1579999999999,"runner_wall_ms":4082.158}
+{"id":"2119-53","target":"{ReductionBounds.BoundTransferTest.Fixture, :product, 1}","event":"started"}
+{"id":"2119-53","assembly_ms":0.05,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4370,"theorems":[]}],"event":"completed","module_wall_ms":4370,"runner_non_module_wall_ms":833.8059999999996,"runner_wall_ms":5203.806}
+{"id":"2119-54","target":"{ReductionBounds.BoundTransferTest.Fixture, :product, 1}","event":"started"}
+{"id":"2119-54","assembly_ms":0.051,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5870,"theorems":[]}],"event":"completed","module_wall_ms":5870,"runner_non_module_wall_ms":714.8909999999996,"runner_wall_ms":6584.891}
+{"id":"2119-55","target":"{ReductionBounds.BoundTransferTest.Fixture, :guarded, 1}","event":"started"}
+{"id":"2119-55","assembly_ms":0.025,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5091,"theorems":[]}],"event":"completed","module_wall_ms":5091,"runner_non_module_wall_ms":866.0280000000002,"runner_wall_ms":5957.028}
+{"id":"2119-56","target":"{ReductionBounds.BoundTransferTest.Fixture, :guarded, 1}","event":"started"}
+{"id":"2119-56","assembly_ms":0.033,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":6232,"theorems":[]}],"event":"completed","module_wall_ms":6232,"runner_non_module_wall_ms":848.8729999999996,"runner_wall_ms":7080.873}
+{"id":"2119-57","target":"{ReductionBounds.BoundTransferTest.Fixture, :crc_step, 1}","event":"started"}
+{"id":"2119-57","assembly_ms":0.045,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4907,"theorems":[]}],"event":"completed","module_wall_ms":4907,"runner_non_module_wall_ms":748.6019999999999,"runner_wall_ms":5655.602}
+{"id":"2119-58","target":"{ReductionBounds.BoundTransferTest.Fixture, :crc_step, 1}","event":"started"}
+{"id":"2119-58","assembly_ms":0.061,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5758,"theorems":[]}],"event":"completed","module_wall_ms":5758,"runner_non_module_wall_ms":806.7920000000004,"runner_wall_ms":6564.792}
+{"id":"2119-59","target":"{ReductionBounds.BoundTransferTest.Fixture, :crc64_step, 1}","event":"started"}
+{"id":"2119-59","assembly_ms":0.049,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5302,"theorems":[]}],"event":"completed","module_wall_ms":5302,"runner_non_module_wall_ms":748.1310000000003,"runner_wall_ms":6050.131}
+{"id":"2119-60","target":"{ReductionBounds.BoundTransferTest.Fixture, :crc64_step, 1}","event":"started"}
+{"id":"2119-60","assembly_ms":0.059,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":6210,"theorems":[]}],"event":"completed","module_wall_ms":6210,"runner_non_module_wall_ms":977.8119999999999,"runner_wall_ms":7187.812}
+{"id":"2119-61","target":"{ReductionBounds.BoundTransferTest.Fixture, :sum, 2}","event":"started"}
+{"id":"2119-61","assembly_ms":0.076,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5015,"theorems":[]}],"event":"completed","module_wall_ms":5015,"runner_non_module_wall_ms":737.3729999999996,"runner_wall_ms":5752.373}
+{"id":"2119-62","target":"{ReductionBounds.BoundTransferTest.Fixture, :sum, 2}","event":"started"}
+{"id":"2119-62","assembly_ms":0.03,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":6773,"theorems":[]}],"event":"completed","module_wall_ms":6773,"runner_non_module_wall_ms":843.3919999999998,"runner_wall_ms":7616.392}
+{"id":"2119-63","target":"{ReductionBounds.BoundTransferTest.Fixture, :crc_loop, 2}","event":"started"}
+{"id":"2119-63","assembly_ms":0.032,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5618,"theorems":[]}],"event":"completed","module_wall_ms":5618,"runner_non_module_wall_ms":689.5919999999996,"runner_wall_ms":6307.592}
+{"id":"2119-64","target":"{ReductionBounds.BoundTransferTest.Fixture, :crc_loop, 2}","event":"started"}
+{"id":"2119-64","assembly_ms":0.042,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7488,"theorems":[]}],"event":"completed","module_wall_ms":7488,"runner_non_module_wall_ms":936.6589999999997,"runner_wall_ms":8424.659}
+{"id":"2119-65","target":"{ReductionBounds.BoundTransferTest.Fixture, :product, 1}","event":"started"}
+{"id":"2119-65","assembly_ms":0.047,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4390,"theorems":[]}],"event":"completed","module_wall_ms":4390,"runner_non_module_wall_ms":789.8130000000001,"runner_wall_ms":5179.813}
+{"id":"2119-66","target":"{ReductionBounds.BoundTransferTest.Fixture, :product, 1}","event":"started"}
+{"id":"2119-66","assembly_ms":0.055,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5731,"theorems":[]}],"event":"completed","module_wall_ms":5731,"runner_non_module_wall_ms":711.1319999999996,"runner_wall_ms":6442.132}
+{"id":"2119-67","target":"{ReductionBounds.BoundTransferTest.Fixture, :opaque, 1}","event":"started"}
+{"id":"2119-67","assembly_ms":0.027,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4644,"theorems":[]}],"event":"completed","module_wall_ms":4644,"runner_non_module_wall_ms":785.2349999999997,"runner_wall_ms":5429.235}
+{"id":"2119-68","target":"{ReductionBounds.BoundTransferTest.Fixture, :opaque, 1}","event":"started"}
+{"id":"2119-68","assembly_ms":0.067,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":6374,"theorems":[]}],"event":"completed","module_wall_ms":6374,"runner_non_module_wall_ms":783.299,"runner_wall_ms":7157.299}
+{"id":"2119-69","target":"{ReductionBounds.BoundTransferTest.Fixture, :opaque, 1}","event":"started"}
+{"id":"2119-69","assembly_ms":0.072,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4347,"theorems":[]}],"event":"completed","module_wall_ms":4347,"runner_non_module_wall_ms":741.3500000000004,"runner_wall_ms":5088.35}
+{"id":"2119-70","target":"{ReductionBounds.BoundTransferTest.Fixture, :opaque, 1}","event":"started"}
+{"id":"2119-70","assembly_ms":0.062,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5838,"theorems":[]}],"event":"completed","module_wall_ms":5838,"runner_non_module_wall_ms":709.9189999999999,"runner_wall_ms":6547.919}
+{"id":"2119-71","target":"{ReductionBounds.BoundTransferTest.Fixture, :opaque, 1}","event":"started"}
+{"id":"2119-71","assembly_ms":0.045,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":4846,"theorems":[]}],"event":"completed","module_wall_ms":4846,"runner_non_module_wall_ms":696.7780000000002,"runner_wall_ms":5542.778}
+{"id":"2119-72","target":"{ReductionBounds.BoundTransferTest.Fixture, :opaque, 1}","event":"started"}
+{"id":"2119-72","assembly_ms":0.062,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":5308,"theorems":[]}],"event":"completed","module_wall_ms":5308,"runner_non_module_wall_ms":955.5569999999998,"runner_wall_ms":6263.557}
+{"id":"2119-73","target":"{ReductionBounds.BoundTransferTest.Fixture, :helper, 1}","event":"started"}
+{"id":"2119-73","assembly_ms":0.05,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4921,"theorems":[]}],"event":"completed","module_wall_ms":4921,"runner_non_module_wall_ms":885.2579999999998,"runner_wall_ms":5806.258}
+{"id":"2119-74","target":"{ReductionBounds.BoundTransferTest.Fixture, :caller, 1}","event":"started"}
+{"id":"2119-74","assembly_ms":0.047,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5114,"theorems":[]}],"event":"completed","module_wall_ms":5114,"runner_non_module_wall_ms":952.2399999999998,"runner_wall_ms":6066.24}
+{"id":"2119-75","target":"{ReductionBounds.BoundTransferTest.Fixture, :caller, 1}","event":"started"}
+{"id":"2119-75","assembly_ms":0.049,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":6447,"theorems":[]}],"event":"completed","module_wall_ms":6447,"runner_non_module_wall_ms":758.7370000000001,"runner_wall_ms":7205.737}
+{"id":"2119-76","target":"{ReductionBounds.BoundTransferTest.Fixture, :product, 1}","event":"started"}
+{"id":"2119-76","assembly_ms":0.047,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4597,"theorems":[]}],"event":"completed","module_wall_ms":4597,"runner_non_module_wall_ms":744.1149999999998,"runner_wall_ms":5341.115}
+{"id":"2119-77","target":"{ReductionBounds.BoundTransferTest.Fixture, :product, 1}","event":"started"}
+{"id":"2119-77","assembly_ms":0.076,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":6347,"theorems":[]}],"event":"completed","module_wall_ms":6347,"runner_non_module_wall_ms":868.6779999999999,"runner_wall_ms":7215.678}
+{"id":"2119-78","target":"{ReductionBounds.BoundTransferTest.Fixture, :product, 1}","event":"started"}
+{"id":"2119-78","assembly_ms":0.048,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4630,"theorems":[]}],"event":"completed","module_wall_ms":4630,"runner_non_module_wall_ms":745.7139999999999,"runner_wall_ms":5375.714}
+{"id":"2119-79","target":"{ReductionBounds.BoundTransferTest.Fixture, :product, 1}","event":"started"}
+{"id":"2119-79","assembly_ms":0.032,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4559,"theorems":[]}],"event":"completed","module_wall_ms":4559,"runner_non_module_wall_ms":854.0799999999999,"runner_wall_ms":5413.08}
+{"id":"2119-80","target":"nil","event":"started"}
+{"id":"2119-80","assembly_ms":0.061,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":4827,"theorems":[]}],"event":"completed","module_wall_ms":4827,"runner_non_module_wall_ms":703.8239999999996,"runner_wall_ms":5530.824}
+{"id":"2119-81","target":"nil","event":"started"}
+{"id":"2119-81","assembly_ms":0.221,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":4134,"theorems":[]}],"event":"completed","module_wall_ms":4134,"runner_non_module_wall_ms":687.2380000000003,"runner_wall_ms":4821.238}
+{"id":"2119-82","target":"{ReductionBounds.BoundTransferTest.Changed, :value, 1}","event":"started"}
+{"id":"2119-82","assembly_ms":0.021,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4494,"theorems":[]}],"event":"completed","module_wall_ms":4494,"runner_non_module_wall_ms":686.7089999999998,"runner_wall_ms":5180.709}
+{"id":"2119-83","target":"{ReductionBounds.BoundTransferTest.Fixture, :opaque, 1}","event":"started"}
+{"id":"2119-83","assembly_ms":0.024,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5171,"theorems":[]}],"event":"completed","module_wall_ms":5171,"runner_non_module_wall_ms":819.4390000000003,"runner_wall_ms":5990.439}
+{"id":"2119-84","target":"{ReductionBounds.BoundTransferTest.Fixture, :opaque, 1}","event":"started"}
+{"id":"2119-84","assembly_ms":0.098,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":4822,"theorems":[]}],"event":"completed","module_wall_ms":4822,"runner_non_module_wall_ms":1007.969,"runner_wall_ms":5829.969}
+{"id":"2119-85","target":"nil","event":"started"}
+{"id":"2119-85","assembly_ms":0.052,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2512,"theorems":[]}],"event":"completed","module_wall_ms":2512,"runner_non_module_wall_ms":800.1289999999999,"runner_wall_ms":3312.129}
+{"id":"2119-86","target":"nil","event":"started"}
+{"id":"2119-86","assembly_ms":0.133,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2976,"theorems":[]}],"event":"completed","module_wall_ms":2976,"runner_non_module_wall_ms":759.7550000000001,"runner_wall_ms":3735.755}
+{"id":"2119-87","target":"nil","event":"started"}
+{"id":"2119-87","assembly_ms":0.061,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":2007,"theorems":[]}],"event":"completed","module_wall_ms":2007,"runner_non_module_wall_ms":817.9699999999998,"runner_wall_ms":2824.97}
+{"id":"2119-88","target":"nil","event":"started"}
+{"id":"2119-88","assembly_ms":0.08,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":3030,"theorems":[]}],"event":"completed","module_wall_ms":3030,"runner_non_module_wall_ms":722.3299999999999,"runner_wall_ms":3752.33}
+{"id":"2119-89","target":"nil","event":"started"}
+{"id":"2119-89","assembly_ms":0.147,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":1892,"theorems":[]}],"event":"completed","module_wall_ms":1892,"runner_non_module_wall_ms":755.0050000000001,"runner_wall_ms":2647.005}
+{"id":"2119-90","target":"nil","event":"started"}
+{"id":"2119-90","assembly_ms":0.038,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4345,"theorems":[]}],"event":"completed","module_wall_ms":4345,"runner_non_module_wall_ms":663.7780000000002,"runner_wall_ms":5008.778}
+{"id":"2119-91","target":"nil","event":"started"}
+{"id":"2119-91","assembly_ms":0.059,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":1925,"theorems":[]}],"event":"completed","module_wall_ms":1925,"runner_non_module_wall_ms":749.511,"runner_wall_ms":2674.511}
+{"id":"2119-92","target":"nil","event":"started"}
+{"id":"2119-92","assembly_ms":0.065,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":1912,"theorems":[]}],"event":"completed","module_wall_ms":1912,"runner_non_module_wall_ms":759.8960000000002,"runner_wall_ms":2671.896}
+{"id":"2119-93","target":"nil","event":"started"}
+{"id":"2119-93","assembly_ms":0.116,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":3340,"theorems":[]}],"event":"completed","module_wall_ms":3340,"runner_non_module_wall_ms":742.1320000000001,"runner_wall_ms":4082.132}
+{"id":"2119-94","target":"nil","event":"started"}
+{"id":"2119-94","assembly_ms":0.059,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":1825,"theorems":[]}],"event":"completed","module_wall_ms":1825,"runner_non_module_wall_ms":655.9099999999999,"runner_wall_ms":2480.91}
+{"id":"2119-95","target":"nil","event":"started"}
+{"id":"2119-95","assembly_ms":0.033,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":1938,"theorems":[]}],"event":"completed","module_wall_ms":1938,"runner_non_module_wall_ms":696.7310000000002,"runner_wall_ms":2634.731}
+{"id":"2119-96","target":"nil","event":"started"}
+{"id":"2119-96","assembly_ms":0.068,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4401,"theorems":[]}],"event":"completed","module_wall_ms":4401,"runner_non_module_wall_ms":680.5439999999999,"runner_wall_ms":5081.544}
+{"id":"2119-97","target":"{ReductionBounds.Fixtures.IntegerPrograms, :conditional, 1}","event":"started"}
+{"id":"2119-97","assembly_ms":0.02,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2878,"theorems":[]}],"event":"completed","module_wall_ms":2878,"runner_non_module_wall_ms":703.8290000000002,"runner_wall_ms":3581.829}
+{"id":"2119-98","target":"{ReductionBounds.Fixtures.IntegerPrograms, :crc_step, 1}","event":"started"}
+{"id":"2119-98","assembly_ms":0.033,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2687,"theorems":[]}],"event":"completed","module_wall_ms":2687,"runner_non_module_wall_ms":857.6199999999999,"runner_wall_ms":3544.62}
+{"id":"2119-99","target":"{ReductionBounds.Fixtures.IntegerPrograms, :right, 1}","event":"started"}
+{"id":"2119-99","assembly_ms":0.062,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2323,"theorems":[]}],"event":"completed","module_wall_ms":2323,"runner_non_module_wall_ms":769.7710000000002,"runner_wall_ms":3092.771}
+{"id":"2119-100","target":"{ReductionBounds.Fixtures.IntegerPrograms, :impossible, 1}","event":"started"}
+{"id":"2119-100","assembly_ms":0.054,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2497,"theorems":[]}],"event":"completed","module_wall_ms":2497,"runner_non_module_wall_ms":895.6149999999998,"runner_wall_ms":3392.615}
+{"id":"2119-101","target":"{ReductionBounds.Fixtures.IntegerPrograms, :rebinding, 1}","event":"started"}
+{"id":"2119-101","assembly_ms":0.028,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2311,"theorems":[]}],"event":"completed","module_wall_ms":2311,"runner_non_module_wall_ms":673.607,"runner_wall_ms":2984.607}
+{"id":"2119-102","target":"{ReductionBounds.Fixtures.IntegerPrograms, :reversed, 1}","event":"started"}
+{"id":"2119-102","assembly_ms":0.049,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2333,"theorems":[]}],"event":"completed","module_wall_ms":2333,"runner_non_module_wall_ms":728.0500000000002,"runner_wall_ms":3061.05}
+{"id":"2119-103","target":"{ReductionBounds.Fixtures.IntegerPrograms, :expression_test, 1}","event":"started"}
+{"id":"2119-103","assembly_ms":0.049,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2457,"theorems":[]}],"event":"completed","module_wall_ms":2457,"runner_non_module_wall_ms":668.3649999999998,"runner_wall_ms":3125.365}
+{"id":"2119-104","target":"{ReductionBounds.Fixtures.IntegerPrograms, :pair, 2}","event":"started"}
+{"id":"2119-104","assembly_ms":0.083,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2331,"theorems":[]}],"event":"completed","module_wall_ms":2331,"runner_non_module_wall_ms":722.4839999999999,"runner_wall_ms":3053.484}
+{"id":"2119-105","target":"{ReductionBounds.Fixtures.IntegerPrograms, :no_args, 0}","event":"started"}
+{"id":"2119-105","assembly_ms":0.058,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2399,"theorems":[]}],"event":"completed","module_wall_ms":2399,"runner_non_module_wall_ms":740.529,"runner_wall_ms":3139.529}
+{"id":"2119-106","target":"{ReductionBounds.Fixtures.IntegerPrograms, :constant, 1}","event":"started"}
+{"id":"2119-106","assembly_ms":0.032,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2506,"theorems":[]}],"event":"completed","module_wall_ms":2506,"runner_non_module_wall_ms":725.636,"runner_wall_ms":3231.636}
+{"id":"2119-107","target":"nil","event":"started"}
+{"id":"2119-107","assembly_ms":0.148,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":2144,"theorems":[]}],"event":"completed","module_wall_ms":2144,"runner_non_module_wall_ms":821.8620000000001,"runner_wall_ms":2965.862}
+{"id":"2119-108","target":"nil","event":"started"}
+{"id":"2119-108","assembly_ms":0.052,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":1969,"theorems":[]}],"event":"completed","module_wall_ms":1969,"runner_non_module_wall_ms":698.232,"runner_wall_ms":2667.232}
+{"id":"2119-109","target":"{ReductionBounds.Fixtures.IntegerCostCases, :variance_numerator, 3}","event":"started"}
+{"id":"2119-109","assembly_ms":0.053,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4671,"theorems":[]}],"event":"completed","module_wall_ms":4671,"runner_non_module_wall_ms":832.7669999999998,"runner_wall_ms":5503.767}
+{"id":"2119-110","target":"{ReductionBounds.Fixtures.IntegerCostCases, :variance_numerator, 3}","event":"started"}
+{"id":"2119-110","assembly_ms":0.03,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4488,"theorems":[]}],"event":"completed","module_wall_ms":4488,"runner_non_module_wall_ms":698.7420000000002,"runner_wall_ms":5186.742}
+{"id":"2119-111","target":"{ReductionBounds.Fixtures.IntegerCostCases, :variance_numerator, 3}","event":"started"}
+{"id":"2119-111","assembly_ms":0.028,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4362,"theorems":[]}],"event":"completed","module_wall_ms":4362,"runner_non_module_wall_ms":706.3180000000002,"runner_wall_ms":5068.318}
+{"id":"2119-112","target":"{ReductionBounds.Fixtures.IntegerCostCases, :variance_numerator, 3}","event":"started"}
+{"id":"2119-112","assembly_ms":0.034,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4389,"theorems":[]}],"event":"completed","module_wall_ms":4389,"runner_non_module_wall_ms":697.7610000000004,"runner_wall_ms":5086.761}
+{"id":"2119-113","target":"{ReductionBounds.Fixtures.IntegerCostCases, :variance_numerator, 3}","event":"started"}
+{"id":"2119-113","assembly_ms":0.028,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4973,"theorems":[]}],"event":"completed","module_wall_ms":4973,"runner_non_module_wall_ms":747.8950000000004,"runner_wall_ms":5720.895}
+{"id":"2119-114","target":"{ReductionBounds.Fixtures.IntegerCostCases, :variance_denominator, 1}","event":"started"}
+{"id":"2119-114","assembly_ms":0.059,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4534,"theorems":[]}],"event":"completed","module_wall_ms":4534,"runner_non_module_wall_ms":708.2389999999996,"runner_wall_ms":5242.239}
+{"id":"2119-115","target":"{ReductionBounds.Fixtures.IntegerCostCases, :crc64_update, 2}","event":"started"}
+{"id":"2119-115","assembly_ms":0.047,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4450,"theorems":[]}],"event":"completed","module_wall_ms":4450,"runner_non_module_wall_ms":678.1819999999998,"runner_wall_ms":5128.182}
+{"id":"2119-116","target":"{ReductionBounds.Fixtures.IntegerCostCases, :crc64_reflected_update, 2}","event":"started"}
+{"id":"2119-116","assembly_ms":0.078,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4502,"theorems":[]}],"event":"completed","module_wall_ms":4502,"runner_non_module_wall_ms":794.0959999999995,"runner_wall_ms":5296.096}
+{"id":"2119-117","target":"{ReductionBounds.Fixtures.IntegerCostCases, :crc64_index, 2}","event":"started"}
+{"id":"2119-117","assembly_ms":0.027,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4859,"theorems":[]}],"event":"completed","module_wall_ms":4859,"runner_non_module_wall_ms":890.5169999999998,"runner_wall_ms":5749.517}
+{"id":"2119-118","target":"{ReductionBounds.Fixtures.IntegerCostCases, :crc64_reflected_index, 2}","event":"started"}
+{"id":"2119-118","assembly_ms":0.064,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4532,"theorems":[]}],"event":"completed","module_wall_ms":4532,"runner_non_module_wall_ms":722.0749999999998,"runner_wall_ms":5254.075}
+{"id":"2119-119","target":"nil","event":"started"}
+{"id":"2119-119","assembly_ms":0.035,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3872,"theorems":[]}],"event":"completed","module_wall_ms":3872,"runner_non_module_wall_ms":830.723,"runner_wall_ms":4702.723}
+{"id":"2119-120","target":"nil","event":"started"}
+{"id":"2119-120","assembly_ms":0.054,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":8001,"theorems":[]}],"event":"completed","module_wall_ms":8001,"runner_non_module_wall_ms":694.3809999999994,"runner_wall_ms":8695.381}
+{"id":"2119-121","target":"nil","event":"started"}
+{"id":"2119-121","assembly_ms":0.03,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":8458,"theorems":[]}],"event":"completed","module_wall_ms":8458,"runner_non_module_wall_ms":671.1059999999998,"runner_wall_ms":9129.106}
+{"id":"2119-122","target":"nil","event":"started"}
+{"id":"2119-122","assembly_ms":0.033,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7914,"theorems":[]}],"event":"completed","module_wall_ms":7914,"runner_non_module_wall_ms":985.6190000000006,"runner_wall_ms":8899.619}
+{"id":"2119-123","target":"nil","event":"started"}
+{"id":"2119-123","assembly_ms":0.031,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7995,"theorems":[]}],"event":"completed","module_wall_ms":7995,"runner_non_module_wall_ms":745.6229999999996,"runner_wall_ms":8740.623}
+{"id":"2119-124","target":"nil","event":"started"}
+{"id":"2119-124","assembly_ms":0.029,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":8778,"theorems":[]}],"event":"completed","module_wall_ms":8778,"runner_non_module_wall_ms":764.7350000000006,"runner_wall_ms":9542.735}
+{"id":"2119-125","target":"nil","event":"started"}
+{"id":"2119-125","assembly_ms":0.035,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":8140,"theorems":[]}],"event":"completed","module_wall_ms":8140,"runner_non_module_wall_ms":915.6029999999992,"runner_wall_ms":9055.603}
+{"id":"2119-126","target":"nil","event":"started"}
+{"id":"2119-126","assembly_ms":0.043,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7996,"theorems":[]}],"event":"completed","module_wall_ms":7996,"runner_non_module_wall_ms":899.6499999999996,"runner_wall_ms":8895.65}
+{"id":"2119-127","target":"nil","event":"started"}
+{"id":"2119-127","assembly_ms":0.029,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7923,"theorems":[]}],"event":"completed","module_wall_ms":7923,"runner_non_module_wall_ms":862.9959999999992,"runner_wall_ms":8785.996}
+{"id":"2119-128","target":"nil","event":"started"}
+{"id":"2119-128","assembly_ms":0.029,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7644,"theorems":[]}],"event":"completed","module_wall_ms":7644,"runner_non_module_wall_ms":750.1620000000003,"runner_wall_ms":8394.162}
+{"id":"2119-129","target":"nil","event":"started"}
+{"id":"2119-129","assembly_ms":0.031,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":5730,"theorems":[]}],"event":"completed","module_wall_ms":5730,"runner_non_module_wall_ms":673.491,"runner_wall_ms":6403.491}
+{"id":"2119-130","target":"nil","event":"started"}
+{"id":"2119-130","assembly_ms":0.036,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":7427,"theorems":[]}],"event":"completed","module_wall_ms":7427,"runner_non_module_wall_ms":709.2650000000003,"runner_wall_ms":8136.265}
+{"id":"2119-131","target":"nil","event":"started"}
+{"id":"2119-131","assembly_ms":0.037,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":7661,"theorems":[]}],"event":"completed","module_wall_ms":7661,"runner_non_module_wall_ms":701.7360000000008,"runner_wall_ms":8362.736}
+{"id":"2119-132","target":"nil","event":"started"}
+{"id":"2119-132","assembly_ms":0.054,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":8003,"theorems":[]}],"event":"completed","module_wall_ms":8003,"runner_non_module_wall_ms":764.9230000000007,"runner_wall_ms":8767.923}
+{"id":"2119-133","target":"nil","event":"started"}
+{"id":"2119-133","assembly_ms":0.047,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":7504,"theorems":[]}],"event":"completed","module_wall_ms":7504,"runner_non_module_wall_ms":729.8989999999994,"runner_wall_ms":8233.899}
+{"id":"2119-134","target":"{ReductionBounds.Fixtures.PortClient, :request, 2}","event":"started"}
+{"id":"2119-134","assembly_ms":0.986,"reports":[{"module":"Elixir.ReductionBounds.Fixtures.PortClient","status":"ok","cached":false,"time_ms":2,"theorems":[]},{"module":"Elixir.ReductionBounds.Fixtures.PortHelpers","status":"ok","cached":false,"time_ms":2,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":8375,"theorems":[]}],"event":"completed","module_wall_ms":8379,"runner_non_module_wall_ms":651.4439999999995,"runner_wall_ms":9030.444}
+{"id":"2119-135","target":"{ReductionBounds.Fixtures.PortClient, :reordered, 2}","event":"started"}
+{"id":"2119-135","assembly_ms":0.068,"reports":[{"module":"Elixir.ReductionBounds.Fixtures.PortClient","status":"ok","cached":false,"time_ms":2,"theorems":[]},{"module":"Elixir.ReductionBounds.Fixtures.PortHelpers","status":"ok","cached":false,"time_ms":2,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":8203,"theorems":[]}],"event":"completed","module_wall_ms":8207,"runner_non_module_wall_ms":710.9629999999997,"runner_wall_ms":8917.963}
+{"id":"2119-136","target":"nil","event":"started"}
+{"id":"2119-136","assembly_ms":0.034,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":7367,"theorems":[]}],"event":"completed","module_wall_ms":7367,"runner_non_module_wall_ms":815.098,"runner_wall_ms":8182.098}
+{"id":"2119-137","target":"nil","event":"started"}
+{"id":"2119-137","assembly_ms":0.067,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":7451,"theorems":[]}],"event":"completed","module_wall_ms":7451,"runner_non_module_wall_ms":822.1599999999999,"runner_wall_ms":8273.16}
+{"id":"2119-138","target":"nil","event":"started"}
+{"id":"2119-138","assembly_ms":0.031,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":7705,"theorems":[]}],"event":"completed","module_wall_ms":7705,"runner_non_module_wall_ms":771.1000000000004,"runner_wall_ms":8476.1}
+{"id":"2119-139","target":"nil","event":"started"}
+{"id":"2119-139","assembly_ms":0.063,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":7618,"theorems":[]}],"event":"completed","module_wall_ms":7618,"runner_non_module_wall_ms":804.4290000000001,"runner_wall_ms":8422.429}
+{"id":"2119-140","target":"nil","event":"started"}
+{"id":"2119-140","assembly_ms":0.079,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":7394,"theorems":[]}],"event":"completed","module_wall_ms":7394,"runner_non_module_wall_ms":745.2569999999996,"runner_wall_ms":8139.257}
+{"id":"2119-141","target":"nil","event":"started"}
+{"id":"2119-141","assembly_ms":0.048,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":7269,"theorems":[]}],"event":"completed","module_wall_ms":7269,"runner_non_module_wall_ms":702.3180000000002,"runner_wall_ms":7971.318}
+{"id":"2119-142","target":"nil","event":"started"}
+{"id":"2119-142","assembly_ms":0.06,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":7650,"theorems":[]}],"event":"completed","module_wall_ms":7650,"runner_non_module_wall_ms":735.3259999999991,"runner_wall_ms":8385.326}
+{"id":"2119-143","target":"nil","event":"started"}
+{"id":"2119-143","assembly_ms":0.06,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4752,"theorems":[]}],"event":"completed","module_wall_ms":4752,"runner_non_module_wall_ms":717.4480000000003,"runner_wall_ms":5469.448}
+{"id":"2119-144","target":"nil","event":"started"}
+{"id":"2119-144","assembly_ms":0.066,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5035,"theorems":[]}],"event":"completed","module_wall_ms":5035,"runner_non_module_wall_ms":733.8429999999998,"runner_wall_ms":5768.843}
+{"id":"2119-145","target":"nil","event":"started"}
+{"id":"2119-145","assembly_ms":0.031,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5096,"theorems":[]}],"event":"completed","module_wall_ms":5096,"runner_non_module_wall_ms":828.6999999999998,"runner_wall_ms":5924.7}
+{"id":"2119-146","target":"nil","event":"started"}
+{"id":"2119-146","assembly_ms":0.036,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":4060,"theorems":[]}],"event":"completed","module_wall_ms":4060,"runner_non_module_wall_ms":734.0429999999997,"runner_wall_ms":4794.043}
+{"id":"2119-147","target":"nil","event":"started"}
+{"id":"2119-147","assembly_ms":0.049,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":4261,"theorems":[]}],"event":"completed","module_wall_ms":4261,"runner_non_module_wall_ms":683.0290000000005,"runner_wall_ms":4944.029}
+{"id":"2119-148","target":"nil","event":"started"}
+{"id":"2119-148","assembly_ms":0.034,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":5245,"theorems":[]}],"event":"completed","module_wall_ms":5245,"runner_non_module_wall_ms":707.5370000000003,"runner_wall_ms":5952.537}
+{"id":"2119-149","target":"nil","event":"started"}
+{"id":"2119-149","assembly_ms":0.066,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3779,"theorems":[]}],"event":"completed","module_wall_ms":3779,"runner_non_module_wall_ms":764.5929999999998,"runner_wall_ms":4543.593}
+{"id":"2119-150","target":"nil","event":"started"}
+{"id":"2119-150","assembly_ms":0.044,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3862,"theorems":[]}],"event":"completed","module_wall_ms":3862,"runner_non_module_wall_ms":831.9110000000001,"runner_wall_ms":4693.911}
+{"id":"2119-151","target":"nil","event":"started"}
+{"id":"2119-151","assembly_ms":0.058,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":6654,"theorems":[]}],"event":"completed","module_wall_ms":6654,"runner_non_module_wall_ms":881.1499999999996,"runner_wall_ms":7535.15}
+{"id":"2119-152","target":"nil","event":"started"}
+{"id":"2119-152","assembly_ms":0.039,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":6563,"theorems":[]}],"event":"completed","module_wall_ms":6563,"runner_non_module_wall_ms":738.4530000000004,"runner_wall_ms":7301.453}
+{"id":"2119-153","target":"nil","event":"started"}
+{"id":"2119-153","assembly_ms":0.028,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7157,"theorems":[]}],"event":"completed","module_wall_ms":7157,"runner_non_module_wall_ms":743.5379999999996,"runner_wall_ms":7900.538}
+{"id":"2119-154","target":"nil","event":"started"}
+{"id":"2119-154","assembly_ms":0.043,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4443,"theorems":[]}],"event":"completed","module_wall_ms":4443,"runner_non_module_wall_ms":733.5720000000001,"runner_wall_ms":5176.572}
+{"id":"2119-155","target":"nil","event":"started"}
+{"id":"2119-155","assembly_ms":0.032,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":6566,"theorems":[]}],"event":"completed","module_wall_ms":6566,"runner_non_module_wall_ms":813.0150000000003,"runner_wall_ms":7379.015}
+{"id":"2119-156","target":"nil","event":"started"}
+{"id":"2119-156","assembly_ms":0.059,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":5971,"theorems":[]}],"event":"completed","module_wall_ms":5971,"runner_non_module_wall_ms":742.1369999999997,"runner_wall_ms":6713.137}
+{"id":"2119-157","target":"nil","event":"started"}
+{"id":"2119-157","assembly_ms":0.039,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":5897,"theorems":[]}],"event":"completed","module_wall_ms":5897,"runner_non_module_wall_ms":694.2939999999999,"runner_wall_ms":6591.294}
+{"id":"2119-158","target":"nil","event":"started"}
+{"id":"2119-158","assembly_ms":0.036,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":5542,"theorems":[]}],"event":"completed","module_wall_ms":5542,"runner_non_module_wall_ms":808.3729999999996,"runner_wall_ms":6350.373}
+{"id":"2119-159","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :product, 1}","event":"started"}
+{"id":"2119-159","assembly_ms":0.035,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4684,"theorems":[]}],"event":"completed","module_wall_ms":4684,"runner_non_module_wall_ms":817.7200000000003,"runner_wall_ms":5501.72}
+{"id":"2119-160","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :product, 1}","event":"started"}
+{"id":"2119-160","assembly_ms":0.04,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4760,"theorems":[]}],"event":"completed","module_wall_ms":4760,"runner_non_module_wall_ms":833.8040000000001,"runner_wall_ms":5593.804}
+{"id":"2119-161","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :product, 1}","event":"started"}
+{"id":"2119-161","assembly_ms":0.029,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4723,"theorems":[]}],"event":"completed","module_wall_ms":4723,"runner_non_module_wall_ms":787.7640000000001,"runner_wall_ms":5510.764}
+{"id":"2119-162","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :product, 1}","event":"started"}
+{"id":"2119-162","assembly_ms":0.03,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4526,"theorems":[]}],"event":"completed","module_wall_ms":4526,"runner_non_module_wall_ms":755.8130000000001,"runner_wall_ms":5281.813}
+{"id":"2119-163","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :crc_step, 1}","event":"started"}
+{"id":"2119-163","assembly_ms":0.026,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4394,"theorems":[]}],"event":"completed","module_wall_ms":4394,"runner_non_module_wall_ms":708.8590000000004,"runner_wall_ms":5102.859}
+{"id":"2119-164","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :increment, 1}","event":"started"}
+{"id":"2119-164","assembly_ms":0.049,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4326,"theorems":[]}],"event":"completed","module_wall_ms":4326,"runner_non_module_wall_ms":657.6210000000001,"runner_wall_ms":4983.621}
+{"id":"2119-165","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :decrement, 1}","event":"started"}
+{"id":"2119-165","assembly_ms":0.046,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5139,"theorems":[]}],"event":"completed","module_wall_ms":5139,"runner_non_module_wall_ms":700.2139999999999,"runner_wall_ms":5839.214}
+{"id":"2119-166","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :increment, 1}","event":"started"}
+{"id":"2119-166","assembly_ms":0.063,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4655,"theorems":[]}],"event":"completed","module_wall_ms":4655,"runner_non_module_wall_ms":832.4300000000003,"runner_wall_ms":5487.43}
+{"id":"2119-167","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :decrement, 1}","event":"started"}
+{"id":"2119-167","assembly_ms":0.103,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4472,"theorems":[]}],"event":"completed","module_wall_ms":4472,"runner_non_module_wall_ms":760.4650000000001,"runner_wall_ms":5232.465}
+{"id":"2119-168","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :increment, 1}","event":"started"}
+{"id":"2119-168","assembly_ms":0.046,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4676,"theorems":[]}],"event":"completed","module_wall_ms":4676,"runner_non_module_wall_ms":654.0900000000001,"runner_wall_ms":5330.09}
+{"id":"2119-169","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :decrement, 1}","event":"started"}
+{"id":"2119-169","assembly_ms":0.073,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4353,"theorems":[]}],"event":"completed","module_wall_ms":4353,"runner_non_module_wall_ms":700.8789999999999,"runner_wall_ms":5053.879}
+{"id":"2119-170","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :increment, 1}","event":"started"}
+{"id":"2119-170","assembly_ms":0.025,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4441,"theorems":[]}],"event":"completed","module_wall_ms":4441,"runner_non_module_wall_ms":722.9120000000003,"runner_wall_ms":5163.912}
+{"id":"2119-171","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :decrement, 1}","event":"started"}
+{"id":"2119-171","assembly_ms":0.026,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4535,"theorems":[]}],"event":"completed","module_wall_ms":4535,"runner_non_module_wall_ms":864.732,"runner_wall_ms":5399.732}
+{"id":"2119-172","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :cancel_products, 2}","event":"started"}
+{"id":"2119-172","assembly_ms":0.056,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4740,"theorems":[]}],"event":"completed","module_wall_ms":4740,"runner_non_module_wall_ms":725.0479999999998,"runner_wall_ms":5465.048}
+{"id":"2119-173","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :crc64_step, 1}","event":"started"}
+{"id":"2119-173","assembly_ms":0.031,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4489,"theorems":[]}],"event":"completed","module_wall_ms":4489,"runner_non_module_wall_ms":706.9250000000002,"runner_wall_ms":5195.925}
+{"id":"2119-174","target":"nil","event":"started"}
+{"id":"2119-174","assembly_ms":0.093,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3708,"theorems":[]}],"event":"completed","module_wall_ms":3708,"runner_non_module_wall_ms":691.4120000000003,"runner_wall_ms":4399.412}
+{"id":"2119-175","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :guarded, 1}","event":"started"}
+{"id":"2119-175","assembly_ms":0.08,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4283,"theorems":[]}],"event":"completed","module_wall_ms":4283,"runner_non_module_wall_ms":758.2070000000003,"runner_wall_ms":5041.207}
+{"id":"2119-176","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :opaque, 1}","event":"started"}
+{"id":"2119-176","assembly_ms":0.034,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4478,"theorems":[]}],"event":"completed","module_wall_ms":4478,"runner_non_module_wall_ms":752.7730000000001,"runner_wall_ms":5230.773}
+{"id":"2119-177","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :helper, 1}","event":"started"}
+{"id":"2119-177","assembly_ms":0.028,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4381,"theorems":[]}],"event":"completed","module_wall_ms":4381,"runner_non_module_wall_ms":680.8980000000001,"runner_wall_ms":5061.898}
+{"id":"2119-178","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :caller, 1}","event":"started"}
+{"id":"2119-178","assembly_ms":0.029,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4757,"theorems":[]}],"event":"completed","module_wall_ms":4757,"runner_non_module_wall_ms":664.0699999999997,"runner_wall_ms":5421.07}
+{"id":"2119-179","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :helper, 1}","event":"started"}
+{"id":"2119-179","assembly_ms":0.025,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4346,"theorems":[]}],"event":"completed","module_wall_ms":4346,"runner_non_module_wall_ms":757.1610000000001,"runner_wall_ms":5103.161}
+{"id":"2119-180","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :local_caller, 1}","event":"started"}
+{"id":"2119-180","assembly_ms":0.025,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5116,"theorems":[]}],"event":"completed","module_wall_ms":5116,"runner_non_module_wall_ms":749.5870000000004,"runner_wall_ms":5865.587}
+{"id":"2119-181","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :helper, 1}","event":"started"}
+{"id":"2119-181","assembly_ms":0.059,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4639,"theorems":[]}],"event":"completed","module_wall_ms":4639,"runner_non_module_wall_ms":693.2380000000003,"runner_wall_ms":5332.238}
+{"id":"2119-182","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :two_calls, 1}","event":"started"}
+{"id":"2119-182","assembly_ms":0.027,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5044,"theorems":[]}],"event":"completed","module_wall_ms":5044,"runner_non_module_wall_ms":805.9790000000003,"runner_wall_ms":5849.979}
+{"id":"2119-183","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :helper, 1}","event":"started"}
+{"id":"2119-183","assembly_ms":0.083,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4559,"theorems":[]}],"event":"completed","module_wall_ms":4559,"runner_non_module_wall_ms":742.2780000000002,"runner_wall_ms":5301.278}
+{"id":"2119-184","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :caller, 1}","event":"started"}
+{"id":"2119-184","assembly_ms":0.056,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4850,"theorems":[]}],"event":"completed","module_wall_ms":4850,"runner_non_module_wall_ms":738.2979999999998,"runner_wall_ms":5588.298}
+{"id":"2119-185","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :grandcaller, 1}","event":"started"}
+{"id":"2119-185","assembly_ms":0.028,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5193,"theorems":[]}],"event":"completed","module_wall_ms":5193,"runner_non_module_wall_ms":897.741,"runner_wall_ms":6090.741}
+{"id":"2119-186","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :opaque, 1}","event":"started"}
+{"id":"2119-186","assembly_ms":0.032,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4877,"theorems":[]}],"event":"completed","module_wall_ms":4877,"runner_non_module_wall_ms":813.4570000000003,"runner_wall_ms":5690.457}
+{"id":"2119-187","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :helper, 1}","event":"started"}
+{"id":"2119-187","assembly_ms":0.034,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4695,"theorems":[]}],"event":"completed","module_wall_ms":4695,"runner_non_module_wall_ms":810.6750000000002,"runner_wall_ms":5505.675}
+{"id":"2119-188","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :sum, 2}","event":"started"}
+{"id":"2119-188","assembly_ms":0.026,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":5397,"theorems":[]}],"event":"completed","module_wall_ms":5397,"runner_non_module_wall_ms":722.3389999999999,"runner_wall_ms":6119.339}
+{"id":"2119-189","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :crc_loop, 2}","event":"started"}
+{"id":"2119-189","assembly_ms":0.027,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":6980,"theorems":[]}],"event":"completed","module_wall_ms":6980,"runner_non_module_wall_ms":716.1750000000002,"runner_wall_ms":7696.175}
+{"id":"2119-190","target":"nil","event":"started"}
+{"id":"2119-190","assembly_ms":0.028,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3798,"theorems":[]}],"event":"completed","module_wall_ms":3798,"runner_non_module_wall_ms":851.1760000000004,"runner_wall_ms":4649.176}
+{"id":"2119-191","target":"nil","event":"started"}
+{"id":"2119-191","assembly_ms":0.03,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3939,"theorems":[]}],"event":"completed","module_wall_ms":3939,"runner_non_module_wall_ms":924.665,"runner_wall_ms":4863.665}
+{"id":"2119-192","target":"nil","event":"started"}
+{"id":"2119-192","assembly_ms":0.031,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3714,"theorems":[]}],"event":"completed","module_wall_ms":3714,"runner_non_module_wall_ms":752.7950000000001,"runner_wall_ms":4466.795}
+{"id":"2119-193","target":"nil","event":"started"}
+{"id":"2119-193","assembly_ms":0.039,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":3626,"theorems":[]}],"event":"completed","module_wall_ms":3626,"runner_non_module_wall_ms":796.3220000000001,"runner_wall_ms":4422.322}
+{"id":"2119-194","target":"nil","event":"started"}
+{"id":"2119-194","assembly_ms":0.032,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":4395,"theorems":[]}],"event":"completed","module_wall_ms":4395,"runner_non_module_wall_ms":685.652,"runner_wall_ms":5080.652}
+{"id":"2119-195","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :helper, 1}","event":"started"}
+{"id":"2119-195","assembly_ms":0.028,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4305,"theorems":[]}],"event":"completed","module_wall_ms":4305,"runner_non_module_wall_ms":715.9160000000002,"runner_wall_ms":5020.916}
+{"id":"2119-196","target":"{ReductionBounds.Fixtures.IntegerCostPrograms, :caller, 1}","event":"started"}
+{"id":"2119-196","assembly_ms":0.028,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":4118,"theorems":[]}],"event":"completed","module_wall_ms":4118,"runner_non_module_wall_ms":901.0839999999998,"runner_wall_ms":5019.084}
+{"id":"2119-197","target":"nil","event":"started"}
+{"id":"2119-197","assembly_ms":0.041,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1435,"theorems":[]}],"event":"completed","module_wall_ms":1435,"runner_non_module_wall_ms":758.7800000000002,"runner_wall_ms":2193.78}
+{"id":"2119-198","target":"nil","event":"started"}
+{"id":"2119-198","assembly_ms":0.065,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1524,"theorems":[]}],"event":"completed","module_wall_ms":1524,"runner_non_module_wall_ms":706.6300000000001,"runner_wall_ms":2230.63}
+{"id":"2119-199","target":"nil","event":"started"}
+{"id":"2119-199","assembly_ms":0.039,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1560,"theorems":[]}],"event":"completed","module_wall_ms":1560,"runner_non_module_wall_ms":754.8580000000002,"runner_wall_ms":2314.858}
+{"id":"2119-200","target":"nil","event":"started"}
+{"id":"2119-200","assembly_ms":0.062,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1611,"theorems":[]}],"event":"completed","module_wall_ms":1611,"runner_non_module_wall_ms":701.3670000000002,"runner_wall_ms":2312.367}
+{"id":"2119-201","target":"nil","event":"started"}
+{"id":"2119-201","assembly_ms":0.062,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1469,"theorems":[]}],"event":"completed","module_wall_ms":1469,"runner_non_module_wall_ms":851.232,"runner_wall_ms":2320.232}
+{"id":"2119-202","target":"nil","event":"started"}
+{"id":"2119-202","assembly_ms":0.065,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1587,"theorems":[]}],"event":"completed","module_wall_ms":1587,"runner_non_module_wall_ms":846.319,"runner_wall_ms":2433.319}
+{"id":"2119-203","target":"nil","event":"started"}
+{"id":"2119-203","assembly_ms":0.03,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":1014,"theorems":[]}],"event":"completed","module_wall_ms":1014,"runner_non_module_wall_ms":709.991,"runner_wall_ms":1723.991}
+{"id":"2119-204","target":"nil","event":"started"}
+{"id":"2119-204","assembly_ms":0.033,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":1005,"theorems":[]}],"event":"completed","module_wall_ms":1005,"runner_non_module_wall_ms":749.317,"runner_wall_ms":1754.317}
+{"id":"2119-205","target":"nil","event":"started"}
+{"id":"2119-205","assembly_ms":0.057,"reports":[{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":681,"theorems":[]}],"event":"completed","module_wall_ms":681,"runner_non_module_wall_ms":678.8399999999999,"runner_wall_ms":1359.84}
+{"id":"2119-209","target":"{ReductionBounds.Fixtures.BoundedCounter, :debit, 2}","event":"started"}
+{"id":"2119-209","assembly_ms":0.032,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2037,"theorems":[]}],"event":"completed","module_wall_ms":2037,"runner_non_module_wall_ms":700.9789999999998,"runner_wall_ms":2737.979}
+{"id":"2119-210","target":"{ReductionBounds.Fixtures.BoundedCounter, :set_limit, 2}","event":"started"}
+{"id":"2119-210","assembly_ms":0.066,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1917,"theorems":[]}],"event":"completed","module_wall_ms":1917,"runner_non_module_wall_ms":801.5210000000002,"runner_wall_ms":2718.521}
+{"id":"2119-211","target":"{ReductionBounds.Fixtures.BoundedCounter, :read_checked, 1}","event":"started"}
+{"id":"2119-211","assembly_ms":0.04,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1878,"theorems":[]}],"event":"completed","module_wall_ms":1878,"runner_non_module_wall_ms":798.4989999999998,"runner_wall_ms":2676.499}
+{"id":"2119-212","target":"nil","event":"started"}
+{"id":"2119-212","assembly_ms":0.034,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":2276,"theorems":[]}],"event":"completed","module_wall_ms":2276,"runner_non_module_wall_ms":733.0790000000002,"runner_wall_ms":3009.079}
+{"id":"2119-213","target":"{ReductionBounds, :verify_port_model, 3}","event":"started"}
+{"id":"2119-213","assembly_ms":0.032,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7592,"theorems":[]}],"event":"completed","module_wall_ms":7592,"runner_non_module_wall_ms":724.0959999999995,"runner_wall_ms":8316.096}
+{"id":"2119-214","target":"{ReductionBounds, :verify_port_model, 3}","event":"started"}
+{"id":"2119-214","assembly_ms":0.03,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":8112,"theorems":[]}],"event":"completed","module_wall_ms":8112,"runner_non_module_wall_ms":912.9249999999993,"runner_wall_ms":9024.925}
+{"id":"2119-215","target":"{ReductionBounds, :verify_port_model, 3}","event":"started"}
+{"id":"2119-215","assembly_ms":0.031,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7866,"theorems":[]}],"event":"completed","module_wall_ms":7866,"runner_non_module_wall_ms":778.8189999999995,"runner_wall_ms":8644.819}
+{"id":"2119-216","target":"{ReductionBounds, :verify_port_model, 3}","event":"started"}
+{"id":"2119-216","assembly_ms":0.033,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7512,"theorems":[]}],"event":"completed","module_wall_ms":7512,"runner_non_module_wall_ms":703.0460000000003,"runner_wall_ms":8215.046}
+{"id":"2119-217","target":"{ReductionBounds, :verify_port_model, 3}","event":"started"}
+{"id":"2119-217","assembly_ms":0.034,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7818,"theorems":[]}],"event":"completed","module_wall_ms":7818,"runner_non_module_wall_ms":693.366,"runner_wall_ms":8511.366}
+{"id":"2119-218","target":"{ReductionBounds, :verify_port_model, 3}","event":"started"}
+{"id":"2119-218","assembly_ms":0.162,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":8563,"theorems":[]}],"event":"completed","module_wall_ms":8563,"runner_non_module_wall_ms":803.9230000000007,"runner_wall_ms":9366.923}
+{"id":"2119-219","target":"{ReductionBounds, :verify_port_model, 3}","event":"started"}
+{"id":"2119-219","assembly_ms":0.032,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":8507,"theorems":[]}],"event":"completed","module_wall_ms":8507,"runner_non_module_wall_ms":816.0249999999996,"runner_wall_ms":9323.025}
+{"id":"2119-220","target":"{ReductionBounds, :verify_port_model, 3}","event":"started"}
+{"id":"2119-220","assembly_ms":0.047,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":8515,"theorems":[]}],"event":"completed","module_wall_ms":8515,"runner_non_module_wall_ms":738.3690000000006,"runner_wall_ms":9253.369}
+{"id":"2119-221","target":"{ReductionBounds, :verify_port_model, 3}","event":"started"}
+{"id":"2119-221","assembly_ms":0.038,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7419,"theorems":[]}],"event":"completed","module_wall_ms":7419,"runner_non_module_wall_ms":810.5130000000008,"runner_wall_ms":8229.513}
+{"id":"2119-222","target":"{ReductionBounds, :verify_port_model, 3}","event":"started"}
+{"id":"2119-222","assembly_ms":0.033,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7846,"theorems":[]}],"event":"completed","module_wall_ms":7846,"runner_non_module_wall_ms":802.1839999999993,"runner_wall_ms":8648.184}
+{"id":"2119-223","target":"{ReductionBounds, :verify_port_model, 3}","event":"started"}
+{"id":"2119-223","assembly_ms":0.078,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":7754,"theorems":[]}],"event":"completed","module_wall_ms":7754,"runner_non_module_wall_ms":768.3899999999994,"runner_wall_ms":8522.39}
+{"id":"2119-224","target":"{ReductionBounds, :verify_port_model, 3}","event":"started"}
+{"id":"2119-224","assembly_ms":0.038,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":8179,"theorems":[]}],"event":"completed","module_wall_ms":8179,"runner_non_module_wall_ms":865.0059999999994,"runner_wall_ms":9044.006}
+{"id":"2119-225","target":"{ReductionBounds.Fixtures.PortClient, :request, 2}","event":"started"}
+{"id":"2119-225","assembly_ms":0.081,"reports":[{"module":"Elixir.ReductionBounds.Fixtures.PortClient","status":"ok","cached":false,"time_ms":2,"theorems":[]},{"module":"Elixir.ReductionBounds.Fixtures.PortHelpers","status":"ok","cached":false,"time_ms":2,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":8308,"theorems":[]}],"event":"completed","module_wall_ms":8312,"runner_non_module_wall_ms":709.5210000000006,"runner_wall_ms":9021.521}
+{"id":"2119-226","target":"{ReductionBoundsTest.Fixture, :identity, 1}","event":"started"}
+{"id":"2119-227","target":"{ReductionBoundsTest.Fixture, :identity_wrapper, 1}","event":"started"}
+{"id":"2119-226","assembly_ms":1.874,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":8,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":579,"theorems":[]}],"event":"completed","module_wall_ms":587,"runner_non_module_wall_ms":764.884,"runner_wall_ms":1351.884}
+{"id":"2119-227","assembly_ms":1.496,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":8,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":598,"theorems":[]}],"event":"completed","module_wall_ms":606,"runner_non_module_wall_ms":774.8130000000001,"runner_wall_ms":1380.813}
+{"id":"2119-228","target":"{ReductionBoundsTest.Fixture, :missing, 1}","event":"started"}
+{"id":"2119-228","reason":"** (CompileError) nofile: undefined function ReductionBoundsTest.Fixture.missing/1","kind":"error","wall_ms":1.34,"event":"failed"}
+{"id":"2119-230","target":"{ReductionBoundsTest.Fixture, :identity, 1}","event":"started"}
+{"id":"2119-229","target":"{ReductionBoundsTest.MissingModule, :identity, 1}","event":"started"}
+{"id":"2119-229","reason":"** (CompileError) unknown module ReductionBoundsTest.MissingModule","kind":"error","wall_ms":0.295,"event":"failed"}
+{"id":"2119-230","assembly_ms":1.405,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":6,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":440,"theorems":[]}],"event":"completed","module_wall_ms":446,"runner_non_module_wall_ms":768.402,"runner_wall_ms":1214.402}
+{"id":"2119-231","target":"{ReductionBoundsTest.Fixture, :identity, 1}","event":"started"}
+{"id":"2119-232","target":"{ReductionBoundsTest.Fixture, :constant, 0}","event":"started"}
+{"id":"2119-231","assembly_ms":1.096,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":6,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":420,"theorems":[]}],"event":"completed","module_wall_ms":426,"runner_non_module_wall_ms":752.6099999999999,"runner_wall_ms":1178.61}
+{"id":"2119-232","assembly_ms":1.358,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":6,"theorems":[]},{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":486,"theorems":[]}],"event":"completed","module_wall_ms":492,"runner_non_module_wall_ms":748.279,"runner_wall_ms":1240.279}
+{"id":"2119-233","target":"{ReductionBoundsTest.Fixture, :identity, 1}","event":"started"}
+{"id":"2119-234","target":"{ReductionBoundsTest.Fixture, :identity_wrapper, 1}","event":"started"}
+{"id":"2119-235","target":"{ReductionBoundsTest.Fixture, :identity, 1}","event":"started"}
+{"id":"2119-235","assembly_ms":0.188,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":7,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":496,"theorems":[]}],"event":"completed","module_wall_ms":503,"runner_non_module_wall_ms":727.9780000000001,"runner_wall_ms":1230.978}
+{"id":"2119-236","target":"{ReductionBoundsTest.Fixture, :sum, 1}","event":"started"}
+{"id":"2119-236","assembly_ms":0.163,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":429,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":469,"theorems":[]}],"event":"completed","module_wall_ms":898,"runner_non_module_wall_ms":781.067,"runner_wall_ms":1679.067}
+{"id":"2119-237","target":"{ReductionBoundsTest.Fixture, :contains, 2}","event":"started"}
+{"id":"2119-237","assembly_ms":0.133,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":494,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":589,"theorems":[]}],"event":"completed","module_wall_ms":1083,"runner_non_module_wall_ms":806.588,"runner_wall_ms":1889.588}
+{"id":"2119-238","target":"{ReductionBoundsTest.Fixture, :contains, 2}","event":"started"}
+{"id":"2119-238","assembly_ms":0.251,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":426,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":963,"theorems":[]}],"event":"completed","module_wall_ms":1389,"runner_non_module_wall_ms":796.4830000000002,"runner_wall_ms":2185.483}
+{"id":"2119-239","target":"{ReductionBoundsTest.Fixture, :list_length, 1}","event":"started"}
+{"id":"2119-239","assembly_ms":0.218,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":428,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":748,"theorems":[]}],"event":"completed","module_wall_ms":1176,"runner_non_module_wall_ms":845.7090000000001,"runner_wall_ms":2021.709}
+{"id":"2119-240","target":"{:lists, :member, 2}","event":"started"}
+{"id":"2119-240","assembly_ms":0.061,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":808,"theorems":[]}],"event":"completed","module_wall_ms":808,"runner_non_module_wall_ms":865.0219999999999,"runner_wall_ms":1673.022}
+{"id":"2119-241","target":"{:lists, :reverse, 2}","event":"started"}
+{"id":"2119-241","assembly_ms":0.166,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":855,"theorems":[]}],"event":"completed","module_wall_ms":855,"runner_non_module_wall_ms":737.981,"runner_wall_ms":1592.981}
+{"id":"2119-242","target":"{ReductionBoundsTest.Fixture, :reverse_on_hit, 2}","event":"started"}
+{"id":"2119-242","assembly_ms":0.208,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":430,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1169,"theorems":[]}],"event":"completed","module_wall_ms":1599,"runner_non_module_wall_ms":730.3899999999999,"runner_wall_ms":2329.39}
+{"id":"2119-243","target":"{ReductionBoundsTest.Fixture, :reverse_onto_on_hit, 2}","event":"started"}
+{"id":"2119-243","assembly_ms":0.181,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":479,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1321,"theorems":[]}],"event":"completed","module_wall_ms":1800,"runner_non_module_wall_ms":738.6619999999998,"runner_wall_ms":2538.662}
+{"id":"2119-244","target":"{ReductionBoundsTest.Fixture, :reverse_via_helper, 2}","event":"started"}
+{"id":"2119-244","assembly_ms":0.204,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":483,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1215,"theorems":[]}],"event":"completed","module_wall_ms":1698,"runner_non_module_wall_ms":895.5189999999998,"runner_wall_ms":2593.519}
+{"id":"2119-245","target":"{ReductionBoundsTest.Fixture, :reverse_via_case, 2}","event":"started"}
+{"id":"2119-245","assembly_ms":0.434,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":429,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1266,"theorems":[]}],"event":"completed","module_wall_ms":1695,"runner_non_module_wall_ms":883.3939999999998,"runner_wall_ms":2578.394}
+{"id":"2119-246","target":"{ReductionBoundsTest.Fixture, :reverse_twice, 1}","event":"started"}
+{"id":"2119-246","assembly_ms":0.159,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":445,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1209,"theorems":[]}],"event":"completed","module_wall_ms":1654,"runner_non_module_wall_ms":712.9299999999998,"runner_wall_ms":2366.93}
+{"id":"2119-247","target":"{CircularBuffer, :insert, 2}","event":"started"}
+{"id":"2119-247","assembly_ms":0.033,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1069,"theorems":[]}],"event":"completed","module_wall_ms":1069,"runner_non_module_wall_ms":723.345,"runner_wall_ms":1792.345}
+{"id":"2119-248","target":"{CircularBuffer, :insert, 2}","event":"started"}
+{"id":"2119-248","assembly_ms":0.056,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1694,"theorems":[]}],"event":"completed","module_wall_ms":1694,"runner_non_module_wall_ms":739.9299999999998,"runner_wall_ms":2433.93}
+{"id":"2119-249","target":"{ReductionBoundsTest.Fixture, :list_length, 1}","event":"started"}
+{"id":"2119-249","assembly_ms":0.213,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":518,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":757,"theorems":[]}],"event":"completed","module_wall_ms":1275,"runner_non_module_wall_ms":773.3620000000001,"runner_wall_ms":2048.362}
+{"id":"2119-250","target":"{:lists, :reverse, 2}","event":"started"}
+{"id":"2119-250","assembly_ms":0.064,"reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":834,"theorems":[]}],"event":"completed","module_wall_ms":834,"runner_non_module_wall_ms":732.6959999999999,"runner_wall_ms":1566.696}
+{"id":"2119-251","target":"{ReductionBoundsTest.Fixture, :reverse_on_hit, 2}","event":"started"}
+{"id":"2119-251","assembly_ms":0.173,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":405,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":1216,"theorems":[]}],"event":"completed","module_wall_ms":1621,"runner_non_module_wall_ms":703.3760000000002,"runner_wall_ms":2324.376}
+{"id":"2119-252","target":"{ReductionBoundsTest.Fixture, :forward_length, 1}","event":"started"}
+{"id":"2119-252","assembly_ms":0.231,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":482,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":971,"theorems":[]}],"event":"completed","module_wall_ms":1453,"runner_non_module_wall_ms":717.1419999999998,"runner_wall_ms":2170.142}
+{"id":"2119-253","target":"{ReductionBoundsTest.Fixture, :forward_length, 1}","event":"started"}
+{"id":"2119-253","assembly_ms":0.185,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":496,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":925,"theorems":[]}],"event":"completed","module_wall_ms":1421,"runner_non_module_wall_ms":744.8850000000002,"runner_wall_ms":2165.885}
+{"id":"2119-254","target":"{ReductionBoundsTest.Fixture, :list_length, 1}","event":"started"}
+{"id":"2119-254","assembly_ms":0.156,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":486,"theorems":[]},{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":868,"theorems":[]}],"event":"completed","module_wall_ms":1354,"runner_non_module_wall_ms":741.277,"runner_wall_ms":2095.277}
+{"id":"2119-255","target":"{ReductionBoundsTest.Fixture, :list_length, 1}","event":"started"}
+{"id":"2119-255","assembly_ms":0.208,"reports":[{"module":"Elixir.ReductionBoundsTest.Fixture","status":"ok","cached":false,"time_ms":412,"theorems":[]},{"module":"Erlang.postlude","status":"error","cached":false,"time_ms":815,"theorems":[]}],"event":"completed","module_wall_ms":1227,"runner_non_module_wall_ms":701.6310000000001,"runner_wall_ms":1928.631}

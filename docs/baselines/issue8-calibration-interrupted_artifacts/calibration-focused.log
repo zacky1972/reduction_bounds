@@ -1,0 +1,7 @@
+Compiling 3 files (.ex)
+Running ExUnit with seed: 619111, max_cases: 8
+
+............
+Finished in 0.08 seconds (0.08s async, 0.00s sync)
+
+Result: 12 passed

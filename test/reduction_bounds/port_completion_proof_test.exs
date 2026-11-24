@@ -1,5 +1,6 @@
 defmodule ReductionBounds.PortCompletionProofTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
+  @moduletag timeout: 300_000
 
   alias ReductionBounds.{
     PortCompletionProof,
@@ -157,7 +158,9 @@ defmodule ReductionBounds.PortCompletionProofTest do
   defp reports(proof) do
     {:ok, postludes} = ProofInput.port_completion_postludes(proof)
     translation = Lynx.Translation.new(postludes: postludes)
-    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
-    Lynx.Commands.verify!(project, ProofInput.assemble(translation))
+
+    ReductionBounds.Verification.verify!(translation,
+      postlude_imports: ["Erlang.erlang", "Erlang.maps"]
+    )
   end
 end

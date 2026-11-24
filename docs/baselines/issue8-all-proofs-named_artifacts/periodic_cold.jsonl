@@ -1,0 +1,2 @@
+{"id":"7875-1","target":"{ReductionBounds.Benchmark.Workloads.Program, :enqueue_pair, 2}","event":"started"}
+{"id":"7875-1","reports":[{"module":"ReductionBounds.Proofs.Periodic","status":"ok","cached":false,"time_ms":573,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":720,"theorems":[]}],"event":"completed","assembly_ms":1.571,"coordination":{"mode":"owner","wall_ms":41.412},"module_wall_ms":1293,"runner_non_module_wall_ms":692.8299999999999,"runner_wall_ms":1985.83}

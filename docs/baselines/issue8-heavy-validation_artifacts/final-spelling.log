@@ -1,0 +1,85 @@
+bun add v1.3.0 (b0a6feca)
+Saved lockfile
+
+installed cspell@9.4.0 with binaries:
+ - cspell
+ - cspell-esm
+
+[32.00ms] done
+ 1/75 CHANGELOG.md 1593.86ms
+ 2/75 docs/baselines/issue8-all-proofs.md 29.17ms
+ 3/75 docs/baselines/issue8-calibration-interrupted.md 10.36ms
+ 4/75 docs/baselines/issue8-fixture-concurrency.md 14.58ms
+ 5/75 docs/baselines/issue8-heavy-regression-isolation.md 13.36ms
+ 6/75 docs/baselines/issue8-integer-cache.md 10.95ms
+ 7/75 docs/baselines/issue8-job-budget.md 26.11ms
+ 8/75 docs/baselines/issue8-linux-otp29.md 11.30ms
+ 9/75 docs/baselines/issue8-remaining-proof-concurrency.md 21.49ms
+10/75 docs/benchmarking.md 28.24ms
+11/75 docs/examples.md 15.09ms
+12/75 docs/examples/cost_contracts.md 7.22ms
+13/75 docs/examples/list_bounds.md 4.42ms
+14/75 docs/examples/ports.md 13.57ms
+15/75 docs/examples/verification.md 8.66ms
+16/75 docs/job_budget.md 14.18ms
+17/75 docs/job_calibration.md 10.67ms
+18/75 docs/proof.md 153.49ms
+19/75 docs/regression_isolation.md 22.21ms
+20/75 docs/roadmap.md 9.61ms
+21/75 docs/shared_proofs.md 12.26ms
+22/75 docs/test_concurrency.md 18.94ms
+23/75 docs/toolchains.md 5.95ms
+24/75 lean-toolchain 4.08ms
+25/75 lean/identity.lean 3.22ms
+26/75 lean/timeout.lean 2.32ms
+27/75 lib/mix/tasks/reduction_bounds.bench.ex 10.45ms
+28/75 lib/mix/tasks/reduction_bounds.calibrate.ex 11.68ms
+29/75 lib/reduction_bounds.ex 82.63ms
+30/75 lib/reduction_bounds/application.ex 8.82ms
+31/75 lib/reduction_bounds/benchmark.ex 25.84ms
+32/75 lib/reduction_bounds/benchmark/calibration.ex 17.69ms
+33/75 lib/reduction_bounds/benchmark/command.ex 9.59ms
+34/75 lib/reduction_bounds/benchmark/test_formatter.ex 5.70ms
+35/75 lib/reduction_bounds/benchmark/workloads.ex 17.18ms
+36/75 lib/reduction_bounds/bound_transfer.ex 24.83ms
+37/75 lib/reduction_bounds/circular_buffer_bound.ex 15.29ms
+38/75 lib/reduction_bounds/circular_buffer_sequence_bound.ex 11.53ms
+39/75 lib/reduction_bounds/composed_bound.ex 38.42ms
+40/75 lib/reduction_bounds/contract_comparison.ex 24.74ms
+41/75 lib/reduction_bounds/core_fragment.ex 17.60ms
+42/75 lib/reduction_bounds/core_source.ex 8.53ms
+43/75 lib/reduction_bounds/cost_contract.ex 14.97ms
+44/75 lib/reduction_bounds/execution_bound.ex 17.60ms
+45/75 lib/reduction_bounds/integer_analysis.ex 21.41ms
+46/75 lib/reduction_bounds/integer_cost_bound.ex 19.42ms
+47/75 lib/reduction_bounds/integer_cost_source.ex 7.89ms
+48/75 lib/reduction_bounds/integer_size.ex 14.39ms
+49/75 lib/reduction_bounds/list_bound.ex 16.68ms
+50/75 lib/reduction_bounds/normalize.ex 4.57ms
+51/75 lib/reduction_bounds/periodic_bound.ex 7.62ms
+52/75 lib/reduction_bounds/port_completion_proof.ex 6.53ms
+53/75 lib/reduction_bounds/port_completion.ex 5.44ms
+54/75 lib/reduction_bounds/port_protocol.ex 7.07ms
+55/75 lib/reduction_bounds/port_result.ex 6.09ms
+56/75 lib/reduction_bounds/port_source_proof.ex 5.75ms
+57/75 lib/reduction_bounds/port_source.ex 8.75ms
+58/75 lib/reduction_bounds/port_workflow.ex 4.54ms
+59/75 lib/reduction_bounds/profile.ex 2.79ms
+60/75 lib/reduction_bounds/proof_cache.ex 4.13ms
+61/75 lib/reduction_bounds/proof_input.ex 17.85ms
+62/75 lib/reduction_bounds/proof_modules.ex 8.29ms
+63/75 lib/reduction_bounds/proof_preparation.ex 4.92ms
+64/75 lib/reduction_bounds/protocol_conditions_proof.ex 7.09ms
+65/75 lib/reduction_bounds/protocol_conditions.ex 8.53ms
+66/75 lib/reduction_bounds/protocol_cost_proof.ex 5.70ms
+67/75 lib/reduction_bounds/protocol_cost.ex 7.27ms
+68/75 lib/reduction_bounds/protocol_proof.ex 6.06ms
+69/75 lib/reduction_bounds/protocol_size.ex 4.59ms
+70/75 lib/reduction_bounds/protocol.ex 5.43ms
+71/75 lib/reduction_bounds/search_bound.ex 4.49ms
+72/75 lib/reduction_bounds/verification_jobs.ex 5.25ms
+73/75 lib/reduction_bounds/verification.ex 6.27ms
+74/75 LICENSE.md 7.63ms
+75/75 README.md 4.62ms
+CSpell: Files checked: 75, Issues found: 0 in 0 files.
+Spellcheck passed.

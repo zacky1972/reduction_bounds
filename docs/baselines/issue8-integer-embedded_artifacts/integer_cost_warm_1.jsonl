@@ -1,0 +1,2 @@
+{"id":"999-1","target":"{ReductionBounds.Benchmark.Workloads.Program, :product, 1}","event":"started"}
+{"id":"999-1","reports":[{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":4183,"theorems":[]}],"event":"completed","assembly_ms":0.459,"module_wall_ms":4183,"runner_non_module_wall_ms":677.0020000000004,"runner_wall_ms":4860.002}

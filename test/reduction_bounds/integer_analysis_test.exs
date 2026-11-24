@@ -1,18 +1,12 @@
 defmodule ReductionBounds.IntegerAnalysisTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
   alias ReductionBounds.{IntegerAnalysis, IntegerSize}
   alias ReductionBounds.Fixtures.IntegerPrograms, as: Fixture
 
+  @moduletag timeout: 300_000
+
   setup_all do
-    path = Path.expand("../fixtures/integer_programs.ex", __DIR__)
-    [{Fixture, beam}] = Code.compile_file(path)
-
-    on_exit(fn ->
-      :code.purge(Fixture)
-      :code.delete(Fixture)
-      :code.purge(Fixture)
-    end)
-
+    {Fixture, beam} = ReductionBounds.TestFixtures.integer_programs()
     %{beam: beam}
   end
 
@@ -31,7 +25,8 @@ defmodule ReductionBounds.IntegerAnalysisTest do
     assert result.cost_model == :not_analyzed
     assert result.unresolved_sizes == []
     assert "targetIntegerSizeBound" in result.checked_theorems
-    assert [%{status: :ok}] = result.reports
+    assert Enum.all?(result.reports, &(&1.status == :ok))
+    assert List.last(result.reports).module == "Erlang.postlude"
 
     for x <- -2..4,
         do: assert(IntegerSize.contains?(result.result_size, apply(Fixture, :conditional, [x])))
@@ -179,10 +174,9 @@ defmodule ReductionBounds.IntegerAnalysisTest do
       proof = IntegerAnalysis.proof(falsified)
       assert {:ok, postludes} = ReductionBounds.ProofInput.integer_postludes(proof)
       translation = Lynx.Translation.new(postludes: postludes)
-      project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
 
       reports =
-        Lynx.Commands.verify!(project, Lynx.Translation.assemble(translation, cache: false))
+        ReductionBounds.Verification.verify!(translation)
 
       assert Enum.any?(reports, &(&1.status == :error))
     end

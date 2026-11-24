@@ -1,0 +1,24 @@
+Optimization evidence: /workspace/scratch/9624e53852b3/conditional-measurements/issue8-conditional-legacy-review.json
+Preparing an isolated Mix build (logs: /workspace/scratch/9624e53852b3/conditional-measurements/issue8-conditional-probes_artifacts)
+Measuring runner_empty: cold
+Measuring runner_empty: warm_1
+Measuring runner_empty: warm_2
+Measuring runner_empty: warm_3
+Measuring runner_runtime: cold
+Measuring runner_runtime: warm_1
+Measuring runner_runtime: warm_2
+Measuring runner_runtime: warm_3
+Measuring integer_cost: cold
+Measuring integer_cost: warm_1
+Measuring integer_cost: warm_2
+Measuring integer_cost: warm_3
+Measuring port_source: cold
+Measuring port_source: warm_1
+Measuring port_source: warm_2
+Measuring port_source: warm_3
+Benchmark report: /workspace/scratch/9624e53852b3/conditional-measurements/issue8-conditional-probes.json
+Preparing an isolated Mix build (logs: /workspace/scratch/9624e53852b3/conditional-measurements/issue8-conditional-cache-cohort_artifacts)
+Measuring suite: cold
+Benchmark report: /workspace/scratch/9624e53852b3/conditional-measurements/issue8-conditional-cache-cohort.json
+Optimization evidence: /workspace/scratch/9624e53852b3/conditional-measurements/issue8-conditional-probe-review.json
+Optimization evidence: /workspace/scratch/9624e53852b3/conditional-measurements/issue8-conditional-cache-review.json

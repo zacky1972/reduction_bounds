@@ -1,5 +1,6 @@
 defmodule ReductionBounds.IntegerSizeProofTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
+  @moduletag timeout: 300_000
 
   alias ReductionBounds.IntegerSize
 
@@ -23,7 +24,7 @@ defmodule ReductionBounds.IntegerSizeProofTest do
         """
       end
 
-    assert [%{module: "Erlang.postlude", status: :ok}] = verify(checks)
+    assert_verified(verify(checks))
   end
 
   test "Lean checks the semantics and agrees with Elixir on boundary cases" do
@@ -39,7 +40,7 @@ defmodule ReductionBounds.IntegerSizeProofTest do
       end
 
     reports = verify(checks <> audit())
-    assert [%{module: "Erlang.postlude", status: :ok}] = reports
+    assert_verified(reports)
   end
 
   test "Lean rejects a nonzero value with a zero magnitude bound" do
@@ -62,7 +63,7 @@ defmodule ReductionBounds.IntegerSizeProofTest do
         "example : Domain.normalize #{original} = #{normalized} := by decide\n" <> membership
       end
 
-    assert [%{module: "Erlang.postlude", status: :ok}] = verify(checks <> audit())
+    assert_verified(verify(checks <> audit()))
   end
 
   test "Lean rejects classifying unknown information as unreachable" do
@@ -92,10 +93,9 @@ defmodule ReductionBounds.IntegerSizeProofTest do
         """
       end
 
-    assert [%{module: "Erlang.postlude", status: :ok}] =
-             verify(
-               "set_option exponentiation.threshold 1024\n" <> constants <> checks <> audit()
-             )
+    assert_verified(
+      verify("set_option exponentiation.threshold 1024\n" <> constants <> checks <> audit())
+    )
   end
 
   test "Lean rejects forgetting the carry bit and treating unrelated inputs as equal" do
@@ -130,10 +130,9 @@ defmodule ReductionBounds.IntegerSizeProofTest do
         """
       end
 
-    assert [%{module: "Erlang.postlude", status: :ok}] =
-             verify(
-               "set_option exponentiation.threshold 1024\n" <> transfers <> values <> audit()
-             )
+    assert_verified(
+      verify("set_option exponentiation.threshold 1024\n" <> transfers <> values <> audit())
+    )
   end
 
   test "Lean rejects losing shifted bits and retaining a negative value after masking" do
@@ -192,11 +191,12 @@ defmodule ReductionBounds.IntegerSizeProofTest do
         "example : rightValue (#{value}) #{amount} = (#{Bitwise.bsr(value, amount)}) := by decide\n"
       end
 
-    assert [%{status: :ok}] =
-             verify(
-               "set_option exponentiation.threshold 1024\n" <>
-                 pairs <> shifts <> branches <> values <> right_values <> audit()
-             )
+    assert_verified(
+      verify(
+        "set_option exponentiation.threshold 1024\n" <>
+          pairs <> shifts <> branches <> values <> right_values <> audit()
+      )
+    )
   end
 
   defp arithmetic_examples() do
@@ -272,8 +272,12 @@ defmodule ReductionBounds.IntegerSizeProofTest do
         postludes: [Lynx.Lean.from_file!(path), Lynx.Lean.from_file!(analysis_path), proof]
       )
 
-    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
-    Lynx.Commands.verify!(project, Lynx.Translation.assemble(translation, cache: false))
+    ReductionBounds.Verification.verify!(translation)
+  end
+
+  defp assert_verified(reports) do
+    assert Enum.all?(reports, &(&1.status == :ok))
+    assert List.last(reports).module == "Erlang.postlude"
   end
 
   defp audit() do

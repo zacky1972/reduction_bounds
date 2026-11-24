@@ -1,0 +1,2 @@
+{"id":"439-1","target":"{ReductionBounds.Benchmark.Workloads.Program, :reverse_twice, 1}","event":"started"}
+{"id":"439-1","reports":[{"module":"Elixir.ReductionBounds.Benchmark.Workloads.Program","status":"ok","cached":false,"time_ms":492,"theorems":[]},{"module":"Erlang.postlude","status":"ok","cached":false,"time_ms":839,"theorems":[]}],"event":"completed","assembly_ms":1.662,"coordination":{"mode":"bypassed","wall_ms":0.0},"module_wall_ms":1331,"runner_non_module_wall_ms":779.556,"runner_wall_ms":2110.556}

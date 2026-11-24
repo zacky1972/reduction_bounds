@@ -21,7 +21,9 @@
     "assets",
     "mix.exs",
     "priv",
-    "test"
+    "test",
+    "docs/baselines/**/*.json",
+    "docs/baselines/**/*_artifacts/**"
   ],
   "words": [
     "leanprover",

@@ -21,6 +21,7 @@ defmodule ReductionBounds.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
+      mod: {ReductionBounds.Application, []},
       extra_applications: [:logger]
     ]
   end
@@ -28,6 +29,7 @@ defmodule ReductionBounds.MixProject do
   def docs do
     [
       main: "readme",
+      assets: %{"docs/baselines" => "."},
       extras: [
         "README.md",
         "docs/examples.md",
@@ -38,6 +40,25 @@ defmodule ReductionBounds.MixProject do
         "docs/proof.md",
         "docs/roadmap.md",
         "docs/toolchains.md",
+        "docs/benchmarking.md",
+        "docs/shared_proofs.md",
+        "docs/job_budget.md",
+        "docs/job_calibration.md",
+        "docs/test_concurrency.md",
+        "docs/regression_isolation.md",
+        "docs/runner_optimization_review.md",
+        "docs/verification_defaults.md",
+        "docs/issue8_status.md",
+        "docs/baselines/issue8-linux-otp29.md",
+        "docs/baselines/issue8-integer-cache.md",
+        "docs/baselines/issue8-all-proofs.md",
+        "docs/baselines/issue8-job-budget.md",
+        "docs/baselines/issue8-fixture-concurrency.md",
+        "docs/baselines/issue8-remaining-proof-concurrency.md",
+        "docs/baselines/issue8-heavy-regression-isolation.md",
+        "docs/baselines/issue8-conditional-runner-review.md",
+        "docs/baselines/issue8-mac-job-calibration.md",
+        "docs/baselines/issue8-final-validation.md",
         "LICENSE.md"
       ]
     ]
@@ -77,7 +98,12 @@ defmodule ReductionBounds.MixProject do
 
   def cli do
     [
-      preferred_envs: [precommit: :test]
+      preferred_envs: [
+        precommit: :test,
+        "reduction_bounds.bench": :test,
+        "reduction_bounds.calibrate": :test,
+        "reduction_bounds.assess": :test
+      ]
     ]
   end
 

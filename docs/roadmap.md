@@ -53,3 +53,17 @@ see the proof reference for the remaining correspondence obligations.
 These implementation-specific directions do not form part of the current
 VM-independent guarantees. Publishing an open-source prototype does not
 establish its applicability to an arbitrary runtime configuration.
+
+## Verification throughput follow-ups
+
+Shared checked artifacts, preparation coordination and bounded test concurrency
+are implemented. Reusable runner sessions and cold dependency scheduling remain
+conditional follow-ups. The current backend uses one-shot calls and sequential
+dependency-ordered module processing. See the
+[runner optimization review](runner_optimization_review.md) for the measurements,
+supported-API and correctness gates required before changing that backend.
+
+The [Issue 8 status](issue8_status.md) records completed concurrency/cache work
+and the successful reference-Mac calibration. The [retained defaults](verification_defaults.md)
+distinguish the initial Mac profile (4 jobs, 2 Lean threads) from the portable
+fallback; neither is claimed to be universally optimal.

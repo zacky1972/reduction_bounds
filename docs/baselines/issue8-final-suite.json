@@ -1,0 +1,24 @@
+{
+  "command": [
+    "mix",
+    "test",
+    "--seed",
+    "42",
+    "--max-cases",
+    "24"
+  ],
+  "source_revision": "e578bcab90f34f8b31e982d6b69f802dc6fae14a",
+  "source_status": "",
+  "started_at": "2026-11-24T10:33:02.300692+00:00",
+  "environment": {
+    "ERL_FLAGS": "+S 4:4",
+    "LEAN_NUM_THREADS": "2",
+    "REDUCTION_BOUNDS_LEAN_JOBS": "4",
+    "REDUCTION_BOUNDS_PROOF_MODE": "named",
+    "REDUCTION_BOUNDS_PROOF_CACHE": "on",
+    "REDUCTION_BOUNDS_BENCH_EVENTS": null
+  },
+  "cache_state": "existing normal test cache; not a controlled cold/warm benchmark",
+  "exit_status": 0,
+  "wall_seconds": 314.466
+}

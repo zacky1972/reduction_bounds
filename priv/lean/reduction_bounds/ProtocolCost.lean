@@ -133,7 +133,7 @@ def EntryGood (spec : Spec) (groups : List Group) (entry : Entry) : Prop :=
 
 instance (spec : Spec) (groups : List Group) (entry : Entry) : Decidable (EntryGood spec groups entry) := by
   unfold EntryGood
-  split <;> infer_instance
+  cases findRule spec entry.before entry.event.name <;> cases entry.event.owner <;> infer_instance
 
 def CostSpecGood (contract : Contract) (spec : Spec) (entries : List Entry) (groups : List Group) : Prop :=
   (∀ entry ∈ entries, EntryGood spec groups entry) ∧
@@ -256,7 +256,7 @@ theorem creditsCons (spec : Spec) (groups : List Group) (charge : Charges) (owne
   rw [← sumAdd]
   congr 1
   funext group
-  split <;> simp [ReductionBounds.ProtocolConditions.countFrom, tick, Nat.add_mul]
+  split <;> simp [ReductionBounds.ProtocolConditions.countFrom, tick, Nat.add_mul] <;> rfl
 
 theorem traceBound (spec : Spec) (entries : List Entry) (groups : List Group) (charge : Charges)
     (owner before : String) (events : List Event) (states : List String) (observations : List Observation)

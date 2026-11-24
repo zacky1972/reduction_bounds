@@ -1,9 +1,9 @@
 defmodule ReductionBounds.ContractComparisonTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias ReductionBounds.{ContractComparison, CostContract, ProofInput}
 
-  @moduletag timeout: 120_000
+  @moduletag timeout: 300_000
 
   test "Lean checks monotone functions and every composed budget" do
     smaller = contract(:smaller, {:add, 1, {:max, :left, :right}})
@@ -182,7 +182,6 @@ defmodule ReductionBounds.ContractComparisonTest do
     {proof, _evidence} = ProofInput.audit_bound(ContractComparison.proof(candidate), candidate)
     {:ok, postludes} = ProofInput.contract_postludes(proof)
     translation = Lynx.Translation.new(postludes: postludes)
-    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
-    Lynx.Commands.verify!(project, Lynx.Translation.assemble(translation, cache: false))
+    ReductionBounds.Verification.verify!(translation)
   end
 end

@@ -18,15 +18,9 @@ defmodule ReductionBounds.ProofInput do
 
   @spec assemble(translation()) :: [map()]
   def assemble(translation) do
-    translation
-    |> Lynx.Translation.assemble(cache: false)
-    |> Enum.map(fn
-      %{"module" => "Erlang.postlude"} = file ->
-        Map.update!(file, "imports", &Enum.uniq(["Erlang.erlang", "Erlang.maps" | &1]))
-
-      file ->
-        file
-    end)
+    ReductionBounds.Verification.assemble(translation,
+      postlude_imports: ["Erlang.erlang", "Erlang.maps"]
+    )
   end
 
   @spec postludes(Lynx.Lean.t()) ::
@@ -126,6 +120,15 @@ defmodule ReductionBounds.ProofInput do
       "CostContract.lean",
       "BoundTransfer.lean"
     ])
+  end
+
+  @spec generated_postludes(Lynx.Lean.t()) :: {:ok, [Lynx.Lean.t()]} | {:error, read_error()}
+  def generated_postludes(proof) do
+    {:ok,
+     ReductionBounds.ProofModules.load(ReductionBounds.ProofModules.generated_roots(proof)) ++
+       [proof]}
+  rescue
+    error in File.Error -> {:error, {:read_lean, error.path, error.reason}}
   end
 
   defp packaged_postludes(proof, sources) do

@@ -1,5 +1,5 @@
 defmodule ReductionBounds.ExecutionComparisonTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias ReductionBounds.{ContractComparison, CostContract, ProofInput}
 
@@ -193,7 +193,6 @@ defmodule ReductionBounds.ExecutionComparisonTest do
     {proof, _evidence} = ProofInput.audit_bound(proof, candidate)
     {:ok, postludes} = ProofInput.contract_postludes(proof)
     translation = Lynx.Translation.new(postludes: postludes)
-    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
-    Lynx.Commands.verify!(project, Lynx.Translation.assemble(translation, cache: false))
+    ReductionBounds.Verification.verify!(translation)
   end
 end

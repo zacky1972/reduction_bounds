@@ -1,5 +1,5 @@
-defmodule ReductionBounds.ProtocolCostProofTest do
-  use ExUnit.Case, async: false
+defmodule ReductionBounds.ProtocolCostProofSupport do
+  import ExUnit.Assertions
 
   alias ReductionBounds.{
     IntegerSize,
@@ -8,34 +8,101 @@ defmodule ReductionBounds.ProtocolCostProofTest do
     Protocol,
     ProtocolConditions,
     ProtocolCost,
-    ProtocolCostProof,
     ProtocolSize
   }
 
-  @moduletag :protocol_cost
-
-  test "Lean proves universal finite trace and prefix budgets including suspended and empty runs" do
-    for names <- [
-          [],
-          [:prepare, :submit_suspended],
-          [
-            :prepare,
-            :submit_rejected,
-            :retry,
-            :submit_accepted,
-            :inspect_message,
-            :response_arrived,
-            :receive_response,
-            :decode
-          ]
-        ] do
-      {profile, events, observations} = input(names)
-      assert {:ok, result, proof} = ProtocolCostProof.build(profile, events, observations)
-      assert result.upper_bounds.caller.cost_unit == :symbolic_work
-      assert result.unmodeled_participants |> Enum.sort() == [:external, :port]
-      assert_ok(proof)
-    end
+  def scenarios do
+    [
+      empty: [],
+      suspended: [:prepare, :submit_suspended],
+      retry_and_response: [
+        :prepare,
+        :submit_rejected,
+        :retry,
+        :submit_accepted,
+        :inspect_message,
+        :response_arrived,
+        :receive_response,
+        :decode
+      ]
+    ]
   end
+
+  def input(names) do
+    {:ok, conditions} =
+      PortProtocol.conditions(
+        data_bounds:
+          Map.new([:request, :response, :message], &{&1, %ProtocolSize{bytes: 8, structure: 16}}),
+        integer_bounds: %{accumulator: %IntegerSize{magnitude_bits: 131}},
+        integer_events: %{prepare: [:accumulator]},
+        count_bounds: %{
+          total_events: 20,
+          submission_attempts: 3,
+          submission_events: 5,
+          resumptions: 3,
+          retries: 2,
+          receive_inspections: 5
+        }
+      )
+
+    rules =
+      for {context = {_, event}, rule} <- conditions.rules,
+          elem(conditions.contract.events[event], 0) != nil,
+          into: %{} do
+        expr =
+          Enum.reduce(rule.data, {:charge, :base}, fn slot, expr ->
+            {:add, expr, {:mul, {:data, slot, :bytes}, {:data, slot, :structure}}}
+          end)
+
+        expr =
+          if :accumulator in rule.integers,
+            do: {:max, expr, {:integer, :accumulator, :magnitude_bits}},
+            else: expr
+
+        {context, %{counter: List.first(rule.counts) || :total_events, cost: expr}}
+      end
+
+    {:ok, profile} = ProtocolCost.new(conditions, rules)
+
+    events =
+      Enum.map(names, fn name ->
+        {:ok, event} = Protocol.event(conditions.contract, name)
+        event
+      end)
+
+    {:ok, observation} =
+      ProtocolConditions.observe(%{request: [], response: [], message: []}, %{
+        accumulator: Integer.pow(2, 130)
+      })
+
+    observations = events |> Enum.with_index() |> Map.new(fn {_, i} -> {i, observation} end)
+    {profile, events, observations}
+  end
+
+  def assert_ok(proof) do
+    reports = reports(proof)
+    assert reports != []
+    assert Enum.all?(reports, &(&1.status == :ok)), inspect(reports, limit: :infinity)
+  end
+
+  def reports(proof) do
+    {:ok, postludes} = ProofInput.protocol_cost_postludes(proof)
+    translation = Lynx.Translation.new(postludes: postludes)
+
+    ReductionBounds.Verification.verify!(translation,
+      postlude_imports: ["Erlang.erlang", "Erlang.maps"]
+    )
+  end
+end
+
+defmodule ReductionBounds.ProtocolCostProofTest do
+  use ExUnit.Case, async: true
+
+  alias ReductionBounds.{Protocol, ProtocolConditions, ProtocolCost, ProtocolCostProof}
+  import ReductionBounds.ProtocolCostProofSupport
+
+  @moduletag :protocol_cost
+  @moduletag timeout: 300_000
 
   test "Lean keeps two participants and distinct units separate" do
     {:ok, contract} =
@@ -92,68 +159,34 @@ defmodule ReductionBounds.ProtocolCostProofTest do
       assert Enum.any?(reports(%{proof | source: changed}), &(&1.status == :error))
     end
   end
+end
 
-  defp input(names) do
-    {:ok, conditions} =
-      PortProtocol.conditions(
-        data_bounds:
-          Map.new([:request, :response, :message], &{&1, %ProtocolSize{bytes: 8, structure: 16}}),
-        integer_bounds: %{accumulator: %IntegerSize{magnitude_bits: 131}},
-        integer_events: %{prepare: [:accumulator]},
-        count_bounds: %{
-          total_events: 20,
-          submission_attempts: 3,
-          submission_events: 5,
-          resumptions: 3,
-          retries: 2,
-          receive_inspections: 5
-        }
+defmodule ReductionBounds.ProtocolCostProofScenarioTest do
+  use ExUnit.Case,
+    async: true,
+    parameterize:
+      for(
+        {scenario, _names} <- ReductionBounds.ProtocolCostProofSupport.scenarios(),
+        do: %{scenario: scenario}
       )
 
-    rules =
-      for {context = {_, event}, rule} <- conditions.rules,
-          elem(conditions.contract.events[event], 0) != nil,
-          into: %{} do
-        expr =
-          Enum.reduce(rule.data, {:charge, :base}, fn slot, expr ->
-            {:add, expr, {:mul, {:data, slot, :bytes}, {:data, slot, :structure}}}
-          end)
+  alias ReductionBounds.ProtocolCostProof
+  import ReductionBounds.ProtocolCostProofSupport
 
-        expr =
-          if :accumulator in rule.integers,
-            do: {:max, expr, {:integer, :accumulator, :magnitude_bits}},
-            else: expr
+  @moduletag :protocol_cost
+  @moduletag timeout: 300_000
 
-        {context, %{counter: List.first(rule.counts) || :total_events, cost: expr}}
-      end
-
-    {:ok, profile} = ProtocolCost.new(conditions, rules)
-
-    events =
-      Enum.map(names, fn name ->
-        {:ok, event} = Protocol.event(conditions.contract, name)
-        event
-      end)
-
-    {:ok, observation} =
-      ProtocolConditions.observe(%{request: [], response: [], message: []}, %{
-        accumulator: Integer.pow(2, 130)
-      })
-
-    observations = events |> Enum.with_index() |> Map.new(fn {_, i} -> {i, observation} end)
-    {profile, events, observations}
+  setup context do
+    ReductionBounds.TestFixtures.label_scenario(context)
   end
 
-  defp assert_ok(proof) do
-    reports = reports(proof)
-    assert reports != []
-    assert Enum.all?(reports, &(&1.status == :ok)), inspect(reports, limit: :infinity)
-  end
-
-  defp reports(proof) do
-    {:ok, postludes} = ProofInput.protocol_cost_postludes(proof)
-    translation = Lynx.Translation.new(postludes: postludes)
-    project = Path.join(Mix.Project.deps_paths()[:lynx], "Lean")
-    Lynx.Commands.verify!(project, ProofInput.assemble(translation))
+  test "Lean proves universal finite trace and prefix budgets including suspended and empty runs",
+       %{scenario: scenario} do
+    names = Keyword.fetch!(scenarios(), scenario)
+    {profile, events, observations} = input(names)
+    assert {:ok, result, proof} = ProtocolCostProof.build(profile, events, observations)
+    assert result.upper_bounds.caller.cost_unit == :symbolic_work
+    assert result.unmodeled_participants |> Enum.sort() == [:external, :port]
+    assert_ok(proof)
   end
 end

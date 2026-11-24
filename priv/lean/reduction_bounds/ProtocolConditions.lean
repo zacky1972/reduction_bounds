@@ -61,7 +61,7 @@ def DataAt (spec : Spec) (observation : Observation) (name : String) : Prop :=
 instance (spec : Spec) (observation : Observation) (name : String) :
     Decidable (DataAt spec observation name) := by
   unfold DataAt
-  split <;> infer_instance
+  cases spec.dataBounds.lookup name <;> cases observation.data.lookup name <;> infer_instance
 
 def IntegerAt (spec : Spec) (observation : Observation) (name : String) : Prop :=
   match spec.integerBounds.lookup name, observation.integers.lookup name with
@@ -71,7 +71,7 @@ def IntegerAt (spec : Spec) (observation : Observation) (name : String) : Prop :
 instance (spec : Spec) (observation : Observation) (name : String) :
     Decidable (IntegerAt spec observation name) := by
   unfold IntegerAt
-  split <;> infer_instance
+  cases spec.integerBounds.lookup name <;> cases observation.integers.lookup name <;> infer_instance
 
 def RowHolds (spec : Spec) (rule : Rule) (observation : Observation) : Prop :=
   observation.wellFormed = true ∧
