@@ -2449,3 +2449,50 @@ cost, progress, source-code, runtime-reduction or wall-clock claims. Timeout end
 the modeled client trace without asserting cancellation of server work or removal
 of late replies. The [RPC guide](examples/rpc.md) gives construction and low-level
 verification commands, supported outcomes and the remaining milestones.
+
+## RPC mailbox, matching and size/count conditions
+
+The next layer adds independent `RpcTerm`, `MailboxMatch`, `Mailbox` and
+`RpcConditions` models. Port iodata size definitions and Port semantics are
+unchanged. Supported terms and patterns have a finite explicit grammar. The
+whole-message measure records structural nodes, binary bytes and maximum integer
+magnitude bits, including unrelated messages. Encoding, concrete representation
+and actual PID/reference association remain unverified.
+
+The Lean mailbox step function implements ordered pattern and guard attempts,
+retained misses, arrival at the tail, a search cursor, selection of the first
+eligible message and timeout after an exhausted unsuccessful search. Restarting
+a receive resets the cursor; waiting in the same receive does not. A logical
+rejected-prefix condition ensures that selection cannot skip an earlier eligible
+message. This certificate validation is not counted as client scanning work.
+
+`executeSound` connects executable replay to the inductive `Runs` relation.
+`checkSound` additionally establishes well-formed matching declarations, initial
+message conditions and the total counter limits. `rejectedPrefixSound` states
+that earlier messages do not match any eligible clause, including guards;
+`removalRetainsOrder` identifies the retained prefix and suffix. Every arriving
+message must satisfy the separate mailbox message cap. Exact inspections,
+pattern attempts and guard attempts are computed from execution, not supplied
+as unchecked annotations.
+
+`RpcMailbox.runSound` checks the connected timeline against canonical correlated
+reply and process-monitor clauses. Request size is checked independently from
+selected-response and mailbox-message size. The proof builder connects the
+computed RPC events and final state to the existing RPC trace certificate, and
+checks that its mailbox actions equal those independently replayed by the generic
+mailbox checker. It rejects free protocol receive/timeout annotations, broadened
+matching clauses, false counters, wrong response tokens and altered queue output.
+Late arrivals after return are retained without advancing the terminal RPC.
+Generic mailbox runs can model repeated receives and their cumulative inspections;
+the connected RPC protocol remains single-attempt and does not establish retries.
+
+New shared theories import through the existing verification boundary. Term theory
+changes invalidate dependent mailbox and RPC artifacts; named and embedded paths
+retain the same sources and transitive axiom audits. Building a candidate keeps
+its Lean status unchecked. Only successful reports for its exact proof input
+validate the supplied-model claims. Future size/arrival/count conditions are
+assumptions, not facts inferred from one successful run. Cost formulas, universal
+cost safety, server mailbox behavior, reply provenance, progress and source/runtime
+correspondence remain subsequent work. See the
+[mailbox guide](examples/rpc_mailbox.md) for the grammar, supported guards,
+conditions, counters, timeline and reproduction commands.

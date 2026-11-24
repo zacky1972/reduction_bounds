@@ -25,16 +25,20 @@ The original evaluation targets now have model-level analyses:
   trusted processing, and unverified runtime claims.
 - An initial RPC model checks supplied single-attempt protocol traces and
   request/monitor correlation on the shared communication foundation. It does
-  not yet analyze mailbox behavior or derive RPC cost/completion bounds.
+  not itself analyze mailbox behavior or derive RPC cost/completion bounds.
+- A separate RPC mailbox layer replays ordinary-message matching, queue
+  retention, cursor behavior, timeout eligibility and explicit size/count
+  conditions. It remains a supplied model, with cost/progress/source proofs
+  left to later milestones.
 
 These descriptions refer to the checked models and supported fragments;
 see the proof reference for the remaining correspondence obligations.
 
 ## Further model development
 
-- Add RPC mailbox and selective-receive semantics, size/count conditions,
-  participant cost bounds, conditional completion and a supported source
-  connection. The [initial model](examples/rpc.md) is the first milestone.
+- Build participant-specific RPC cost safety, conditional completion and a
+  supported source connection on the [mailbox conditions](examples/rpc_mailbox.md).
+  Repeated RPC attempts require explicit retry and duplicate-execution contracts.
 
 - Extend the supported program fragments and reusable contracts while
   continuing to report unsupported operations and unresolved obligations.

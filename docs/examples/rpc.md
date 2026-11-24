@@ -6,6 +6,10 @@ PID and has at most one outstanding request. Abstract natural-number tokens
 identify the request and, optionally, a process monitor. They are not actual
 Erlang references, and do not establish freshness or compiler receive optimization.
 
+The [mailbox and conditions layer](rpc_mailbox.md) now connects this coarse
+protocol to checked selective-receive models. The initial API below retains
+its narrower scope; its annotations alone do not establish mailbox behavior.
+
 ## Construct a trace
 
 ```elixir

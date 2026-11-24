@@ -45,6 +45,24 @@ defmodule ReductionBounds.ProofInput do
     packaged_postludes(proof, ["Protocol.lean", "RpcProtocol.lean"])
   end
 
+  @spec mailbox_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def mailbox_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, ["RpcTerm.lean", "Mailbox.lean"])
+  end
+
+  @spec rpc_mailbox_postludes(Lynx.Lean.t()) ::
+          {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
+  def rpc_mailbox_postludes(%Lynx.Lean{} = proof) do
+    packaged_postludes(proof, [
+      "Protocol.lean",
+      "RpcProtocol.lean",
+      "RpcTerm.lean",
+      "Mailbox.lean",
+      "RpcMailbox.lean"
+    ])
+  end
+
   @spec protocol_condition_postludes(Lynx.Lean.t()) ::
           {:ok, [Lynx.Lean.t()]} | {:error, read_error() | {:priv_dir, :bad_name}}
   def protocol_condition_postludes(%Lynx.Lean{} = proof) do
@@ -267,6 +285,24 @@ defmodule ReductionBounds.ProofInput do
   end
 
   def scope_evidence(_candidate), do: %{}
+
+  defp case_study_theorems(%{source: :rpc_mailbox}) do
+    case_study_theorems(%{source: :rpc_trace}) ++
+      case_study_theorems(%{source: :mailbox}) ++
+      ~w(ReductionBounds.RpcMailbox.walkSound ReductionBounds.RpcMailbox.runSound
+        ReductionBounds.RpcMailbox.suppliedTimelineCertificate
+        ReductionBounds.RpcMailbox.suppliedTimelineSound
+        ReductionBounds.RpcMailbox.suppliedProtocolProjection
+        ReductionBounds.RpcMailbox.suppliedFinalAgreement
+        ReductionBounds.RpcMailbox.suppliedMailboxActions)
+  end
+
+  defp case_study_theorems(%{source: :mailbox}) do
+    ~w(ReductionBounds.Mailbox.executeSound ReductionBounds.Mailbox.checkSound
+      ReductionBounds.Mailbox.rejectedPrefixSound ReductionBounds.Mailbox.removalRetainsOrder
+      ReductionBounds.Mailbox.suppliedMailboxCertificate ReductionBounds.Mailbox.suppliedMailboxRun
+      ReductionBounds.Mailbox.suppliedMailboxLimits)
+  end
 
   defp case_study_theorems(%{source: :rpc_trace}) do
     case_study_theorems(%{source: :protocol_trace}) ++

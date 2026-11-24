@@ -1,4 +1,5 @@
 ExUnit.start()
+Code.require_file("support/mailbox_support.ex", __DIR__)
 
 defmodule ReductionBounds.TestFixtures do
   [{module, beam}] = Code.compile_file(Path.expand("fixtures/bounded_counter.ex", __DIR__))
