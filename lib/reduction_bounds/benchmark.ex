@@ -4,7 +4,7 @@ defmodule ReductionBounds.Benchmark do
 
   alias Mix.Dep.Lock
 
-  alias ReductionBounds.Benchmark.{Command, Opportunities}
+  alias ReductionBounds.Benchmark.{Command, Opportunities, Workspace}
 
   @spec run(keyword()) :: map()
   def run(opts) do
@@ -40,6 +40,8 @@ defmodule ReductionBounds.Benchmark do
 
       if preparation.exit_status != 0,
         do: Mix.raise("benchmark preparation failed; see #{preparation.log}")
+
+      Workspace.copy_priv!(build)
 
       warmup =
         Command.run(
