@@ -5,7 +5,7 @@
 `n` recursive steps before reaching the empty list, or at most `n - 1`
 before stopping on a nonempty list. For positive `n`, the refined bound
 takes the maximum of these two path bounds when both are possible. At
-`n = 0`, it uses only the empty-list cost.
+`$n=0$`, it uses only the empty-list cost.
 
 The proof is parametric in nonnegative symbolic charges. Applying it to
 actual BEAM reductions requires a separate, version-specific argument.

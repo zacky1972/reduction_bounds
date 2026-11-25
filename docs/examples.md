@@ -1,7 +1,9 @@
 # Examples and verification cases
 
-Start with one of these guides after completing the installation in the
-[README](../README.md#installation). Interactive examples run in
+Start with [Getting Started](getting_started.md), then use the
+[Case Studies](case_studies.md) for complete file and IEx examples across the
+public analysis workflows. Use [Test Performance Calibration](test_performance.md)
+to choose test-run job/thread settings. The guides below provide deeper detail. Interactive examples run in
 `iex -S mix`; test commands run from the repository root.
 
 | Guide | Purpose |

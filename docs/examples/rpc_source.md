@@ -1,3 +1,4 @@
+<!-- cspell:words mathrm -->
 # A restricted RPC source connection
 
 This milestone connects a **helper-contracted client fragment** to the
@@ -142,9 +143,12 @@ blocked time and primitive runtime implementation work. This is an abstract
 counter, not ERTS reductions. With a compatible natural `source_node` charge in
 `:client_work` and a **disjoint accounting contract**, the client formula is:
 
-```text
-source_node_bound * source_node_charge + client_model_bound
+```math
+B_{\mathrm{source}}=L c_{\mathrm{source}}+B_{\mathrm{client}}.
 ```
+
+Here `$L$` is `source_node_bound`, `$c_{\mathrm{source}}$` is
+`source_node_charge`, and `$B_{\mathrm{client}}$` is `client_model_bound`.
 
 Model operation envelopes cover the helper/primitive work and must exclude the
 same local overhead counted by the source nodes. The source-node charge must

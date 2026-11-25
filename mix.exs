@@ -29,9 +29,56 @@ defmodule ReductionBounds.MixProject do
   def docs do
     [
       main: "readme",
+      before_closing_head_tag: %{
+        html: ~S"""
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.19.1/dist/katex.min.css" integrity="sha384-WwGtaC6ywCHxA5cstpj/3+xIZvTez8dq2IcBQaXRkenHZ7FVVq1ZROtURwfbtTlG" crossorigin="anonymous">
+        <style>.katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.25em 0; }</style>
+        """
+      },
+      before_closing_body_tag: %{
+        html: ~S"""
+        <script>
+          window.renderDocumentationMath = function () {
+            if (typeof window.renderMathInElement !== "function") return;
+            const root = document.querySelector("main") || document.body;
+            root.querySelectorAll("pre > code.math").forEach(code => {
+              const display = document.createElement("div");
+              window.katex.render(code.textContent, display, {
+                displayMode: true, throwOnError: false
+              });
+              code.parentElement.replaceWith(display);
+            });
+            root.querySelectorAll("code").forEach(code => {
+              if (code.closest("pre")) return;
+              const text = code.textContent;
+              if (text.startsWith("$") && text.endsWith("$") && text.length > 2) {
+                const inline = document.createElement("span");
+                window.katex.render(text.slice(1, -1), inline, {throwOnError: false});
+                code.replaceWith(inline);
+              }
+            });
+            window.renderMathInElement(root, {
+              delimiters: [
+                {left: "$$", right: "$$", display: true},
+                {left: "$", right: "$", display: false}
+              ],
+              ignoredClasses: ["katex"],
+              throwOnError: false
+            });
+          };
+          window.addEventListener("exdoc:loaded", window.renderDocumentationMath);
+          document.addEventListener("DOMContentLoaded", window.renderDocumentationMath);
+        </script>
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.19.1/dist/katex.min.js" integrity="sha384-a1WQdjRj162i159OYq041X6I4K8NenkrI09LlPmiHg0YOb7CR+wJOraXwK9abpnE" crossorigin="anonymous"></script>
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.19.1/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous" onload="window.renderDocumentationMath()"></script>
+        """
+      },
       assets: %{"docs/baselines" => "."},
       extras: [
         "README.md",
+        "docs/getting_started.md",
+        "docs/case_studies.md",
+        "docs/test_performance.md",
         "docs/examples.md",
         "docs/examples/verification.md",
         "docs/examples/cost_contracts.md",

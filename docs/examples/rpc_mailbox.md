@@ -16,7 +16,7 @@ identities must be supplied explicitly and their runtime association is unverifi
 Three independent dimensions measure each whole message: tree nodes, total binary
 bytes and maximum magnitude bit length of embedded integers. Atoms and identities
 are opaque symbols; their labels are not an encoded byte size. Zero has zero
-magnitude bits; negative `-2^200` needs 201. These are mathematical measures, not
+magnitude bits; negative `$-2^{200}$` needs 201. These are mathematical measures, not
 ERTS word counts, copy costs, binary sharing rules or an encoding contract. Port
 `ProtocolSize` iodata measures are unchanged.
 

@@ -1,11 +1,12 @@
+<!-- cspell:words mathbin mathrm operatorname -->
 # Proofs of symbolic cost bounds
 
 ## Integer value ranges and magnitude sizes
 
 `IntegerSize` describes a set of mathematical integers. Its three
 components constrain the same value: a finite lower endpoint requires
-`lower <= value`, a finite upper endpoint requires `value <= upper`,
-and a known magnitude bound requires `abs(value) < 2^bits`.
+`$\mathrm{lower}\leq\mathrm{value}$`, a finite upper endpoint requires `$\mathrm{value}\leq\mathrm{upper}$`,
+and a known magnitude bound requires `$|\mathrm{value}|<2^{\mathrm{bits}}$`.
 The endpoints are inclusive and the magnitude limit is strict.
 An unbounded endpoint or unknown magnitude adds no constraint.
 All components are conjoined. Contradictory constraints denote the
@@ -16,7 +17,7 @@ and rejects malformed representations and non-integer inputs.
 In `priv/lean/reduction_bounds/IntegerSize.lean`, `Bounds` represents
 missing components with `Option.none`, and `Holds` defines the
 represented set over Lean's `Int`. The magnitude predicate uses
-`value.natAbs < 2 ^ width`, without a sign bit or a machine-word limit.
+`$|\mathrm{value}|<2^{\mathrm{width}}$`, without a sign bit or a machine-word limit.
 `containsCorrect` proves that the Lean Boolean membership test equals
 this predicate. The component projection theorems recover each stated
 constraint. `unconstrained` admits every integer, `zeroMagnitude`
@@ -32,7 +33,7 @@ mix test test/reduction_bounds/integer_size_test.exs test/reduction_bounds/integ
 The proof test loads the packaged Lean definitions through Lynx,
 checks the generic theorems for unexpected axioms, compares the Lean
 and Elixir predicates on signed boundary cases and values around
-`2^200`, and confirms that Lean rejects an invalid membership claim.
+`$2^{200}$`, and confirms that Lean rejects an invalid membership claim.
 These finite comparisons check the serialization and examples; they
 are not a universal proof of the Elixir implementation. The generic
 theorems apply to the Lean definitions. Basic arithmetic size propagation
@@ -56,7 +57,7 @@ Membership in `:unreachable` is false for every integer.
 
 The emptiness check constructs a candidate from the interval endpoints:
 use zero when neither endpoint is known, clamp zero toward a finite
-endpoint when only one is known, and use `max(lower, min(0, upper))`
+endpoint when only one is known, and use `$\max(\mathrm{lower},\min(0,\mathrm{upper}))$`
 when both are known. If any integer satisfies the range and magnitude
 constraints, this candidate satisfies them too. It is therefore enough
 to test this single candidate, even for one-sided ranges or magnitudes
@@ -92,16 +93,16 @@ satisfying the supplied descriptions, the result description contains
 the corresponding arithmetic result. These are domain operations;
 they are not yet applied automatically to extracted Core Erlang.
 
-For a constant `z`, `from_integer(z)` has the exact interval `[z, z]`
-and the smallest magnitude width with `abs(z) < 2^width`. Zero has
-width zero. Let `[L1, U1]` and `[L2, U2]` denote finite operand
+For a constant `z`, `from_integer(z)` has the exact interval `$[z,z]$`
+and the smallest magnitude width with `$|z|<2^{\mathrm{width}}$`. Zero has
+width zero. Let `$[L_1,U_1]$` and `$[L_2,U_2]$` denote finite operand
 intervals, and let `w1` and `w2` be known magnitude bounds.
 
 | Operation | Interval rule | Magnitude bound |
 | --- | --- | --- |
-| Addition | `[L1 + L2, U1 + U2]` | `max(w1, w2) + 1` |
-| Subtraction | `[L1 - U2, U1 - L2]` | `max(w1, w2) + 1` |
-| Multiplication | Minimum and maximum of `L1*L2`, `L1*U2`, `U1*L2`, `U1*U2` | `w1 + w2` |
+| Addition | `$[L_1+L_2,U_1+U_2]$` | `$\max(w_1,w_2)+1$` |
+| Subtraction | `$[L_1-U_2,U_1-L_2]$` | `$\max(w_1,w_2)+1$` |
+| Multiplication | Minimum and maximum of `$L_1L_2$`, `$L_1U_2$`, `$U_1L_2$`, `$U_1U_2$` | `$w_1+w_2$` |
 
 For addition and subtraction, an endpoint is unknown if a required
 operand endpoint is unknown. The magnitude result is unknown if either
@@ -119,12 +120,12 @@ error, even if the other operand is unreachable. Result normalization
 preserves the represented set.
 
 The domain does not track correlations between operands. Subtracting
-`[1, 3]` from the same description therefore gives `[-2, 2]` rather
+`[1, 3]` from the same description therefore gives `$[-2,2]$` rather
 than inferring zero. Constant cancellation can still produce the exact
-interval `[0, 0]`, while the propagated magnitude bound is deliberately
+interval `$[0,0]$`, while the propagated magnitude bound is deliberately
 coarse. The analysis keeps descriptions of intermediate values separate:
 a zero final result does not reduce the bound on an earlier product.
-For example, squaring `2^200` has exact value `2^400` and a propagated
+For example, squaring `$2^{200}$` has exact value `$2^{400}$` and a propagated
 magnitude bound of 402, even if subtracting that product from itself
 later produces zero.
 
@@ -158,26 +159,26 @@ small-integer boundary, or ERTS reduction formula is fixed here.
 ### Constant left shifts and low-bit masks
 
 `shift_left/2` accepts a size description and a fixed nonnegative integer
-shift amount `k`. Each finite endpoint is multiplied by `2^k`; missing
-endpoints remain unbounded. A known magnitude bound `w` becomes `w + k`,
+shift amount `k`. Each finite endpoint is multiplied by `$2^k$`; missing
+endpoints remain unbounded. A known magnitude bound `w` becomes `$w+k$`,
 while an unknown bound stays unknown. Positive scaling preserves the
 order of negative as well as positive endpoints. A known zero input
-remains exact zero. The modeled value is `shiftValue z k = z <<< k`.
-`shiftValueMultiply` relates it to `z * 2^k` using Lean's signed shift
+remains exact zero. The modeled value is `$\operatorname{shiftValue}(z,k)=z\,2^k$`.
+`shiftValueMultiply` relates it to `$z\,2^k$` using Lean's signed shift
 semantics. `lowerShiftSound`, `upperShiftSound`, and `shiftBitsSound`
 prove the component rules, and `boundsShiftLeftSound` combines them.
 
 `mask/2` retains the low `k` bits, for any signed integer input. Its
-mathematical value is the nonnegative remainder `maskValue z k = z % 2^k`
+mathematical value is the nonnegative remainder `$\operatorname{maskValue}(z,k)=z\bmod 2^k$`
 with Euclidean division. This defines a low-bit mask without choosing
-a machine word size. In particular, masking `-1` gives `2^k - 1`;
+a machine word size. In particular, masking `-1` gives `$2^k-1$`;
 it does not retain the original magnitude bound of one bit. The general
-result interval is `[0, 2^k - 1]` and its magnitude bound is `k`.
+result interval is `$[0,2^k-1]$` and its magnitude bound is `k`.
 A known zero input, or a zero mask width, gives exact zero. This first
 rule deliberately drops other range information from the input.
 
 `maskRange` proves the nonnegative range, `maskResidue` proves that the
-remainder preserves the residue modulo `2^k`, and `maskUnique` proves
+remainder preserves the residue modulo `$2^k$`, and `maskUnique` proves
 uniqueness under those two conditions. `maskMagnitudeBound` gives the
 width bound. `maskInRange` proves that a value already in range is
 unchanged, `maskNegativeOne` handles `-1` for every width, and
@@ -196,7 +197,7 @@ sound operation on `Bounds` to the domain containing unreachable states.
 The unit tests compare actual `Bitwise.bsl/2` and `Bitwise.band/2` results
 with the mathematical value operations and check that the propagated
 bounds contain them. Cases include negative values, widths zero and 64,
-values around `2^200`, partial ranges, invalid widths, and empty inputs.
+values around `$2^{200}$`, partial ranges, invalid widths, and empty inputs.
 The proof test also compares those actual values and the Elixir transfer
 results with the Lean definitions, audits the new theorems, and checks
 that Lean rejects dropping shifted bits or retaining a negative masked
@@ -206,7 +207,7 @@ The universal size theorems cover the stated Lean value models and make
 no cost claim.
 
 Size descriptions are immutable and remain separate at each operation.
-For example, shifting `2^100` by 100 produces `2^200` with width bound
+For example, shifting `$2^{100}$` by 100 produces `$2^{200}$` with width bound
 201. Retaining its low 64 bits then produces a value bounded by 64 bits,
 which is zero for this concrete input. The later mask does not reduce
 the recorded bound for the earlier shifted intermediate.
@@ -219,18 +220,18 @@ reduction charges.
 
 `bit_xor/2` propagates a conservative magnitude bound for signed XOR.
 With operand bounds `a` and `b`, the result has magnitude bound
-`max(a, b) + 1`. Its interval endpoints are unbounded. If either
+`$\max(a,b)+1$`. Its interval endpoints are unbounded. If either
 magnitude is unknown, the result magnitude is unknown. The extra bit
-is necessary for this uniform signed rule: `3 XOR -1 = -4`.
+is necessary for this uniform signed rule: `$3\mathbin{\mathrm{XOR}}(-1)=-4$`.
 `xorValue` defines the operation using natural-number XOR and the
 signed complement representation; `xorMagnitude`, `boundsXorSound`,
 and `xorSound` establish the size bound for every pair of admitted
 mathematical integers.
 
 `shift_right/2` accepts a fixed nonnegative amount `k`. It divides
-finite endpoints by `2^k` with floor rounding. The result retains the
+finite endpoints by `$2^k$` with floor rounding. The result retains the
 original magnitude bound, a deliberate conservative choice that also
-covers negative values such as `-1 >> k = -1`. `rightValue` uses
+covers negative values such as `$\lfloor-1/2^k\rfloor=-1$`. `rightValue` uses
 Lean's signed right shift. `rightMagnitude`, `divideMonotone`,
 `boundsShiftRightSound`, and `shiftRightSound` justify the rule.
 Both operations validate and normalize operands and preserve
@@ -243,9 +244,9 @@ checks are not a proof of an Erlang built-in implementation.
 `assume(size, comparison, constant, truth)` refines an integer
 under a comparison with a constant `k`. The supported comparisons
 are `:lt`, `:le`, `:eq`, `:ne`, `:ge`, and `:gt`. For example,
-the true branch of `x < k` sets an upper bound of `k - 1`, and
+the true branch of `$x<k$` sets an upper bound of `$k-1$`, and
 the false branch sets a lower bound of `k`. The true branch of
-`x == k` intersects both endpoints with `k`. Negated equality
+`$x=k$` intersects both endpoints with `k`. Negated equality
 cannot in general be represented as one interval, so it leaves
 the description unchanged. `:ne`, `:ge`, and `:gt` use the
 corresponding complementary rules. Normalization turns contradictory
@@ -286,7 +287,7 @@ alias ReductionBounds.IntegerSize
 
 For `update(x)` defined as `y = x * 3` followed by
 `if y < 0, do: y - 1, else: y + 1`, the returned result has
-range `[-7, 13]` and magnitude bound 6. Omitted input descriptions
+range `$[-7,13]$` and magnitude bound 6. Omitted input descriptions
 are unknown; supplied descriptions must occur in argument order.
 `beam_binaries` supports modules compiled only in memory, as for
 other inference APIs. If an input is unreachable, the entire input
@@ -630,7 +631,7 @@ are included in the existing axiom audit.
 an integer bound from its recorded source operation-cost contract B to a
 smaller contract A. Both contracts need concrete declarative functions and
 the same cost unit, modeled semantics, event profile, parameter meanings,
-and all-natural parameter domain. The comparison direction is A ≤ B;
+and all-natural parameter domain. The comparison direction is `$A\leq B$`;
 the reused budget is evaluated under B.
 
 The API extracts the target's Core Erlang again from the supplied BEAM or
@@ -661,9 +662,9 @@ with any supplied A execution. Finally, `derivationSound` bounds the B
 execution. The theorem and its target specialization `transferredCostChain`
 exhibit the source execution and prove
 
-```text
-value_A = value_B
-C_A ≤ C_B ≤ budget_B
+```math
+\operatorname{value}_A=\operatorname{value}_B,\qquad
+C_A\leq C_B\leq\mathrm{budget}_B.
 ```
 
 Only the B callee budgets are assumed. In particular, a smaller auxiliary
@@ -876,7 +877,7 @@ use magnitude bounds for their operands. A shift leaf uses the input
 magnitude bound and constant shift amount. A mask leaf uses the input
 magnitude bound and constant mask width. Value evaluation, variable
 lookup, binding, and the local static- and recursive-call charges use parameters
-`[0, 0]`. A comparison charge includes the variable and constant used
+`$[0,0]$`. A comparison charge includes the variable and constant used
 in the branch test; their retrieval is included in that local charge.
 Unary signs are lowered to addition or subtraction from zero, including
 the corresponding zero-literal charge in this conservative cost model.
@@ -884,7 +885,7 @@ the corresponding zero-literal charge in this conservative cost model.
 `Budget` in `IntegerCost.lean` combines leaves by addition for sequential
 work and maximum for alternatives. If an actual operand has magnitude
 `beta(v)` and its inferred bound is `w`, `knownWidth` supplies
-`beta(v) <= w`. `MonotoneCharges` then justifies replacing the actual
+`$\beta(v)\leq w$`. `MonotoneCharges` then justifies replacing the actual
 size by `w` in the charge. The proof reuses the existing `IntegerSize`
 arithmetic, shift, mask, refinement, and join theorems.
 
@@ -942,8 +943,8 @@ preconditions or execution bounds.
 With a finite counter range, this permits a sequence of different
 operand-size bounds. For example, `sum(counter, accumulator)` adds the
 positive counter and calls itself with its predecessor, returning the
-accumulator otherwise. From counter range `[0, 4]` with magnitude bound
-3 and initial accumulator zero, the result interval is `[0, 10]`,
+accumulator otherwise. From counter range `$[0,4]$` with magnitude bound
+3 and initial accumulator zero, the result interval is `$[0,10]$`,
 with a conservative propagated magnitude bound of 7. The budget adds
 size-dependent costs at each expanded level and takes maxima over the
 possible stopping branches. There is no assumption that the initial
@@ -961,8 +962,8 @@ this theorem. `costInvariants` also checks the recorded domain-inclusion
 obligations. Automatically inferred domains and the supplied invariant
 are separately exposed in `conditions`.
 
-The CRC loop fixture uses counter interval `[0, 4]` without a magnitude
-constraint in the invariant, and accumulator interval `[0, 255]` with
+The CRC loop fixture uses counter interval `$[0,4]$` without a magnitude
+constraint in the invariant, and accumulator interval `$[0,255]$` with
 magnitude bound 8. Its initial counter description still supplies a
 magnitude bound for cost inference. Each update shifts and applies XOR
 before masking. The intermediate widths remain in the derivation,
@@ -1040,7 +1041,7 @@ rejected when supplied to a caller.
 The Issue #1 boundary regressions use mathematical magnitude boundaries,
 not a fixed small-integer/bignum representation threshold. For widths
 1, 8, 32, 64, and 200, the domain tests cover both signs immediately
-below, at, and above `2^width`. They check exact constant descriptions,
+below, at, and above `$2^{\mathrm{width}}$`. They check exact constant descriptions,
 the strict magnitude condition, and carry and negative subtraction
 results. The Lean comparison test checks the same signed boundary
 family against `Holds` and `contains`.
@@ -1052,20 +1053,20 @@ They also compare the compiled functions' endpoint results with the
 inferred result descriptions.
 
 `cancel_products/2` squares two independently supplied signed inputs
-and subtracts the products. For inputs `-(2^200 + 1)` and `2^200 + 1`,
+and subtracts the products. For inputs `$-(2^{200}+1)$` and `$2^{200}+1$`,
 the final result is zero. The trace must nevertheless retain both
 products with magnitude bound 402, both multiplication charges with
-operand bounds `[201, 201]`, and the subtraction charge with operand
-bounds `[402, 402]`. This prevents a small final result from hiding
+operand bounds `$[201,201]$`, and the subtraction charge with operand
+bounds `$[402,402]$`. This prevents a small final result from hiding
 large intermediate work. A negative Lean test changes the returned
 budget to charge those multiplications at zero operand width and
 requires rejection.
 
 `crc64_step/1` is a CRC-style expression with a fixed polynomial and
 a 64-bit mask, not a complete CRC implementation. On input interval
-`[-2^64, 2^64]` with magnitude bound 65, shifting left by eight gives
+`$[-2^{64},2^{64}]$` with magnitude bound 65, shifting left by eight gives
 bound 73 and signed XOR gives conservative bound 74. The mask returns
-range `[0, 2^64 - 1]` with magnitude bound 64. The test requires the
+range `$[0,2^{64}-1]$` with magnitude bound 64. The test requires the
 shift, XOR, and mask cost leaves to use their respective intermediate
 operand sizes, including the 74-bit input to the mask. It checks
 compiled results on negative, zero, and positive boundary inputs.
@@ -1101,17 +1102,17 @@ cost rule specific to variance or CRC.
 The variance kernels follow the integer expression in the
 [Mobius change motivating Issue #1](https://github.com/mobius-home/mobius/commit/bf00f21638b12bf9a3a683126dc5a1cf87f58983).
 For a count `n`, sum `s`, and sum of squares `q`, the numerator is
-`n * q - s * s`, and the denominator is `n * (n - 1)`. The numerator
+`$nq-s^2$`, and the denominator is `$n(n-1)$`. The numerator
 takes three integer arguments; the denominator's test requires
-`2 <= n <= 8`. Division, floating-point conversion, clamping, and square
+`$2\leq n\leq8$`. Division, floating-point conversion, clamping, and square
 root are outside these kernels and have no supplied contracts here.
 The fixture does not analyze the complete Mobius module.
 
 The exact-input tests use closely spaced positive and negative samples
-near `1_788_878_897_448`, samples near `2^200`, and identical samples
-near `2^200`. The compiled numerator returns 6 or 0 while both products
-exceed `2^64`. The tests compare it with the independent identity
-`sum((x_i - x_j)^2, i < j)`, check the exact result interval, and retain
+near `1_788_878_897_448`, samples near `$2^{200}$`, and identical samples
+near `$2^{200}$`. The compiled numerator returns 6 or 0 while both products
+exceed `$2^{64}$`. The tests compare it with the independent identity
+`$\sum_{i<j}(x_i-x_j)^2$`, check the exact result interval, and retain
 both product summaries and size-dependent multiplication charges.
 A negative Lean test requires rejection of a zero budget for this work.
 An interval-input test also checks the bound on independently specified
@@ -1128,18 +1129,18 @@ entry, and `b` an input byte. Their arithmetic is:
 
 | Kernel | Integer expression |
 | --- | --- |
-| Normal update | `((u << 8) XOR t) AND (2^64 - 1)` |
-| Reflected update | `((u >> 8) XOR t) AND (2^64 - 1)` |
-| Normal table index | `(((u >> 56) XOR b) AND 255) + 1` |
-| Reflected table index | `((u XOR b) AND 255) + 1` |
+| Normal update | `$((u\ll8)\mathbin{\mathrm{XOR}}t)\mathbin{\mathrm{AND}}(2^{64}-1)$` |
+| Reflected update | `$((u\gg8)\mathbin{\mathrm{XOR}}t)\mathbin{\mathrm{AND}}(2^{64}-1)$` |
+| Normal table index | `$(((u\gg56)\mathbin{\mathrm{XOR}}b)\mathbin{\mathrm{AND}}255)+1$` |
+| Reflected table index | `$((u\mathbin{\mathrm{XOR}}b)\mathbin{\mathrm{AND}}255)+1$` |
 
-The update contracts require both inputs in `[0, 2^64 - 1]`, with
+The update contracts require both inputs in `$[0,2^{64}-1]$`, with
 magnitude bound 64. The normal path records a 72-bit shift bound and
 a conservative 73-bit XOR bound before masking to 64 bits. The reflected
 path retains the conservative 64-bit right-shift bound, then a 65-bit
 XOR bound before masking. The mask's charge uses the intermediate
 width, not the final width. Index inputs require a 64-bit state and
-byte range `[0, 255]`; the resulting one-based index is in `[1, 256]`.
+byte range `$[0,255]$`; the resulting one-based index is in `$[1,256]$`.
 Tests cover all 256 byte values for selected boundary states.
 
 These are arithmetic expressions, not a full CRC implementation. The
@@ -1433,7 +1434,7 @@ that every callee outcome for a natural argument stays within that
 limit. Normal return assumes the callees terminate normally and return
 natural results on those arguments. Lean uses a total relation to
 construct a terminating derivation by induction on the input.
-`targetTerminates` gives a maximum self-call depth of `n + 1`, counting
+`targetTerminates` gives a maximum self-call depth of `$n+1$`, counting
 the initial call, for this construction.
 
 `Eval.pathCost` constructs a derivation for the existing `CostTree`
@@ -1462,7 +1463,7 @@ costs of sequential expressions. A dispatch charge covers the tests
 that led to the selected clause, including rejected earlier clauses.
 
 Lean's `ListCost` relation describes the costs of these three cases.
-`listRulesSound` bounds every derivation by `base + n * step` when
+`listRulesSound` bounds every derivation by `$\mathrm{base}+n\,\mathrm{step}$` when
 `n` bounds the list length, `base` bounds the empty and early-stop
 charges, and `step` bounds the local cost of a recursive clause. The
 proof uses the fact that a recursive clause makes at most one call
@@ -1480,7 +1481,7 @@ cost inequality for the modeled derivations.
 the membership pattern. The function returns false for an empty list,
 returns true on an exact match at the head, and otherwise searches the
 tail with the same key. Its `searchCostBound` theorem bounds the cost
-model by `max(c_empty, c_hit) + n * c_step`, where `c_step` is the
+model by `$\max(c_{\mathrm{empty}},c_{\mathrm{hit}})+nc_{\mathrm{step}}$`, where `c_step` is the
 local charge of a miss before continuing. This entry point checks the
 cost inequality for that model.
 
@@ -1516,7 +1517,7 @@ of searching the tail. In the returned expression, the
 | --- | --- |
 | Empty list | `E` |
 | Head equals the key | `H` |
-| Head differs from the key | `S + cost(tail)` |
+| Head differs from the key | `$S+\operatorname{cost}(\mathrm{tail})$` |
 
 The theorem `searchCostDerivation` proves that the cost computed by the
 model has a derivation in the shared `ListCost` relation. Each
@@ -1528,13 +1529,13 @@ The result contains the following two bounds.
 
 | Result field | Upper bound |
 | --- | --- |
-| `upper_bound` | `max(E, H) + n * S` |
-| `refined_upper_bound` | `E` if `n = 0`, and `max(E + n * S, H + (n - 1) * S)` if `n > 0` |
+| `upper_bound` | `$\max(E,H)+nS$` |
+| `refined_upper_bound` | `E` if `$n=0$`, and `$\max(E+nS,H+(n-1)S)$` if `$n>0$` |
 
 An exhaustive search can continue at most `n` times and then reach the
 empty list. A search that hits must still have a head to inspect,
 so it can continue at most `n - 1` times before the hit. When
-`n = 0`, only the empty case is possible.
+`$n=0$`, only the empty case is possible.
 
 The generated theorem `listValueAndBound` combines value agreement
 with both cost inequalities. It is checked by Lean when inference
@@ -1565,13 +1566,13 @@ continuing. The charges range over the natural numbers.
 | Input | Modeled cost |
 | --- | --- |
 | `[]`, `acc` | `E` |
-| `head :: tail`, `acc` | `S + cost(tail, head :: acc)` |
+| `head :: tail`, `acc` | `$S+\operatorname{cost}(\mathrm{tail},\mathrm{head}::\mathrm{acc})$` |
 
 The theorem `reverseCostDerivation` proves that the computed cost has a
 derivation in the shared `ListCost` relation. Every step consumes one
 cell of the first list. The model reaches the empty case after
 `xs.length` steps, so both `upper_bound` and `refined_upper_bound`
-are `E + n * S`. The bound has no term for the length of `acc`.
+are `$E+nS$`. The bound has no term for the length of `acc`.
 
 The generated theorem `listValueAndBound` gives the result equation
 and both inequalities for all values of `acc` in the stated domain.
@@ -1588,18 +1589,18 @@ lists. It proves that the precondition establishes the invariant
 (`inputInvariantTail`), and that the measure decreases by at least one
 on a tail step (`inputSizeTail`).
 
-`inputLengthBound` then proves `xs.length ≤ inputSize xs` by induction
+`inputLengthBound` then proves `$|\mathrm{xs}|\leq\operatorname{inputSize}(\mathrm{xs})$` by induction
 on the list. The generated theorem `listInputValueAndBound` applies
 the model's cost theorem with `inputSize xs` under the precondition
 and includes value agreement. For example, a contract can require
-`xs.length < 100` and supply `xs.length + 2` as the size measure.
+`$|\mathrm{xs}|<100$` and supply `$|\mathrm{xs}|+2$` as the size measure.
 
 `ReductionBounds.infer_list_call_bound/3` checks that a local wrapper
 forwards every argument in the original order to a different function in
 the same module. It supports recognized membership, length, and reversal
 models. Lean checks the callee theorem in the same run and applies it in
 `listCallerValueAndBound`. The wrapper's upper bound is
-`caller_cost + callee_refined_bound`. The symbolic `caller_cost` covers
+`$c_{\mathrm{caller}}+B_{\mathrm{callee,refined}}$`. The symbolic `caller_cost` covers
 the wrapper's own work. With an input contract, the wrapper proof uses
 the same precondition and size measure as the callee.
 
@@ -1619,7 +1620,7 @@ and sizes. It uses the contracts above for the two built-ins and derives
 a bound from the body for a regular callee. Each call bound is included
 in the caller's expression under its MFA. If one call prepends a
 one-element accumulator through reversal, a later call on the result
-receives an input size bound of `n + 1`.
+receives an input size bound of `$n+1$`.
 
 The generated theorem `programValueAndBound` proves that the translated
 target agrees with the model and that the modeled cost is at most the
@@ -1652,8 +1653,8 @@ outside the calls.
 
 | Result field | Upper bound |
 | --- | --- |
-| `path_bounds.hit` | `M(n) + (B_hit + R(n))` |
-| `path_bounds.miss` | `M(n) + B_miss` |
+| `path_bounds.hit` | `$M(n)+B_{\mathrm{hit}}+R(n)$` |
+| `path_bounds.miss` | `$M(n)+B_{\mathrm{miss}}$` |
 | `upper_bound` | Maximum of the hit and miss bounds |
 
 Both paths use the same membership upper bound. On a hit, the proof
@@ -1674,7 +1675,7 @@ primitive contract.
 
 The inputs are a buffer with proper integer lists `a` and `b` and an
 integer item. A valid state has
-`count = length(a) + length(b) <= capacity`, and a nonempty `b`
+`$\mathrm{count}=|a|+|b|\leq\mathrm{capacity}$`, and a nonempty `b`
 implies the buffer is full. In the returned formula `n` is the
 capacity.
 
@@ -1682,7 +1683,7 @@ capacity.
 | --- | --- | --- |
 | `consume` | Remove the head of `b` and prepend the new item to `a` | `C_consume` |
 | `fill` | Prepend to `a` and increase the count | `C_fill` |
-| `rotate` | Reverse `a`, drop the oldest element, and start a new `a` | `C_rotate + C_enum_reverse + R(n)` |
+| `rotate` | Reverse `a`, drop the oldest element, and start a new `a` | `$C_{\mathrm{rotate}}+C_{\mathrm{Enum.reverse}}+R(n)$` |
 | `zero` | Return the original buffer | `C_zero` |
 
 Each path charge includes its local tests and operations outside
@@ -1729,29 +1730,31 @@ the corresponding observable behavior of the Elixir library.
 `Periodic.lean` gives the common rule for a sequence of state
 transitions with a constant increment and periodic resets. Let `m` be
 a positive period, `d` the increment, `o` the lower endpoint after a
-step, and `size(s)` the progress in state `s`. The inferred proof
-obligations check invariant preservation, `size(s) < m + o` in valid
+step, and `$\operatorname{size}(s)$` the progress in state `s`. The inferred proof
+obligations check invariant preservation, `$\operatorname{size}(s)<m+o$` in valid
 states, and the following equation for each valid step:
 
-```text
-size(s) + d = events_this_step * m + size(next)
+```math
+\operatorname{size}(s)+d=q_s m+\operatorname{size}(s'),
 ```
 
-The next state must also satisfy `o ≤ size(next)`. The rule allows
+where `$q_s$` is the number of events in this step and `$s'$` is the next state.
+
+The next state must also satisfy `$o\leq\operatorname{size}(\mathrm{next})$`. The rule allows
 an initial size below `o` and handles an empty sequence separately.
 Lean's `accumulate` combines the transition obligations by induction.
-`eventCount` derives `floor(max(initial + n * d - o, 0) / m)`. Here
+`eventCount` derives `$\left\lfloor\frac{\max(\mathrm{initial}+nd-o,0)}{m}\right\rfloor$`. Here
 `initial` denotes the initial size and `n` the number of steps.
 `costBound` sums the per-step budgets to give
-`n * base + events * surcharge`.
+`$n\,\mathrm{base}+\mathrm{events}\,\mathrm{surcharge}$`.
 
 `infer_periodic_bound/2` recognizes a two-argument transition that
 adds a positive constant to a pending count. At the threshold it
 subtracts the period and returns an event flag. Below the threshold it
 keeps the advanced count and returns false. The invariant is
-`pending < period`, with a period at least as large as the increment.
+`$\mathrm{pending}<\mathrm{period}$`, with a period at least as large as the increment.
 For a function that enqueues two items at a time and signals a batch
-when it is ready, the rule gives `floor((pending + 2 * n) / period)`.
+when it is ready, the rule gives `$\left\lfloor\frac{\mathrm{pending}+2n}{\mathrm{period}}\right\rfloor$`.
 The counter decoder checks this source shape in Core Erlang. The
 counter proof checks the transition's obligations in its natural
 number model. The symbolic surcharge is the extra modeled cost of an
@@ -1767,7 +1770,7 @@ initial pending count. The API returns the supplied Lean source and
 separate measured bounds. Lean checks these obligations and rejects a
 contract that relies on an unfinished proof or an extra axiom. The
 periodic bound tests demonstrate an even-period, even-count invariant
-and a measure of `state + 2`.
+and a measure of `$\mathrm{state}+2$`.
 
 ## Consecutive CircularBuffer insertions
 
@@ -1786,15 +1789,15 @@ rotating. Let `r(m)` be the extra cost bound for the rotation's
 
 | Condition | Exact modeled rotations `q(m, n)` | Symbolic cost upper bound |
 | --- | --- | --- |
-| `m = 0` | `0` | `n * C_zero` |
-| `m > 0` and `n = 0` | `0` | `0` |
-| `m > 0` and `n > 0` | `floor((n - 1) / m)` | `n * c + q(m, n) * r(m)` |
+| `$m=0$` | `0` | `$nC_{\mathrm{zero}}$` |
+| `$m>0$` and `$n=0$` | `0` | `0` |
+| `$m>0$` and `$n>0$` | `$\left\lfloor(n-1)/m\right\rfloor$` | `$nc+q(m,n)r(m)$` |
 
 `CircularBufferSequence.lean` uses the fixed-progress rule with
-`size(s) = length(a)`, increment one, and lower endpoint one. Its
+`$\operatorname{size}(s)=|a|$`, increment one, and lower endpoint one. Its
 `rotationStep` counts a rotation exactly when `insertPath` selects the
 rotate path. With positive capacity, an ordinary step increases the
-length of `a` by one. A rotation takes place with `length(a) = m` and
+length of `a` by one. A rotation takes place with `$|a|=m$` and
 leaves the new `a` with length one. `bufferObligations` discharges the
 shared rule's premises using the single-insertion model.
 `insertManyRotationCount` specializes the shared count theorem to an
@@ -1802,21 +1805,21 @@ empty initial buffer. At capacity zero the state remains empty.
 
 `insertManyCostBound` then combines the per-step cost with the exact
 rotation count. The returned `rotation_count` expression uses natural
-number subtraction, so `n - 1` is zero when `n = 0`.
+number subtraction, so `n - 1` is zero when `$n=0$`.
 
 ### Starting from a valid buffer
 
 Let `a0` be the initial length of the newer list `a`. For any state
 satisfying `BufferState.valid`, `insertManyRotationCountFrom` proves
 that the modeled number of rotations is zero at capacity zero and
-`floor(max(a0 + n - 1, 0) / m)` for `m > 0`. The first rotation takes
-place on insertion `m - a0 + 1` if the sequence reaches that point.
+`$\left\lfloor\frac{\max(a_0+n-1,0)}{m}\right\rfloor$` for `$m>0$`. The first rotation takes
+place on insertion `$m-a_0+1$` if the sequence reaches that point.
 Later rotations are `m` insertions apart.
 
 For positive capacity the proof uses
-`a0 + n = rotations * m + length(final_a)`. When `a0 + n > 0`, the
+`$a_0+n=\mathrm{rotations}\,m+|a_{\mathrm{final}}|$`. When `$a_0+n>0$`, the
 final length lies between one and `m`, so subtracting one and dividing
-by `m` gives the exact quotient. When `a0 + n = 0`, the run is empty.
+by `m` gives the exact quotient. When `$a_0+n=0$`, the run is empty.
 At capacity zero the invariant forces both lists to be empty and the
 count to be zero. Each insertion leaves the state unchanged.
 
@@ -1834,9 +1837,9 @@ zero. Applying the theorem to any prefix gives the retained contents
 at that point in the run, including runs that cross a rotation.
 
 `insertManyCostBoundFrom` bounds the modeled cost by
-`n * c + rotations * r(m)` for positive capacity and `n * C_zero`
+`$nc+\mathrm{rotations}\,r(m)$` for positive capacity and `$nC_{\mathrm{zero}}$`
 at capacity zero. The existing empty-initialization theorems specialize
-these results to `a0 = 0`. The public inference entry point still
+these results to `$a_0=0$`. The public inference entry point still
 returns the bound for a run starting from `new/1`.
 
 ExUnit checks states reached by insertion into the actual library for
@@ -2074,7 +2077,7 @@ establish these progress hypotheses.
 `behaviorInvariant` preserves declared states. `conditionalCompletion` uses
 strong induction on the rank and the progress assumptions to prove that a
 terminal state is eventually reached. `eventCountBound` bounds the active
-events in every finite prefix by `9 + 10*(R + S + I)`. This bounds neither the
+events in every finite prefix by `$9+10(R+S+I)$`. This bounds neither the
 number of idle ticks nor elapsed time. `stalledNotComplete` exhibits permanent
 idle waiting without completion; finite cost safety alone cannot exclude it.
 
@@ -2278,12 +2281,12 @@ selected success trace.
 
 Local source work is charged separately so that bindings, argument retrieval
 and case dispatch are not omitted. In the abstract semantics, returning a
-value costs one local unit; a preparation binding costs `2 + arity`; Boolean
-dispatch costs `4 + arity`; reply-pattern dispatch costs `9 + arity`; a tail
-call costs `1 + arity`. The work of nested expressions is added. `Core.budget` adds the
+value costs one local unit; a preparation binding costs `$2+\mathrm{arity}$`; Boolean
+dispatch costs `$4+\mathrm{arity}$`; reply-pattern dispatch costs `$9+\mathrm{arity}$`; a tail
+call costs `$1+\mathrm{arity}$`. The work of nested expressions is added. `Core.budget` adds the
 budgets of all alternatives, giving a conservative finite limit `L`.
 `localBound` proves that every source derivation has local work at most `L`.
-For the example, `L = 25`. With a natural symbolic local-unit charge
+For the example, `$L=25$`. With a natural symbolic local-unit charge
 `source_node` (written as `c_s` below), and protocol budget `B_p`, the caller formula is
 
 \[
@@ -2533,12 +2536,13 @@ checks `RpcMailbox.step`, count caps, known control states, canonical protocol
 edges and the balance between remaining allowance and consumed mailbox steps.
 `Moves.erased` yields an original `RpcMailbox.Runs` proof.
 
-The natural rank is `12 * remaining + phase`, with canonical RPC phase at most
+Write `$R$` for remaining mailbox actions, `$p$` for the control phase, and `$L$`
+for `mailbox.limits.steps`. The natural rank is `$12R+p$`, with canonical RPC phase at most
 11. Mailbox arrivals, setup, inspections and timeout consume allowance; explicit
 protocol actions decrease phase. `none` represents suspension with unchanged
 configuration. `advanceDecreases`, `Moves.bounded` and `eventCountBound` prove
 finite active work without assuming eventual completion. The conservative
-active-action bound is `11 + 12 * mailbox.limits.steps`; it counts timeline items,
+active-action bound is `$11+12L$`; it counts timeline items,
 not elapsed time or cost charges.
 
 `conditionalCompletion` adds client/request/server/response progress at every

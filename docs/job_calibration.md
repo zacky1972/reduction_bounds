@@ -1,5 +1,9 @@
 # Calibrating the Lean job budget
 
+For a step-by-step walkthrough, including shell environment settings, report
+diagnostics and applying a selected profile, start with
+[Test Performance Calibration](test_performance.md).
+
 The global default of **2** is provisional. It is not a restriction imposed by
 Lean or the hardware, and copying the old per-call limit does not preserve the
 previous aggregate concurrency. Choose a job budget together with Lean's thread

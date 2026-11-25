@@ -34,25 +34,20 @@ proof checking, unless your project has a matching `lean-toolchain` file.
 See [toolchain maintenance](docs/toolchains.md) for Elan and Lynx updates
 and instructions for working in this repository.
 
-## Examples and verification cases
+## Getting started and Case Studies
 
-Start with the [examples index](docs/examples.md). It links to guides for
-Lean verification, symbolic list bounds, and cost-contract comparison and
-bound reuse, as well as the integer, CRC, map, and ring-buffer cases.
+Follow [Getting Started](docs/getting_started.md) to install the toolchain,
+check your first bound, and read the result's proof scope.
+
+The [Case Studies](docs/case_studies.md) provide compiled-source and IEx routes
+for constants, branches, recursion, list traversal and conditional reversal,
+integer sizes and contract reuse, CRC/variance kernels, maps, periodic rules,
+ring buffers, Port and RPC workflows. The [examples index](docs/examples.md)
+links to detailed API guides.
 
 The [proof reference](docs/proof.md) explains the checked theorems,
 assumptions, and reproduction commands. Future directions are in the
 [roadmap](docs/roadmap.md).
-
-## Verification performance and configuration
-
-Shared Lean theories and target artifacts are reused when their sources,
-dependencies and options match. Independent verification runs under a per-VM
-job budget. The fallback is 2 jobs; it has not been calibrated as an optimum.
-See [verification defaults](docs/verification_defaults.md) for controls, measured
-trade-offs and deadlines. The reference M2 Max profile is 4 jobs with 2 Lean
-threads, supported by a successful cold/warm full-suite comparison. Benchmark,
-calibration and log-assessment tasks are described in that guide.
 
 ## Limitations
 

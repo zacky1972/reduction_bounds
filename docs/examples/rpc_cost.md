@@ -1,3 +1,4 @@
+<!-- cspell:words mathrm operatorname -->
 # RPC participant cost safety and server contracts
 
 This layer extends the [single-attempt RPC](rpc.md) and
@@ -19,7 +20,8 @@ The rates apply under these **assumed applicability contracts**:
 
 - Client work uses the declared request, response and message size caps, fixed
   matching program, initial queue cap, arrival cap and execution count limits.
-  Queue length is bounded by `initial_messages + mailbox.limits.arrivals`.
+  Queue length is bounded by `$N_{\mathrm{initial}}+N_{\mathrm{arrivals}}$`,
+  the initial-message cap plus the arrival cap.
 - An inspection rate covers its own structural overhead. Pattern and guard
   attempt rates separately cover their entire modeled matching work, including
   traversal of large messages and integers under the size caps. These are
@@ -55,8 +57,13 @@ and guard work must be excluded from the inspection overhead envelope to avoid
 charging the same work twice. Runtime work absent from this model is outside
 the theorem, not implicitly free.
 
-The budget for each participant is the sum of `count_cap * rate` over its
-operations. General protocol work uses the event limit; sends use send limits,
+For participant `$p$`, the budget is
+
+```math
+B_p=\sum_{o:\operatorname{owner}(o)=p}N_o r_o,
+```
+
+where `$N_o$` is the count cap and `$r_o$` the rate for operation `$o$`. General protocol work uses the event limit; sends use send limits,
 terminal handlers use the handler limit, and mailbox work uses mailbox limits.
 This is conservative: mutually exclusive terminal alternatives can each
 contribute to the budget. The server handler invocation cap is separately

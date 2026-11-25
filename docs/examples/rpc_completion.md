@@ -1,3 +1,4 @@
+<!-- cspell:words mathrm operatorname -->
 # Conditional RPC completion
 
 Completion is a separate claim from [participant cost safety](rpc_cost.md).
@@ -56,10 +57,13 @@ The completion model instruments the existing mailbox state with a remaining
 mailbox-action allowance. It starts at `conditions.mailbox.limits.steps` and
 maintains:
 
-```text
-remaining + model.counts.steps = conditions.mailbox.limits.steps
-rank = 12 * remaining + phase(model.protocolState)
+```math
+R+j=L,\qquad \rho=12R+p.
 ```
+
+Here `$R$` is `remaining`, `$j$` is `model.counts.steps`,
+`$L$` is `conditions.mailbox.limits.steps`, and
+`$p=\operatorname{phase}(\mathrm{model.protocolState})$`.
 
 Canonical RPC phases range from 11 at initial setup to zero at terminal states.
 Every active action decreases this natural rank:
@@ -78,7 +82,7 @@ control-edge certificate. `Moves.erased` maps it back to the original
 and unmatched-message retention still use the existing checked semantics.
 The completion model does not accept arbitrary receive or timeout annotations.
 
-The rank yields an upper bound of `11 + 12 * mailbox.limits.steps` on active
+The rank yields an upper bound of `$11+12L$` on active
 **timeline items**. A mailbox inspection can project multiple coarse protocol
 events; the action bound counts the timeline item once. It is a conservative
 proof rank, not an additional cost formula, an optimal operation count or a
