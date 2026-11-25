@@ -73,14 +73,3 @@ Copyright 2026 University of Kitakyushu.
 
 Licensed under the Apache License, Version 2.0. See [LICENSE.md](LICENSE.md).
 
-
-### RPC prototype workflows
-
-`ReductionBounds.verify_rpc_model/4` verifies supplied mailbox timelines and
-participant budgets with separate conditional completion reporting.
-`ReductionBounds.verify_rpc_conditions/4` checks the mailbox/completion model
-without cost declarations. `ReductionBounds.infer_rpc_bound/3` checks the
-restricted helper-contracted source fragment under explicit applicability and
-mailbox association conditions. See the [public RPC guide](docs/examples/rpc_workflow.md)
-for setup, supported forms and evidence reporting. Model completion is distinct
-from source totality; native source receive is currently unsupported.
